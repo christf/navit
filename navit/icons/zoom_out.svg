@@ -13,8 +13,8 @@
    height="48"
    id="svg2"
    version="1.1"
-   inkscape:version="0.48.3.1 r9886"
-   sodipodi:docname="zoom_in.svg"
+   inkscape:version="0.92.3 (2405546, 2018-03-11)"
+   sodipodi:docname="zoom_out.svg"
    inkscape:export-filename="/home/michael/src/navit-artwork/zoom_in.png"
    inkscape:export-xdpi="134.99994"
    inkscape:export-ydpi="134.99994">
@@ -53,34 +53,41 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="15.8125"
-     inkscape:cx="21.280633"
+     inkscape:cx="9.2964433"
      inkscape:cy="24"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="true"
      showguides="true"
      inkscape:guide-bbox="true"
-     inkscape:window-width="1280"
-     inkscape:window-height="955"
+     inkscape:window-width="1920"
+     inkscape:window-height="1000"
      inkscape:window-x="0"
      inkscape:window-y="24"
-     inkscape:window-maximized="1">
+     inkscape:window-maximized="1"
+     inkscape:object-nodes="false"
+     inkscape:snap-bbox="true"
+     inkscape:bbox-nodes="true">
     <sodipodi:guide
        orientation="0,1"
        position="0,40"
-       id="guide2985" />
+       id="guide2985"
+       inkscape:locked="false" />
     <sodipodi:guide
        orientation="0,1"
        position="0,8"
-       id="guide2987" />
+       id="guide2987"
+       inkscape:locked="false" />
     <sodipodi:guide
        orientation="1,0"
        position="8,0"
-       id="guide2989" />
+       id="guide2989"
+       inkscape:locked="false" />
     <sodipodi:guide
        orientation="1,0"
        position="40,0"
-       id="guide2991" />
+       id="guide2991"
+       inkscape:locked="false" />
     <inkscape:grid
        type="xygrid"
        id="grid3763"
@@ -97,7 +104,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -114,21 +121,10 @@
        x="3.5527137e-15"
        y="1004.3622"
        rx="4" />
-    <g
-       style="fill:#ffffff;fill-opacity:1"
-       id="g1386"
-       transform="matrix(0.49591559,0,0,-0.49591559,20.296793,1022.8491)">
-      <path
-         d="m -17.263,0 0,-4.162 30.368,0 0,4.162 z"
-         style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-         id="path1388"
-         inkscape:connector-curvature="0"
-         sodipodi:nodetypes="ccccc" />
-    </g>
     <path
        inkscape:connector-curvature="0"
-       id="path1540"
-       style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-       d="m 13.045073,1030.1706 c -3.5229842,-3.526 -3.5229842,-9.2399 0,-12.7629 3.525464,-3.5255 9.23494,-3.5225 12.762388,0 3.522488,3.523 3.522488,9.235 0,12.7629 -3.527448,3.523 -9.239403,3.523 -12.762388,0 m 26.573141,9.1908 -6.032317,-6.0343 c -0.53063,-0.5296 -1.491218,-0.4796 -2.454782,0.022 l -2.631824,-2.6308 c 3.42876,-4.4796 3.104927,-10.9112 -0.993319,-15.0104 -4.462745,-4.4608 -11.697161,-4.4608 -16.160402,0 -4.4607603,4.4632 -4.4607603,11.6977 0,16.1609 4.100231,4.0983 10.53176,4.4221 15.010869,0.9923 l 2.631824,2.6299 c -0.501866,0.9655 -0.552945,1.9251 -0.02331,2.4562 l 6.03331,6.0343 c 0.762222,0.7613 2.417092,0.3427 3.690107,-0.9338 1.274999,-1.2735 1.693552,-2.9254 0.929842,-3.6866" />
+       d="m 30.870212,1032.488 h -1.445398 l -0.512293,-0.494 c 1.793025,-2.0858 2.872499,-4.7936 2.872499,-7.7393 0,-6.5683 -5.324185,-11.8925 -11.89251,-11.8925 -6.568325,0 -11.89251,5.3242 -11.89251,11.8925 0,6.5683 5.324185,11.8925 11.89251,11.8925 2.945683,0 5.653516,-1.0795 7.73928,-2.8725 l 0.493996,0.5123 v 1.4454 l 9.148085,9.1298 L 40,1041.6361 Z m -10.977702,0 c -4.555746,0 -8.233276,-3.6775 -8.233276,-8.2333 0,-4.5557 3.67753,-8.2333 8.233276,-8.2333 4.555746,0 8.233276,3.6776 8.233276,8.2333 0,4.5558 -3.67753,8.2333 -8.233276,8.2333 z m -4.574042,-9.1481 h 9.148084 v 1.8296 h -9.148084 z"
+       id="path2"
+       style="stroke-width:1.8296169;fill:#ffffff" />
   </g>
 </svg>
