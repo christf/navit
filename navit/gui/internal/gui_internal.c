@@ -66,6 +66,7 @@
 #include "gui_internal_poi.h"
 #include "gui_internal_priv.h"
 #include "gui_internal_search.h"
+#include "gui_internal_vehicle_dimension.h"
 #include "gui_internal_widget.h"
 #include "item.h"
 #include "keys.h"
@@ -399,7 +400,7 @@ void gui_internal_back(struct gui_priv *this, struct widget *w, void *data) {
 }
 
 void gui_internal_cmd_return(struct gui_priv *this, struct widget *wm, void *data) {
-    gui_internal_prune_menu(this, wm->data);
+                                gui_internal_prune_menu(this, wm->data);
 }
 
 void gui_internal_cmd_main_menu(struct gui_priv *this, struct widget *wm, void *data) {
@@ -502,7 +503,7 @@ void gui_internal_apply_config(struct gui_priv *this) {
     } else {
         this->spacing = this->config.spacing;
         dbg(lvl_info, "Overriding default spacing %d with value %d provided in config file", current_config->spacing,
-            this->config.spacing);
+                    this->config.spacing);
     }
     if (!this->fonts[0]) {
         int i, sizes[] = {100, 66, 50};
@@ -628,7 +629,7 @@ void gui_internal_select_waypoint(struct gui_priv *this, const char *title, cons
 
 static void gui_internal_cmd_insert_destination(struct gui_priv *this, struct widget *wm, void *data) {
     gui_internal_select_waypoint(this, data, _("Select waypoint to insert the new one before"), wm,
-                                 gui_internal_cmd_insert_destination_do, data);
+                gui_internal_cmd_insert_destination_do, data);
 }
 
 static void gui_internal_cmd_set_position(struct gui_priv *this, struct widget *wm, void *data) {
@@ -1144,7 +1145,7 @@ void gui_internal_cmd_position_do(struct gui_priv *this, const struct pcoord *pc
                                           gravity_left|orientation_horizontal|flags_fill));
     gui_internal_widget_append(row,
                                gui_internal_button_new(this, "Add to tour",
-                                       image_new_o(this, "gui_active"), gravity_left_center|orientation_horizontal|flags_fill));
+                                                       image_new_o(this, "gui_active"), gravity_left_center|orientation_horizontal|flags_fill));
 #endif
     if (flags & 128) {
         gui_internal_widget_append(
@@ -1838,6 +1839,83 @@ static void gui_internal_cmd_show_nmea_data(struct gui_priv *this, struct widget
     gui_internal_menu_render(this);
 }
 
+static void gui_internal_cmd_show_vehicle_dimensions(struct gui_priv *this, struct widget *wm, void *data) {
+    struct widget *w,*wd, *wdweight, *wdaxleweight, *wdlength, *wdwidth, *wdheight, *wdhazmat, *wdemissionclass;
+    struct attr attr;
+    struct vehicleprofile *v=data;
+    char str[50];
+    wd=gui_internal_menu(this, _("Change settings"));
+    gui_internal_menu_data(this)->redisplay=gui_internal_cmd_show_vehicle_dimensions;
+    gui_internal_menu_data(this)->redisplay_widget=wm;
+    w=gui_internal_box_new(this, gravity_top_center|orientation_vertical|flags_expand|flags_fill);
+    gui_internal_widget_append(wd, w);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_weight, &attr, NULL);
+    sprintf(str, _("Total Weight: %li"), attr.u.num);
+    wdweight = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+               gravity_left_center | orientation_horizontal | flags_fill,
+               gui_internal_cmd_change_vehicle_dimensions_weight, NULL);
+    gui_internal_widget_append(w, wdweight);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_axle_weight, &attr, NULL);
+    sprintf(str, _("Axle Weight: %li"), attr.u.num);
+    wdaxleweight = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+                   gravity_left_center | orientation_horizontal | flags_fill,
+                   gui_internal_cmd_change_vehicle_dimensions_axle_weight, NULL);
+    gui_internal_widget_append(w, wdaxleweight);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_length, &attr, NULL);
+    sprintf(str, _("Length: %li"), attr.u.num);
+    wdlength = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+               gravity_left_center | orientation_horizontal | flags_fill,
+               gui_internal_cmd_change_vehicle_dimensions_length, NULL);
+    gui_internal_widget_append(w, wdlength);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_width, &attr, NULL);
+    sprintf(str, _("Width: %li"), attr.u.num);
+    wdwidth = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+              gravity_left_center | orientation_horizontal | flags_fill,
+              gui_internal_cmd_change_vehicle_dimensions_width, NULL);
+    gui_internal_widget_append(w, wdwidth);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_height, &attr, NULL);
+    sprintf(str, _("Height: %li"), attr.u.num);
+    wdheight = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+               gravity_left_center | orientation_horizontal | flags_fill,
+               gui_internal_cmd_change_vehicle_dimensions_height, NULL);
+    gui_internal_widget_append(w, wdheight);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_dangerous_goods, &attr, NULL);
+    sprintf(str, _("Hazardous materials: %s"), attr.u.num==1?_("Yes"):_("No"));
+    wdhazmat = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+               gravity_left_center | orientation_horizontal | flags_fill,
+               gui_internal_cmd_change_vehicle_dimensions_hazmat, v);
+    gui_internal_widget_append(w, wdhazmat);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_emission_class, &attr, NULL);
+    sprintf(str, _("Emission Class: %s"), ectxt.classes[attr.u.num]);
+    wdemissionclass = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+               gravity_left_center | orientation_horizontal | flags_fill,
+               gui_internal_cmd_change_vehicle_dimensions_emissionclass, v);
+    gui_internal_widget_append(w, wdemissionclass);
+
+    attr.u.num = 0;
+    vehicleprofile_get_attr(v, attr_vehicle_lez_allowed, &attr, NULL);
+    sprintf(str, _("Enter Low Emission Zone: %s"), attr.u.num==1?_("Yes"):_("No"));
+    wdemissionclass = gui_internal_button_new_with_callback(this, _(str), image_new_xs(this, "gui_tools"),
+                gravity_left_center | orientation_horizontal | flags_fill,
+                gui_internal_cmd_change_vehicle_dimensions_lez, v);
+    gui_internal_widget_append(w, wdemissionclass);
+
+    gui_internal_menu_render(this);
+}
 /**
  * A container to hold the selected vehicle and the desired profile in
  * one data item.
@@ -1914,6 +1992,9 @@ static void gui_internal_cmd_set_active_profile(struct gui_priv *this, struct wi
 
     save_vehicle_xml(v);
 
+    //save in gui_internal.txt
+    gui_internal_set("navit.vehicleprofile=*", g_strdup_printf("navit.vehicleprofile=navit.vehicleprofile[@name==\"%s\"]", profilename));
+
     // Notify Navit that the routing should be re-done if this is the
     // active vehicle.
     if (gui_internal_is_active_vehicle(this, v)) {
@@ -1945,6 +2026,7 @@ static void gui_internal_add_vehicle_profile(struct gui_priv *this, struct widge
     char *label = NULL;
     int active;
     struct vehicle_and_profilename *context = NULL;
+    struct vehicleprofile *current_profile;
 
 #ifdef ONLY_FOR_TRANSLATION
     char *translations[] = {_n("car"), _n("bike"), _n("pedestrian")};
@@ -1959,8 +2041,10 @@ static void gui_internal_add_vehicle_profile(struct gui_priv *this, struct widge
     name = attr->u.str;
 
     // Determine whether the profile is the active one
-    if (vehicle_get_attr(v, attr_profilename, &profile_attr, NULL))
+    current_profile = navit_get_vehicleprofile(this->nav);
+    if (vehicleprofile_get_attr(current_profile, attr_name, &profile_attr, NULL))
         active_profile = profile_attr.u.str;
+
     active = active_profile != NULL && !strcmp(name, active_profile);
 
     dbg(lvl_debug, "Adding vehicle profile %s, active=%s/%i", name, active_profile, active);
@@ -1990,6 +2074,7 @@ void gui_internal_menu_vehicle_settings(struct gui_priv *this, struct vehicle *v
     struct widget *w, *wb, *row;
     struct attr attr;
     struct vehicleprofile *profile = NULL;
+    struct vehicleprofile *active_profile = NULL;
     GList *profiles;
 
     wb = gui_internal_menu(this, name);
@@ -2023,6 +2108,18 @@ void gui_internal_menu_vehicle_settings(struct gui_priv *this, struct vehicle *v
                                                        gravity_left_center | orientation_horizontal | flags_fill,
                                                        gui_internal_cmd_show_nmea_data, v));
     }
+
+    // If we have weight set
+    active_profile = navit_get_vehicleprofile(this->nav);
+
+    //if (vehicleprofile_get_attr(active_profile, attr_vehicle_weight, &attr, NULL)) {
+    gui_internal_widget_append(w, row=gui_internal_widget_table_row_new(this,
+                                      gravity_left|orientation_horizontal|flags_fill));
+    gui_internal_widget_append(row,
+                               gui_internal_button_new_with_callback(this, _(g_strdup_printf(_("Change settings for: %s"), _(active_profile->name))),
+                                                                     image_new_xs(this, "gui_tools"), gravity_left_center|orientation_horizontal|flags_fill,
+                                                                     gui_internal_cmd_show_vehicle_dimensions, active_profile));
+    //}
 
     // Add all the possible vehicle profiles to the menu
     profiles = navit_get_vehicleprofiles(this->nav);

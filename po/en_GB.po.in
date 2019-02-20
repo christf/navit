@@ -19,7 +19,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.6\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-16 19:22+0100\n"
+"POT-Creation-Date: 2026-01-18 10:54+0100\n"
 "PO-Revision-Date: 2025-02-06 18:34+0000\n"
 "Last-Translator: Andi Chandler <andi@gowling.com>\n"
 "Language-Team: English (United Kingdom) <https://hosted.weblate.org/projects/"
@@ -2002,6 +2002,46 @@ msgstr " Azimuth "
 msgid "Show NMEA Data"
 msgstr "Show NMEA data"
 
+msgid "Change settings"
+msgstr ""
+
+#, c-format
+msgid "Total Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Axle Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Length: %li"
+msgstr ""
+
+#, c-format
+msgid "Width: %li"
+msgstr ""
+
+#, c-format
+msgid "Height: %li"
+msgstr ""
+
+#, c-format
+msgid "Hazardous materials: %s"
+msgstr ""
+
+#. Strings from android/res/values/strings.xml
+#. Android resource: @strings/yes
+msgid "Yes"
+msgstr "Yes"
+
+#, c-format
+msgid "Emission Class: %s"
+msgstr ""
+
+#, c-format
+msgid "Enter Low Emission Zone: %s"
+msgstr ""
+
 msgid "car"
 msgstr "car"
 
@@ -2027,6 +2067,10 @@ msgstr "Show satellite status"
 
 msgid "Show NMEA data"
 msgstr "Show NMEA data"
+
+#, c-format
+msgid "Change settings for: %s"
+msgstr ""
 
 msgid "Add Bookmark"
 msgstr "Add bookmark"
@@ -2097,6 +2141,12 @@ msgid "please install a map *.heightlines.bin to provide elevationdata"
 msgstr ""
 
 msgid "The route must cross at least 2 heightlines"
+msgstr ""
+
+msgid "Distance:"
+msgstr ""
+
+msgid "Vertical Meters:"
 msgstr ""
 
 msgid "Route Description"
@@ -2244,11 +2294,6 @@ msgstr "horse"
 
 msgid "Truck"
 msgstr "Truck"
-
-#. Strings from android/res/values/strings.xml
-#. Android resource: @strings/yes
-msgid "Yes"
-msgstr "Yes"
 
 #. Android resource: @strings/cancel
 msgid "Cancel"

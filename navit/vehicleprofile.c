@@ -17,16 +17,26 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#include "vehicleprofile.h"
-#include "callback.h"
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <glib.h>
+#include <string.h>
 #include "debug.h"
 #include "item.h"
-#include "roadprofile.h"
 #include "xmlconfig.h"
-#include <glib.h>
-#include <stdlib.h>
-#include <string.h>
+#include "roadprofile.h"
+#include "vehicleprofile.h"
+#include "callback.h"
+#include "navit.h"
 
+
+#define DIMENSIONSFILE "dimensions.txt"
+#define TEMPFILE "tempfile.txt"
+
+/* The error code set by various library functions.  */
+//extern int *__errno_location (void) __THROW __attribute_const__;
+//# define errno (*__errno_location ())
 static void vehicleprofile_set_attr_do(struct vehicleprofile *this_, struct attr *attr) {
     dbg(lvl_debug, "%s:%ld", attr_to_name(attr->type), attr->u.num);
     switch (attr->type) {
@@ -89,6 +99,12 @@ static void vehicleprofile_set_attr_do(struct vehicleprofile *this_, struct attr
     case attr_turn_around_penalty2:
         this_->turn_around_penalty2 = attr->u.num;
         break;
+    case attr_vehicle_emission_class:
+        this_->emissionclass = attr->u.num;
+        break;
+    case attr_vehicle_lez_allowed:
+        this_->lez_allowed = attr->u.num;
+        break;
     default:
         break;
     }
@@ -125,6 +141,8 @@ static void vehicleprofile_clear(struct vehicleprofile *this_) {
     this_->weight = -1;
     this_->axle_weight = -1;
     this_->through_traffic_penalty = 9000;
+    this_->emissionclass = -1;
+    this_->lez_allowed = -1;
     vehicleprofile_free_hash(this_);
     this_->roadprofile_hash = g_hash_table_new(NULL, NULL);
 }
@@ -198,6 +216,8 @@ static void vehicleprofile_update(struct vehicleprofile *this_) {
         if (active.u.num)
             vehicleprofile_apply_attrs(this_, profile_option.u.navit_object, 1);
     }
+    //vehicleprofile_store_dimensions(this_);
+    vehicleprofile_read_dimensions(this_);
     vehicleprofile_attr_iter_destroy(iter);
     dbg(lvl_debug, "result l %d w %d h %d wg %d awg %d pen %d", this_->length, this_->width, this_->height,
         this_->weight, this_->axle_weight, this_->through_traffic_penalty);
@@ -205,6 +225,262 @@ static void vehicleprofile_update(struct vehicleprofile *this_) {
         this_->flags_forward_mask, this_->flags_reverse_mask, this_->flags, this_->maxspeed_handling,
         this_->static_speed, this_->static_distance, this_->dangerous_goods);
     g_hash_table_foreach(this_->roadprofile_hash, vehicleprofile_debug_roadprofile, NULL);
+}
+
+
+char* getTagValue(char *xmlstring, char *tag) {
+
+    if (xmlstring == 0 || tag == 0)
+        return 0;
+
+    char *ptr_valstart, *ptr_valend;
+    char opentag[strlen(tag) + 3];
+    char closetag[strlen(tag) + 4];
+
+    memset(opentag, 0, sizeof(opentag));
+    memset(closetag, 0, sizeof(closetag));
+
+    opentag[0] = '<';
+    strcpy(&opentag[1], tag);
+    opentag[strlen(opentag)] = '>';
+    opentag[sizeof(opentag)-1] = 0;
+
+    closetag[0] = '<';
+    closetag[1] = '/';
+    strcpy(&closetag[2], tag);
+    closetag[strlen(closetag)] = '>';
+    closetag[sizeof(closetag)-1] = 0;
+
+    ptr_valstart = strstr(xmlstring, opentag) + strlen(opentag);
+    if (ptr_valstart) {
+        ptr_valend = strstr(xmlstring, closetag);
+        if (ptr_valend) {
+            *ptr_valend = 0;
+            char *value = malloc(strlen(ptr_valstart) + 1);
+            strcpy(value, ptr_valstart);
+            *ptr_valend = '<';
+            return value;
+        }
+    }
+
+    return 0;
+}
+
+int vehicleprofile_store_dimensions(struct vehicleprofile *profile) {
+
+    char *filename;
+    int profilefound = 0;
+    char weight[30] = "0";
+    char axle_weight[40] = "0";
+    char length[30] = "0";
+    char width[30] = "0";
+    char height[30] = "0";
+    char hazmat[37] = "0";
+    char emissionclass[34] = "0";
+    char lez_allowed[29] = "0";
+    FILE *document, *newdocument;
+    char line[250];
+    char *value, *tmpfilename, *test;
+    int content;
+
+    if (profile->weight < 1000000) {
+        sprintf(weight, "<weight>%i</weight>", profile->weight);
+    }
+
+    if (profile->axle_weight < 1000000) {
+        sprintf(axle_weight, "<axle_weight>%i</axle_weight>", profile->axle_weight);
+    }
+
+    if (profile->length < 1000000) {
+        sprintf(length, "<length>%i</length>", profile->length);
+    }
+
+    if (profile->width < 1000000) {
+        sprintf(width, "<width>%i</width>", profile->width);
+    }
+
+    if (profile->height < 1000000) {
+        sprintf(height, "<height>%i</height>", profile->height);
+    }
+
+    if (profile->dangerous_goods < 2) {
+        sprintf(hazmat, "<dangerous_goods>%i</dangerous_goods>", profile->dangerous_goods);
+    }
+
+    if (profile->emissionclass < EMISSION_CLASS_MAX) {
+        sprintf(emissionclass, "<emissionclass>%i</emissionclass>", profile->emissionclass);
+    }
+
+    if (profile->lez_allowed < 2) {
+            sprintf(lez_allowed, "<lez_allowed>%i</lez_allowed>", profile->lez_allowed);
+    }
+
+    filename = g_strjoin("/", navit_get_user_data_directory(TRUE), DIMENSIONSFILE, NULL);
+    tmpfilename = g_strjoin("/", navit_get_user_data_directory(TRUE), TEMPFILE, NULL);
+
+    document = fopen(filename, "r");
+    newdocument = fopen(tmpfilename, "w+");
+
+    // Create new file if it doesn't exist. Workaround for Android as fgets will always return NULL when mode a, a+ is used
+    if (document == 0) {
+        document = fopen(filename, "a");
+        fclose(document);
+        document = fopen(filename, "r");
+    }
+
+    if (document == 0 || newdocument == 0)
+        return 0;
+
+    test=fgets(line, (int)sizeof(line), document);
+    while (test) {
+        value = getTagValue(line, "name");
+        if (value) {
+            if (!strcmp(value, profile->name)) {
+                profilefound = 1;
+                fprintf(newdocument, "<name>%s</name>%s%s%s%s%s%s%s%s\r\n", profile->name, weight, axle_weight, length,
+                        width, height, hazmat, emissionclass, lez_allowed);
+            } else {
+                fprintf(newdocument, "%s", line);
+            }
+        }
+        test=fgets(line, (int)sizeof(line), document);
+    }
+
+    if (!profilefound) {
+        fprintf(newdocument, "<name>%s</name>%s%s%s%s%s%s%s%s\r\n", profile->name, weight, axle_weight, length, width, height, hazmat, emissionclass, lez_allowed);
+    }
+
+    fclose(newdocument);
+    fclose(document);
+
+    document = fopen(filename, "w+");
+    newdocument = fopen(tmpfilename, "r");
+
+    g_free(filename);
+    g_free(tmpfilename);
+
+    if (document == 0)
+        return 0;
+
+    content = fgetc(newdocument);
+
+    while (content != EOF) {
+        fputc(content, document);
+        content = fgetc(newdocument);
+    }
+
+    fclose(document);
+    fclose(newdocument);
+
+#ifndef WIN32
+    remove(tmpfilename);
+#endif
+
+    return 1;
+}
+
+int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
+
+    char *filename;
+    struct attr attr;
+    FILE *document;
+    char line[250];
+    char *value;
+    int profilefound=0;
+
+    filename = g_strjoin("/", navit_get_user_data_directory(TRUE), DIMENSIONSFILE, NULL);
+
+    document = fopen(filename, "r");
+
+    g_free(filename);
+
+    if (document == 0) {   //first startup of this version. Need to create the dimensions file.
+        vehicleprofile_store_dimensions(profile);
+    } else {
+        while (fgets(line, sizeof(line), document)) {
+
+            value = getTagValue(line, "name");
+
+            if (value) {
+                if (!strcmp(value, profile->name)) {
+                    free(value);
+                    profilefound=1;
+                    value = getTagValue(line, "weight");
+                    if (value) {
+                        attr.type = attr_vehicle_weight;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "axle_weight");
+                    if (value) {
+                        attr.type = attr_vehicle_axle_weight;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "length");
+                    if (value) {
+                        attr.type = attr_vehicle_length;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "width");
+                    if (value) {
+                        attr.type = attr_vehicle_width;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "height");
+                    if (value) {
+                        attr.type = attr_vehicle_height;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "dangerous_goods");
+                    if (value) {
+                        attr.type = attr_vehicle_dangerous_goods;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "emissionclass");
+                    if (value) {
+                        attr.type = attr_vehicle_emission_class;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    }
+                    value = getTagValue(line, "lez_allowed");
+                    if (value) {
+                        attr.type = attr_vehicle_lez_allowed;
+                        attr.u.num = atoi(value);
+                        vehicleprofile_set_attr(profile, &attr);
+                        free(value);
+                    } else {
+                        attr.type = attr_vehicle_lez_allowed;
+                        attr.u.num = 1; // Default to 1
+                        vehicleprofile_set_attr(profile, &attr);
+                    }
+                } else {
+                    free(value);
+                }
+            }
+        }
+
+        fclose(document);
+
+        if(!profilefound) {
+            //if the profile is not in the dimension.txt yet add it
+            vehicleprofile_store_dimensions(profile);
+        }
+
+    }
+
+    return 1;
 }
 
 struct vehicleprofile *vehicleprofile_new(struct attr *parent, struct attr **attrs) {
@@ -235,7 +511,12 @@ void vehicleprofile_attr_iter_destroy(struct attr_iter *iter) {
 
 int vehicleprofile_get_attr(struct vehicleprofile *this_, enum attr_type type, struct attr *attr,
                             struct attr_iter *iter) {
+    if (this_) {
     return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
+    } else {
+        dbg(lvl_error, "vehicleprofile_get_attr vehicleprofile is NULL");
+        return 0;
+    }
 }
 
 int vehicleprofile_set_attr(struct vehicleprofile *this_, struct attr *attr) {
@@ -277,18 +558,9 @@ static int vehicleprofile_init(struct vehicleprofile *this_) {
     return 0;
 }
 
-struct object_func vehicleprofile_func = {
-    attr_vehicleprofile,
-    (object_func_new)vehicleprofile_new,
-    (object_func_get_attr)vehicleprofile_get_attr,
-    (object_func_iter_new)vehicleprofile_attr_iter_new,
-    (object_func_iter_destroy)vehicleprofile_attr_iter_destroy,
-    (object_func_set_attr)vehicleprofile_set_attr,
-    (object_func_add_attr)vehicleprofile_add_attr,
-    (object_func_remove_attr)vehicleprofile_remove_attr,
-    (object_func_init)vehicleprofile_init,
-    (object_func_destroy)NULL,
-    (object_func_dup)NULL,
-    (object_func_ref)navit_object_ref,
-    (object_func_unref)navit_object_unref,
-};
+struct object_func vehicleprofile_func = { attr_vehicleprofile, (object_func_new) vehicleprofile_new,
+            (object_func_get_attr) vehicleprofile_get_attr, (object_func_iter_new) vehicleprofile_attr_iter_new,
+            (object_func_iter_destroy) vehicleprofile_attr_iter_destroy, (object_func_set_attr) vehicleprofile_set_attr,
+            (object_func_add_attr) vehicleprofile_add_attr, (object_func_remove_attr) vehicleprofile_remove_attr,
+            (object_func_init) vehicleprofile_init, (object_func_destroy) NULL, (object_func_dup) NULL,
+            (object_func_ref) navit_object_ref, (object_func_unref) navit_object_unref, };

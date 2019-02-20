@@ -63,6 +63,8 @@
 <!ATTLIST vehicleprofile vehicle_length CDATA #IMPLIED>
 <!ATTLIST vehicleprofile vehicle_weight CDATA #IMPLIED>
 <!ATTLIST vehicleprofile vehicle_axle_weight CDATA #IMPLIED>
+<!ATTLIST vehicleprofile turn_around_penalty CDATA #IMPLIED>
+<!ATTLIST vehicleprofile turn_around_penalty2 CDATA #IMPLIED>
 <!ELEMENT coord EMPTY>
 <!ATTLIST coord x CDATA #REQUIRED>
 <!ATTLIST coord y CDATA #REQUIRED>

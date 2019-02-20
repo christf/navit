@@ -47,7 +47,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.6\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-16 19:22+0100\n"
+"POT-Creation-Date: 2026-01-18 10:54+0100\n"
 "PO-Revision-Date: 2025-12-18 13:05+0000\n"
 "Last-Translator: Christof Schulze <christof.schulze@gmx.net>\n"
 "Language-Team: German <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -2036,6 +2036,46 @@ msgstr "Längengrad"
 msgid "Show NMEA Data"
 msgstr "zeige NMEA Daten"
 
+msgid "Change settings"
+msgstr ""
+
+#, c-format
+msgid "Total Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Axle Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Length: %li"
+msgstr ""
+
+#, c-format
+msgid "Width: %li"
+msgstr ""
+
+#, c-format
+msgid "Height: %li"
+msgstr ""
+
+#, c-format
+msgid "Hazardous materials: %s"
+msgstr ""
+
+#. Strings from android/res/values/strings.xml
+#. Android resource: @strings/yes
+msgid "Yes"
+msgstr "Ja"
+
+#, c-format
+msgid "Emission Class: %s"
+msgstr ""
+
+#, c-format
+msgid "Enter Low Emission Zone: %s"
+msgstr ""
+
 msgid "car"
 msgstr "Auto"
 
@@ -2061,6 +2101,10 @@ msgstr "Satellitenstatus anzeigen"
 
 msgid "Show NMEA data"
 msgstr "NMEA Daten anzeigen"
+
+#, c-format
+msgid "Change settings for: %s"
+msgstr ""
 
 msgid "Add Bookmark"
 msgstr "Lesezeichen hinzufügen"
@@ -2132,6 +2176,12 @@ msgstr "Bitte Karte mit Höhenlinien installieren zur Nutzung des Höhenprofils"
 
 msgid "The route must cross at least 2 heightlines"
 msgstr "Die Route muss mindestens 2 Höhenlinien schneiden"
+
+msgid "Distance:"
+msgstr ""
+
+msgid "Vertical Meters:"
+msgstr ""
 
 msgid "Route Description"
 msgstr "Wegbeschreibung"
@@ -2282,11 +2332,6 @@ msgstr "Pferd"
 
 msgid "Truck"
 msgstr "LKW"
-
-#. Strings from android/res/values/strings.xml
-#. Android resource: @strings/yes
-msgid "Yes"
-msgstr "Ja"
 
 #. Android resource: @strings/cancel
 msgid "Cancel"
