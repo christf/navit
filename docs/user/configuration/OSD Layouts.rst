@@ -42,8 +42,6 @@ with , otherwise Navit won't be able to parse it properly.
 This trick was contributed by Daniel Would on the `NSeries <Meamo>`__
 wiki page.
 
-.. _layout_scaler_for_different_screen_sizes:
-
 Layout scaler for different screen sizes
 ----------------------------------------
 
@@ -80,15 +78,11 @@ get it `here <http://www.wandersleb.net/navit/scale-0.1.tar.gz>`__
 
 | 
 
-.. _nokia_nseries_tablets:
-
 Nokia NSeries Tablets
 ---------------------
 
 For tips and advice on Nokia layouts please reference the
 `NSeries <Maemo>`__ specific page.
-
-.. _nseries_layout_1:
 
 NSeries Layout 1
 ~~~~~~~~~~~~~~~~
@@ -155,8 +149,6 @@ NSeries Layout 1
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _nseries_layout_2:
 
 NSeries Layout 2
 ~~~~~~~~~~~~~~~~
@@ -226,8 +218,6 @@ NSeries Layout 2
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _nseries_layout_3:
 
 NSeries Layout 3
 ~~~~~~~~~~~~~~~~
@@ -413,8 +403,6 @@ laptop as well. See the Nokia specific page for further configuration.
 | 
 | ==Neo FreeRunner==
 
-.. _freerunner_layout_1:
-
 FreeRunner Layout 1
 ~~~~~~~~~~~~~~~~~~~
 
@@ -474,8 +462,6 @@ FreeRunner Layout 1
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
 
-.. _freerunner_layout_2:
-
 FreeRunner Layout 2
 ~~~~~~~~~~~~~~~~~~~
 
@@ -524,8 +510,6 @@ FreeRunner Layout 2
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _freerunner_layout_3:
 
 FreeRunner Layout 3
 ~~~~~~~~~~~~~~~~~~~
@@ -579,8 +563,6 @@ FreeRunner Layout 3
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
 
-.. _freerunner_layout_4:
-
 FreeRunner Layout 4
 ~~~~~~~~~~~~~~~~~~~
 
@@ -618,12 +600,8 @@ FreeRunner Layout 4
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
 
-.. _neo_cs:
-
 neo-cs
 ~~~~~~
-
-.. _about_the_skin:
 
 About the skin
 ^^^^^^^^^^^^^^
@@ -671,8 +649,6 @@ Screenshots
 +----------------------------------+----------------------------------+
 |                                  |                                  |
 +----------------------------------+----------------------------------+
-
-.. _skin_description:
 
 Skin description
 ^^^^^^^^^^^^^^^^
@@ -735,8 +711,6 @@ Download
 | Additionally you can find my latest navit built for debian
   squeeze/wheezy there.
 
-.. _installation_and_configuration:
-
 Installation and configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -794,8 +768,6 @@ file to modify rather than to edit everywhere in the complete
 configuration file. That way I have only to look for new layouts or
 vehicleprofiles to include in case of a navit update.
 
-.. _known_issues_bugs_and_todo:
-
 Known issues, bugs and TODO
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -821,12 +793,8 @@ Known issues, bugs and TODO
 
 | 
 
-.. _pc_layouts:
-
 PC Layouts
 ----------
-
-.. _mineques_pc_layouts:
 
 Mineque's PC layouts
 ~~~~~~~~~~~~~~~~~~~~
@@ -863,8 +831,6 @@ with corrected path of your user dirname and choosen skin.
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _mineques_osd_001_layout:
 
 Mineque's OSD 001 Layout
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -928,8 +894,6 @@ layout:
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _mineques_osd_003_layout:
 
 Mineque's OSD 003 Layout
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -996,14 +960,10 @@ layout:
 
 | 
 
-.. _nibblers_osd_layouts:
-
 Nibblers OSD Layouts
 ~~~~~~~~~~~~~~~~~~~~
 
 All these OSDs are developed for and tested with navit 0.2.0
-
-.. _nibbler01_v0.2_for_netbook_widescreen:
 
 nibbler01 v0.2 for Netbook & widescreen
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1046,8 +1006,6 @@ them under the terms of CC-SA.
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
 
-.. _lcars_v0.1_startrek_tng:
-
 LCARS v0.1 (Startrek TNG)
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1079,8 +1037,6 @@ For an appropriate vehicle include the cursor:
    <hr style="height: 10px; color:#AB4E3F; background-color:#AB4E3F;" />
 
 | 
-
-.. _netbook_layout_1:
 
 Netbook Layout 1
 ~~~~~~~~~~~~~~~~
@@ -1119,8 +1075,6 @@ are:
 .. raw:: html
 
    </center>
-
-.. _tracking_mode:
 
 Tracking Mode
 ^^^^^^^^^^^^^
@@ -1186,8 +1140,6 @@ t:
 
       -  Tracking mode
       -  Navigating mode
-
-.. _navigating_mode:
 
 Navigating Mode
 ^^^^^^^^^^^^^^^
@@ -1370,8 +1322,6 @@ There are some hard-coded paths in the markup, especially to the
 
 | 
 
-.. _netbook_layout_2:
-
 Netbook Layout 2
 ~~~~~~~~~~~~~~~~
 
@@ -1399,8 +1349,6 @@ and the `compass <OSD#compass>`__ OSD.
 
    </center>
 
-.. _special_features:
-
 Special Features
 ^^^^^^^^^^^^^^^^
 
@@ -1425,8 +1373,6 @@ Special Features
 | |2D.png| |3D.png| |speech_on.png| |speech_off.png|
   |no_destination.png| |destination_set.png| |calculating_route.png|
   |routing.png|\ |no_route.png|
-
-.. _keybindings_1:
 
 Keybindings
 ^^^^^^^^^^^
@@ -1457,8 +1403,6 @@ SVN builds of Navit. The following are defined:
 
    -  Bound to the speaker icon. Press this key to toggle speech on/off.
 
-.. _xml_1:
-
 XML
 ^^^
 
@@ -1470,7 +1414,7 @@ the png versions, make sure you change the path.
 +----------------------------------------------------------------------+
 | Layout XML                                                           |
 +======================================================================+
-| ::                                                                   |
+| .. code::                                                            |
 |                                                                      |
 |    <!-- TOP LEFT -->                                                 |
 |    <!-- Distance to Next Maneouvre -->                               |
@@ -1611,9 +1555,6 @@ the png versions, make sure you change the path.
 
 | 
 
-.. _glossy_netbook_layout:
-
-10.2" glossy netbook layout
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. raw:: html
@@ -1831,14 +1772,10 @@ the png versions, make sure you change the path.
 
 | 
 
-.. _windows_mobile_osd_layouts:
-
 Windows Mobile OSD Layouts
 --------------------------
 
 All these OSDs are developed for and tested with navit 0.2.0
-
-.. _windows_mobile_vga_1:
 
 Windows Mobile VGA 1
 ~~~~~~~~~~~~~~~~~~~~
@@ -1942,8 +1879,6 @@ with patch included to run Navit with 480x640 pixels.
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
 
-.. _dirk205s_layout_for_landscape_wvga:
-
 Dirk205's layout for landscape WVGA
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2036,8 +1971,6 @@ c) Scaler can work for 2D view only.
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _asus_mypal_a696___qvga_240x320:
 
 Asus Mypal A696 - QVGA 240x320
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2145,8 +2078,6 @@ add this to your navit.xml file:
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _treo_750_qvga_square_240x240_german:
 
 Treo 750 QVGA Square (240x240) (German)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2357,8 +2288,6 @@ the bottom left corner.
 .. raw:: html
 
    <hr style="height: 4px; color:#AB4E3F; background-color:#AB4E3F;" />
-
-.. _yakumo_delta_5_x:
 
 Yakumo Delta 5 X
 ~~~~~~~~~~~~~~~~
@@ -2658,8 +2587,6 @@ also at similar devices (not tested). --`Bogo10 <User:Bogo10>`__ 20:08,
 
 | 
 
-.. _layout_for_sony_nav_u92t:
-
 Layout for Sony nav-u92T
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2728,8 +2655,6 @@ pixmaps, so should be easy to install
 | e="button" x="450" y="20" command="zoom_out()" src="zoom_out.png"/>  |
 +----------------------------------------------------------------------+
 
-.. _palm_pre_layout:
-
 Palm Pre Layout
 ---------------
 
@@ -2753,8 +2678,6 @@ cursor <Layout#2D_Car>`__.
    <hr style="height: 10px; color:#AB4E3F; background-color:#AB4E3F;" />
 
 | 
-
-.. _x800_portrait:
 
 480x800 Portrait
 ----------------
@@ -2852,8 +2775,6 @@ Use osd_configuration="4" in the main navit tag for the initial display.
 
 | 
 
-.. _x480_fwvga:
-
 854x480 (FWVGA)
 ---------------
 
@@ -2875,8 +2796,6 @@ completeness:
    :width: 360px
 
    854_480_horizontal_route.png
-
-.. _with_route:
 
 With route:
 ~~~~~~~~~~~
@@ -2908,8 +2827,6 @@ With route:
    :width: 200px
 
    vertical_no_route.png
-
-.. _without_route:
 
 Without route
 ~~~~~~~~~~~~~
