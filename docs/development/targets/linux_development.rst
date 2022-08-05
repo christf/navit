@@ -3,10 +3,6 @@
 Linux development
 =================
 
-.. raw:: mediawiki
-
-   {{warning|1='''This is a page has been migrated to readthedocs:'''https://github.com/navit-gps/navit/pull/880 . It is only kept here for archiving purposes.}}
-
 .. _taking_care_of_dependencies:
 
 Taking care of dependencies
@@ -14,7 +10,7 @@ Taking care of dependencies
 
 See the `Dependencies <Dependencies>`__ page for a list of software
 packages required to build Navit. To build with `CMake <#CMake>`__ you
-will need **CMake 2.6** or newer.
+will need **CMake 3.2** or newer.
 
 .. _getting_navit_from_the_git_repository:
 
