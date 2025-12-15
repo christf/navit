@@ -150,6 +150,7 @@ static GList *process_boundaries_setup(FILE *boundaries, struct relations *relat
         boundary->ib=item_bin_dup(ib);
         boundaries_list=g_list_append(boundaries_list, boundary);
     }
+    g_free(relations_func);
     return boundaries_list;
 }
 
