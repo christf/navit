@@ -307,8 +307,7 @@ static void command_get_attr(struct context *ctx, struct result *res) {
     int result;
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     enum attr_type attr_type = command_attr_type(res);
     enum attr_type parent_type = res->attr.type; /* for debugging only */
@@ -914,8 +913,7 @@ static void command_call_function(struct context *ctx, struct result *res) {
 static void eval_postfix(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     const char *op;
 
@@ -1001,8 +999,7 @@ static void eval_unary(struct context *ctx, struct result *res) {
 static void eval_multiplicative(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     const char *op;
 
@@ -1024,8 +1021,7 @@ static void eval_multiplicative(struct context *ctx, struct result *res) {
 static void eval_additive(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     const char *op;
 
@@ -1047,8 +1043,7 @@ static void eval_additive(struct context *ctx, struct result *res) {
 static void eval_equality(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     const char *op;
 
@@ -1070,8 +1065,7 @@ static void eval_equality(struct context *ctx, struct result *res) {
 static void eval_bitwise_and(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_equality(ctx, res);
@@ -1094,8 +1088,7 @@ static void eval_bitwise_and(struct context *ctx, struct result *res) {
 static void eval_bitwise_xor(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_bitwise_and(ctx, res);
@@ -1116,8 +1109,7 @@ static void eval_bitwise_xor(struct context *ctx, struct result *res) {
 static void eval_bitwise_or(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_bitwise_xor(ctx, res);
@@ -1140,8 +1132,7 @@ static void eval_bitwise_or(struct context *ctx, struct result *res) {
 static void eval_logical_and(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_bitwise_or(ctx, res);
@@ -1162,8 +1153,7 @@ static void eval_logical_and(struct context *ctx, struct result *res) {
 static void eval_logical_or(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_logical_and(ctx, res);
@@ -1184,8 +1174,7 @@ static void eval_logical_or(struct context *ctx, struct result *res) {
 static void eval_conditional(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     int cond = 0;
     int skip;
@@ -1235,8 +1224,7 @@ static void eval_conditional(struct context *ctx, struct result *res) {
 static void eval_assignment(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
     eval_conditional(ctx, res);
     if (ctx->error)
@@ -1261,8 +1249,7 @@ static void eval_assignment(struct context *ctx, struct result *res) {
 static void eval_comma(struct context *ctx, struct result *res) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     eval_assignment(ctx, res);
@@ -1282,8 +1269,7 @@ static void eval_comma(struct context *ctx, struct result *res) {
 static struct attr **eval_list(struct context *ctx) {
     struct result tmp = {
         {
-            0,
-        },
+         0, },
     };
 
     struct attr **ret = NULL;
@@ -1335,8 +1321,7 @@ static void command_evaluate_to(struct attr *attr, const char *expr, struct cont
 enum attr_type command_evaluate_to_attr(struct attr *attr, char *expr, int *error, struct attr *ret) {
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
     command_evaluate_to(attr, expr, &ctx, &res);
@@ -1351,8 +1336,7 @@ enum attr_type command_evaluate_to_attr(struct attr *attr, char *expr, int *erro
 void command_evaluate_to_void(struct attr *attr, char *expr, int *error) {
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
     command_evaluate_to(attr, expr, &ctx, &res);
@@ -1366,8 +1350,7 @@ void command_evaluate_to_void(struct attr *attr, char *expr, int *error) {
 char *command_evaluate_to_string(struct attr *attr, char *expr, int *error) {
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
     char *ret = NULL;
@@ -1391,8 +1374,7 @@ char *command_evaluate_to_string(struct attr *attr, char *expr, int *error) {
 int command_evaluate_to_int(struct attr *attr, char *expr, int *error) {
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
     int ret = 0;
@@ -1416,8 +1398,7 @@ int command_evaluate_to_int(struct attr *attr, char *expr, int *error) {
 int command_evaluate_to_boolean(struct attr *attr, const char *expr, int *error) {
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
     int ret = 0;
@@ -1449,8 +1430,7 @@ int command_evaluate_to_length(const char *expr, int *error) {
     struct attr attr;
     struct result res = {
         {
-            0,
-        },
+         0, },
     };
     struct context ctx;
 
@@ -1469,9 +1449,8 @@ static int command_evaluate_single(struct context *ctx) {
     struct result res =
                       {
                           {
-                              0,
-                          },
-                      },
+                           0, },
+    },
                   tmp = {
                       {
                           0,
