@@ -25,10 +25,10 @@ extern "C" {
 #endif
 
 #ifndef PATH_MAX
-#define PATH_MAX 4096
+#    define PATH_MAX 4096
 #endif
 #ifndef __CEGCC__
-#include <time.h>
+#    include <time.h>
 #endif
 #include "param.h"
 #include <stdio.h>

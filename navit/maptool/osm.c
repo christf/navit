@@ -18,10 +18,10 @@
  */
 #include "navit_lfs.h"
 #ifdef _MSC_VER
-#define strcasecmp _stricmp
-#define snprintf _snprintf
+#    define strcasecmp _stricmp
+#    define snprintf _snprintf
 #else
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 #include "country.h"
 #include "debug.h"
@@ -37,8 +37,8 @@
 #include <string.h>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
-#define M_PI_4 0.785398163397448309616
+#    define M_PI 3.14159265358979323846
+#    define M_PI_4 0.785398163397448309616
 #endif
 
 static int in_way, in_node, in_relation;
@@ -3807,11 +3807,11 @@ void process_turn_restrictions_old(FILE *in, FILE *coords, FILE *ways, FILE *way
             }
 
         }
-#if 0
+#    if 0
         fprintf(stderr,"via "LONGLONG_FMT" vs %d\n",viam.id, ni.id);
         fprintf(stderr,"coord 0x%x,0x%x\n",ni.c.x,ni.c.y);
         fprintf(stderr,"Lookup "LONGLONG_FMT"\n",fromm.id);
-#endif
+#    endif
         if (!(fromc=get_way(ways, ways_index, viafrom, fromm.id, from, 0))) {
             if (viam.type == 1 || !(fromc=get_way(ways, ways_index, viato, fromm.id, from, 0))) {
                 osm_warning("relation",relid,0,"turn restriction: failed to connect via ");
@@ -3836,9 +3836,9 @@ void process_turn_restrictions_old(FILE *in, FILE *coords, FILE *ways, FILE *way
             fprintf(stderr,")\n");
             continue;
         }
-#if 0
+#    if 0
         fprintf(stderr,"(0x%x,0x%x)-(0x%x,0x%x)-(0x%x,0x%x)\n",fromc->x,fromc->y, ni.c.x, ni.c.y, toc->x, toc->y);
-#endif
+#    endif
         item_bin_init(ib,ib->type);
         item_bin_add_coord(ib, fromc, 1);
         item_bin_add_coord(ib, viafrom, 1);
@@ -3888,12 +3888,12 @@ static void process_countries(FILE *way, FILE *ways_index) {
             fprintf(stderr,"segment %p %s area "LONGLONG_FMT"\n",sort_segments,coord_is_equal(*seg->first,
                     *seg->last) ? "closed":"open",geom_poly_area(seg->first,seg->last-seg->first+1));
         }
-#if 0
+#    if 0
         int count=seg->last-seg->first+1;
         item_bin_init(ib, type_border_country);
         item_bin_add_coord(ib, seg->first, count);
         item_bin_dump(ib, tmp);
-#endif
+#    endif
 
         sort_segments=g_list_next(sort_segments);
     }

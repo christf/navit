@@ -28,12 +28,12 @@
 #include "config.h"
 
 #ifdef HAVE_UNISTD_H
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 
 #ifndef _WIN32
-#include <signal.h>
-#include <sys/wait.h>
+#    include <signal.h>
+#    include <sys/wait.h>
 #endif
 
 #include "callback.h"
@@ -51,11 +51,11 @@
 #include "util.h"
 #include "xmlconfig.h"
 #ifdef HAVE_API_WIN32_BASE
-#include <windows.h>
+#    include <windows.h>
 #endif
 
 #ifdef HAVE_API_WIN32_CE
-#include "libc.h"
+#    include "libc.h"
 #endif
 
 struct map_data *map_data_default;
@@ -63,14 +63,14 @@ struct map_data *map_data_default;
 struct callback_list *cbl;
 
 #ifdef HAVE_API_WIN32
-#ifndef HAVE_API_WIN32_CE
+#    ifndef HAVE_API_WIN32_CE
 void setenv(char *var, char *val, int overwrite) {
     char *str = g_strdup_printf("%s=%s", var, val);
     if (overwrite || !getenv(var))
         putenv(str);
     g_free(str);
 }
-#endif
+#    endif
 #endif
 
 /*
@@ -316,16 +316,16 @@ static void win_set_nls(void) {
     char country[32], lang[32];
     int i = 0;
 
-#ifdef HAVE_API_WIN32_CE
+#    ifdef HAVE_API_WIN32_CE
     wchar_t wcountry[32], wlang[32];
     GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SABBREVLANGNAME, wlang, sizeof(wlang));
     WideCharToMultiByte(CP_ACP, 0, wlang, -1, lang, sizeof(lang), NULL, NULL);
     GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SABBREVCTRYNAME, wcountry, sizeof(wcountry));
     WideCharToMultiByte(CP_ACP, 0, wcountry, -1, country, sizeof(country), NULL, NULL);
-#else
+#    else
     GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SABBREVLANGNAME, lang, sizeof(lang));
     GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SABBREVCTRYNAME, country, sizeof(country));
-#endif
+#    endif
     while (nls_table[i][0]) {
         if (!strcmp(nls_table[i][0], lang) && !(strcmp(nls_table[i][1], country))) {
             dbg(lvl_info, "Setting LANG=%s for Lang %s Country %s", nls_table[i][2], lang, country);
@@ -385,25 +385,25 @@ void main_init(const char *program) {
             } else
                 setenv("NAVIT_PREFIX", PREFIX, 0);
         }
-#ifdef HAVE_API_ANDROID
+#    ifdef HAVE_API_ANDROID
         main_setup_environment(3);
-#else
+#    else
         main_setup_environment(1);
-#endif
+#    endif
     }
 
-#else           /* _WIN32 || _WIN32_WCE */
+#else               /* _WIN32 || _WIN32_WCE */
     if (!getenv("NAVIT_PREFIX")) {
         char filename[MAX_PATH + 1], *end;
         int len;
 
         *filename = '\0';
-#ifdef _UNICODE /* currently for wince */
+#    ifdef _UNICODE /* currently for wince */
         if (GetModuleFileNameW(NULL, wfilename, MAX_PATH)) {
             wcstombs(filename, wfilename, MAX_PATH);
-#else
+#    else
         if (GetModuleFileName(NULL, filename, MAX_PATH)) {
-#endif
+#    endif
             end = strrchr(filename, L'\\'); /* eliminate the file name which is on the right side */
             if (end)
                 *end = '\0';
@@ -416,21 +416,21 @@ void main_init(const char *program) {
     }
     if (!getenv("HOME"))
         setenv("HOME", getenv("NAVIT_PREFIX"), 0);
-#if defined(HAVE_API_WIN32) && !defined(HAVE_API_WIN32_CE)
+#    if defined(HAVE_API_WIN32) && !defined(HAVE_API_WIN32_CE)
     main_setup_environment(4);
-#else /* not (defined(HAVE_API_WIN32) && !defined(HAVE_API_WIN32_CE)) */
-#if defined(HAVE_API_WIN32_CE) && !defined(HAVE_API_WIN32)
+#    else /* not (defined(HAVE_API_WIN32) && !defined(HAVE_API_WIN32_CE)) */
+#        if defined(HAVE_API_WIN32_CE) && !defined(HAVE_API_WIN32)
     main_setup_environment(2);
-#else /* not (defined(HAVE_API_WIN32_CE) && !defined(HAVE_API_WIN32)) */
-#if defined(HAVE_API_WIN32_CE)
-#warning HAVE_API_WIN32_CE is defined
-#endif
-#if defined(HAVE_API_WIN32)
-#warning HAVE_API_WIN32 is defined
-#endif
-#error Exactly only one directive amongst HAVE_API_WIN32_CE or HAVE_API_WIN32 should be defined when preprocessor reach this section of code
-#endif
-#endif
+#        else /* not (defined(HAVE_API_WIN32_CE) && !defined(HAVE_API_WIN32)) */
+#            if defined(HAVE_API_WIN32_CE)
+#                warning HAVE_API_WIN32_CE is defined
+#            endif
+#            if defined(HAVE_API_WIN32)
+#                warning HAVE_API_WIN32 is defined
+#            endif
+#            error Exactly only one directive amongst HAVE_API_WIN32_CE or HAVE_API_WIN32 should be defined when preprocessor reach this section of code
+#        endif
+#    endif
 #endif /* _WIN32 || _WIN32_WCE */
 
     s = getenv("NAVIT_WID");
