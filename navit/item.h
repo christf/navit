@@ -46,10 +46,11 @@ extern int default_flags[];
 #define item_is_point(item) ((item).type < type_line)
 #define item_is_custom_poi(item) ((item).type >= type_poi_customg && (item).type < type_line)
 #define item_is_street(item)                                                                                           \
-    (((item).type >= type_street_nopass && (item).type <= type_roundabout) || (item).type == type_street_service       \
+    (((item).type >= type_street_nopass && (item).type <= type_roundabout)                                             \
      || ((item).type >= type_street_pedestrian && (item).type <= type_track_grass)                                     \
-     || (item).type == type_living_street || (item).type == type_street_construction || (item).type == type_path       \
-     || (item).type == type_street_parking_lane || (item).type == type_footway)
+     || (item).type == type_street_service || (item).type == type_living_street                                        \
+     || (item).type == type_street_construction || (item).type == type_path || (item).type == type_street_parking_lane \
+     || (item).type == type_footway)
 /**
  * @brief Determines if the given item's type is a POI or not
  *
