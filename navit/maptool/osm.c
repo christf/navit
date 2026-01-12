@@ -3016,14 +3016,14 @@ static void process_multipolygons_finish(GList *tr, FILE *out) {
         int *outer_direction = NULL;
         int **outer_sequences = NULL;
         /* combine outer to full loops */
-        outer_loop_count =
-            process_multipolygons_find_loops(multipolygon->relid, multipolygon->outer_count, multipolygon->outer,
-                                             &outer_scount, &outer_sequences, &outer_direction);
+        outer_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->outer_count,
+                                                            multipolygon->outer, &outer_scount, &outer_sequences,
+                                                            &outer_direction);
 
         /* combine inner to full loops */
-        inner_loop_count =
-            process_multipolygons_find_loops(multipolygon->relid, multipolygon->inner_count, multipolygon->inner,
-                                             &inner_scount, &inner_sequences, &inner_direction);
+        inner_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->inner_count,
+                                                            multipolygon->inner, &inner_scount, &inner_sequences,
+                                                            &inner_direction);
 
         dump_sequence("outer", outer_loop_count, outer_scount, outer_sequences, outer_direction);
         dump_sequence("inner", inner_loop_count, inner_scount, inner_sequences, inner_direction);

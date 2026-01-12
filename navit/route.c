@@ -839,8 +839,8 @@ static void route_info_distances(struct route_info *ri, enum projection pro) {
     /* 0 1 2 X 3 4 5 6 pos=2 npos=3 count=7 0,1,2 3,4,5,6*/
     ri->lenextra = transform_distance(pro, &ri->lp, &ri->c);
     ri->lenneg = transform_polyline_length(pro, sd->c, npos) + transform_distance(pro, &sd->c[ri->pos], &ri->lp);
-    ri->lenpos =
-        transform_polyline_length(pro, sd->c + npos, sd->count - npos) + transform_distance(pro, &sd->c[npos], &ri->lp);
+    ri->lenpos = transform_polyline_length(pro, sd->c + npos, sd->count - npos)
+                 + transform_distance(pro, &sd->c[npos], &ri->lp);
     if (ri->lenneg || ri->lenpos)
         ri->percent = (ri->lenneg * 100) / (ri->lenneg + ri->lenpos);
     else
@@ -1609,8 +1609,8 @@ void route_graph_add_segment(struct route_graph *this, struct route_graph_point 
     struct route_graph_segment *s;
     int size;
 
-    size =
-        sizeof(struct route_graph_segment) - sizeof(struct route_segment_data) + route_segment_data_size(data->flags);
+    size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data)
+           + route_segment_data_size(data->flags);
     s = g_slice_alloc0(size);
     if (!s) {
         printf("%s:Out of memory\n", __FUNCTION__);
