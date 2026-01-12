@@ -687,8 +687,8 @@ static void eval_value(struct context *ctx, struct result *res) {
     if ((op[0] >= 'a' && op[0] <= 'z') || (op[0] >= 'A' && op[0] <= 'Z') || op[0] == '_') {
         const char *s = op;
         for (;;) {
-            while ((op[0] >= 'a' && op[0] <= 'z') || (op[0] >= 'A' && op[0] <= 'Z') || (op[0] >= '0' && op[0] <= '9') ||
-                   op[0] == '_') {
+            while ((op[0] >= 'a' && op[0] <= 'z') || (op[0] >= 'A' && op[0] <= 'Z') || (op[0] >= '0' && op[0] <= '9')
+                   || op[0] == '_') {
                 op++;
             }
             if (op - s == 3 && !strncmp(s, "new", 3) && op[0] == ' ') {
@@ -700,9 +700,9 @@ static void eval_value(struct context *ctx, struct result *res) {
         ctx->expr = op;
         return;
     }
-    if ((op[0] >= '0' && op[0] <= '9') || (op[0] == '.' && op[1] >= '0' && op[1] <= '9') ||
-        (op[0] == '-' && op[1] >= '0' && op[1] <= '9') ||
-        (op[0] == '-' && op[1] == '.' && op[2] >= '0' && op[2] <= '9')) {
+    if ((op[0] >= '0' && op[0] <= '9') || (op[0] == '.' && op[1] >= '0' && op[1] <= '9')
+        || (op[0] == '-' && op[1] >= '0' && op[1] <= '9')
+        || (op[0] == '-' && op[1] == '.' && op[2] >= '0' && op[2] <= '9')) {
         while ((op[0] >= '0' && op[0] <= '9') || op[0] == '.' || (res->varlen == 0 && op[0] == '-')) {
             if (op[0] == '.')
                 dots++;
@@ -839,8 +839,8 @@ static void command_call_function(struct context *ctx, struct result *res) {
         return;
     }
     if (!ctx->skip) {
-        if (!strcmp(function, "_") && list && list[0] && list[0]->type >= attr_type_string_begin &&
-            list[0]->type <= attr_type_string_end) {
+        if (!strcmp(function, "_") && list && list[0] && list[0]->type >= attr_type_string_begin
+            && list[0]->type <= attr_type_string_end) {
             result_free(res);
             res->attr.type = list[0]->type;
             res->attr.u.str = g_strdup(navit_nls_gettext(list[0]->u.str));
@@ -1428,8 +1428,8 @@ int command_evaluate_to_boolean(struct attr *attr, const char *expr, int *error)
     if (!ctx.error) {
         if (res.attr.type == attr_none)
             ret = 0;
-        else if ((res.attr.type >= attr_type_int_begin && res.attr.type <= attr_type_int_end) ||
-                 (res.attr.type >= attr_type_double_begin && res.attr.type <= attr_type_double_end))
+        else if ((res.attr.type >= attr_type_int_begin && res.attr.type <= attr_type_int_end)
+                 || (res.attr.type >= attr_type_double_begin && res.attr.type <= attr_type_double_end))
             ret = get_int(&ctx, &res);
         else
             ret = res.attr.u.data != NULL;

@@ -1118,9 +1118,9 @@ void osm_add_tag(char *k, char *v) {
     }
     if (!g_strcmp0(k, "access")) {
         if (g_strcmp0(v, "destination"))
-            flagsa[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK |
-                                       AF_DELIVERY_TRUCK | AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR |
-                                       AF_MOTORCYCLE | AF_MOPED | AF_HORSE | AF_BIKE | AF_PEDESTRIAN;
+            flagsa[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK
+                                       | AF_DELIVERY_TRUCK | AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR
+                                       | AF_MOTORCYCLE | AF_MOPED | AF_HORSE | AF_BIKE | AF_PEDESTRIAN;
         else
             flags[0] |= AF_THROUGH_TRAFFIC_LIMIT;
         if (!g_strcmp0(v, "hov"))
@@ -1128,14 +1128,14 @@ void osm_add_tag(char *k, char *v) {
         level = 5;
     }
     if (!g_strcmp0(k, "vehicle")) {
-        flags[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK | AF_DELIVERY_TRUCK |
-                                  AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR | AF_MOTORCYCLE | AF_MOPED |
-                                  AF_BIKE;
+        flags[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK | AF_DELIVERY_TRUCK
+                                  | AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR | AF_MOTORCYCLE | AF_MOPED
+                                  | AF_BIKE;
         level = 5;
     }
     if (!g_strcmp0(k, "motor_vehicle")) {
-        flags[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK | AF_DELIVERY_TRUCK |
-                                  AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR | AF_MOTORCYCLE | AF_MOPED;
+        flags[access_value(v)] |= AF_DANGEROUS_GOODS | AF_EMERGENCY_VEHICLES | AF_TRANSPORT_TRUCK | AF_DELIVERY_TRUCK
+                                  | AF_PUBLIC_BUS | AF_TAXI | AF_HIGH_OCCUPANCY_CAR | AF_CAR | AF_MOTORCYCLE | AF_MOPED;
         level = 5;
     }
     if (!g_strcmp0(k, "bicycle")) {
@@ -1739,8 +1739,9 @@ void osm_end_relation(struct maptool_osm *osm) {
     /* sets tmp_item_bin type and other fields */
     osm_end_relation_multipolygon(osm);
 
-    if (!g_strcmp0(relation_type, "restriction") && (tmp_item_bin->type == type_street_turn_restriction_no ||
-                                                     tmp_item_bin->type == type_street_turn_restriction_only))
+    if (!g_strcmp0(relation_type, "restriction")
+        && (tmp_item_bin->type == type_street_turn_restriction_no
+            || tmp_item_bin->type == type_street_turn_restriction_only))
         item_bin_write(tmp_item_bin, osm->turn_restrictions);
 
     if (!g_strcmp0(relation_type, "associatedStreet"))
@@ -1892,8 +1893,8 @@ void osm_end_way(struct maptool_osm *osm) {
             item_bin_add_attr_int(item_bin, attr_duplicate, 1);
         item_bin_write(item_bin, osm->ways);
 
-        if (types[i] >= type_house_number_interpolation_even &&
-            types[i] <= type_house_number_interpolation_alphabetic) {
+        if (types[i] >= type_house_number_interpolation_even
+            && types[i] <= type_house_number_interpolation_alphabetic) {
             struct item_bin *item_bin_interpolation_way = init_item(types[i]);
             item_bin_add_attr_longlong(item_bin, attr_osm_wayid, osmid_attr_value);
             item_bin_add_attr_longlong(item_bin, attr_osm_nodeid_first_node, GET_REF(coord_buffer[0]));
@@ -2215,9 +2216,8 @@ static void osm_town_relations_to_poly(GList *boundaries, FILE *towns_poly) {
             GList *s = b->sorted_segments;
             while (s) {
                 struct geom_poly_segment *seg = s->data;
-                if ((seg->type == geom_poly_segment_type_way_outer ||
-                     seg->type == geom_poly_segment_type_way_unknown) &&
-                    coord_is_equal(*seg->first, *seg->last)) {
+                if ((seg->type == geom_poly_segment_type_way_outer || seg->type == geom_poly_segment_type_way_unknown)
+                    && coord_is_equal(*seg->first, *seg->last)) {
                     struct item_bin *ib = init_item(b->ib->type);
                     void *a;
                     item_bin_add_coord(ib, seg->first, seg->last - seg->first + 1);
@@ -2300,8 +2300,8 @@ void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
                 g_free(name);
             }
 
-            if (item_is_district(*ib) &&
-                NULL != (town_name = osm_process_town_get_town_name_from_is_in(ib, town_hash))) {
+            if (item_is_district(*ib)
+                && NULL != (town_name = osm_process_town_get_town_name_from_is_in(ib, town_hash))) {
                 struct attr attr_new_town_name;
                 attr_new_town_name.type = attr_town_name;
                 attr_new_town_name.u.str = town_name;
@@ -2547,20 +2547,20 @@ static void process_associated_street_member(void *func_priv, void *relation_pri
     if (!fp->out) {
         /* Pass 1, fill associated street names in relation_priv */
         char *name;
-        if (!rel->name && item_is_street(*member) &&
-            (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
+        if (!rel->name && item_is_street(*member)
+            && (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
             rel->name = g_strdup(name);
             fp->allocations = g_list_prepend(fp->allocations, rel->name);
         }
     } else {
         /* Pass 2, add associated street names to relation members which do not have street name attr defined but
            have house number defined or are streets */
-        int type_implies_streetname = item_is_street(*member) || member->type == type_house_number_interpolation_even ||
-                                      member->type == type_house_number_interpolation_odd ||
-                                      member->type == type_house_number_interpolation_all ||
-                                      member->type == type_house_number_interpolation_alphabetic;
-        if (rel->name && !item_bin_get_attr(member, attr_street_name, NULL) &&
-            (type_implies_streetname || item_bin_get_attr(member, attr_house_number, NULL)))
+        int type_implies_streetname = item_is_street(*member) || member->type == type_house_number_interpolation_even
+                                      || member->type == type_house_number_interpolation_odd
+                                      || member->type == type_house_number_interpolation_all
+                                      || member->type == type_house_number_interpolation_alphabetic;
+        if (rel->name && !item_bin_get_attr(member, attr_street_name, NULL)
+            && (type_implies_streetname || item_bin_get_attr(member, attr_house_number, NULL)))
             item_bin_add_attr_string(member, attr_street_name, rel->name);
         item_bin_write(member, fp->out);
     }
@@ -3042,8 +3042,8 @@ static void process_multipolygons_finish(GList *tr, FILE *out) {
             }
             // long long relid=item_bin_get_relationid(multipolygon->rel);
             // fprintf(stderr,"process %lld\n", relid);
-            outer_length = process_multipolygons_loop_count(multipolygon->outer, outer_scount[b], outer_sequences[b]) *
-                           sizeof(struct coord);
+            outer_length = process_multipolygons_loop_count(multipolygon->outer, outer_scount[b], outer_sequences[b])
+                           * sizeof(struct coord);
             outer_buffer = (struct coord *)g_malloc0(outer_length);
             outer_length = process_multipolygons_loop_dump(multipolygon->outer, outer_scount[b], outer_sequences[b],
                                                            outer_direction, outer_buffer);
@@ -3071,8 +3071,8 @@ static void process_multipolygons_finish(GList *tr, FILE *out) {
                 used += sizeof(int);
                 hole_coord = (struct coord *)&(buffer[used]);
                 used += process_multipolygons_loop_dump(multipolygon->inner, inner_scount[a], inner_sequences[a],
-                                                        inner_direction, (struct coord *)&(buffer[used])) *
-                        sizeof(struct coord);
+                                                        inner_direction, (struct coord *)&(buffer[used]))
+                        * sizeof(struct coord);
                 /* check if at least one point is inside the outer */
                 for (d = 0; d < hole_len; d++)
                     if (bbox_contains_coord(&outer_bbox, hole_coord))
@@ -3128,14 +3128,14 @@ static void process_multipolygons_member(void *func_priv, void *relation_priv, s
     /* we remeber the whole binary item, as we may want to have the attributes later on finalize */
     if (type) {
         /* copy the member as inner */
-        multipolygon->inner = (struct item_bin **)g_realloc(multipolygon->inner, sizeof(struct item_bin *) *
-                                                                                     (multipolygon->inner_count + 1));
+        multipolygon->inner = (struct item_bin **)g_realloc(multipolygon->inner, sizeof(struct item_bin *)
+                                                                                     * (multipolygon->inner_count + 1));
         multipolygon->inner[multipolygon->inner_count] = item_bin_dup(member);
         multipolygon->inner_count++;
     } else {
         /* copy the member as outer */
-        multipolygon->outer = (struct item_bin **)g_realloc(multipolygon->outer, sizeof(struct item_bin *) *
-                                                                                     (multipolygon->outer_count + 1));
+        multipolygon->outer = (struct item_bin **)g_realloc(multipolygon->outer, sizeof(struct item_bin *)
+                                                                                     * (multipolygon->outer_count + 1));
         multipolygon->outer[multipolygon->outer_count] = item_bin_dup(member);
         multipolygon->outer_count++;
     }
@@ -4159,8 +4159,8 @@ void write_countrydir(struct zip_info *zip_info, int max_index_size) {
                      - adding new tile would make index part too big, or
                      - item just read belongs to a different tile than the previous one,
                     then close existing output file, put reference to the country index tile.*/
-                if (out &&
-                    (!r || (partsize && ((partsize + ibsize) > max_index_size)) || g_strcmp0(tileprev, tilecur))) {
+                if (out
+                    && (!r || (partsize && ((partsize + ibsize) > max_index_size)) || g_strcmp0(tileprev, tilecur))) {
                     partsize = ftello(out);
                     fclose(out);
                     out = NULL;

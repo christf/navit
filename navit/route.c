@@ -645,8 +645,8 @@ int route_destination_reached(struct route *this) {
         return 0;
     }
 
-    if ((sd->flags & AF_ONEWAY) &&
-        (this->pos->lenneg >= dst->lenneg)) {  // We would have to drive against the one-way road
+    if ((sd->flags & AF_ONEWAY)
+        && (this->pos->lenneg >= dst->lenneg)) {  // We would have to drive against the one-way road
         return 0;
     }
     if ((sd->flags & AF_ONEWAYREV) && (this->pos->lenpos >= dst->lenpos)) {
@@ -1864,8 +1864,8 @@ void route_graph_free_segments(struct route_graph *this) {
     curr = this->route_segments;
     while (curr) {
         next = curr->next;
-        size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data) +
-               route_segment_data_size(curr->data.flags);
+        size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data)
+               + route_segment_data_size(curr->data.flags);
         g_slice_free1(size, curr);
         curr = next;
     }
@@ -1936,8 +1936,8 @@ static int route_seg_speed(struct vehicleprofile *profile, struct route_segment_
             calculatedspeed = 0;
         if (size_weight->weight != -1 && profile->weight != -1 && profile->weight > size_weight->weight)
             calculatedspeed = 0;
-        if (size_weight->axle_weight != -1 && profile->axle_weight != -1 &&
-            profile->axle_weight > size_weight->axle_weight)
+        if (size_weight->axle_weight != -1 && profile->axle_weight != -1
+            && profile->axle_weight > size_weight->axle_weight)
             calculatedspeed = 0;
     }
 
@@ -2019,8 +2019,8 @@ static int route_get_traffic_distortion(struct route_graph_segment *seg, int dir
 
     for (tmp = start->start; tmp; tmp = tmp->start_next) {
         if (tmp->data.item.type == type_traffic_distortion && tmp->start == start && tmp->end == end) {
-            if ((tmp->data.flags & (dir > 0 ? profile->flags_forward_mask : profile->flags_reverse_mask)) !=
-                profile->flags)
+            if ((tmp->data.flags & (dir > 0 ? profile->flags_forward_mask : profile->flags_reverse_mask))
+                != profile->flags)
                 continue;
             if (tmp->data.len > result.delay)
                 result.delay = tmp->data.len;
@@ -2031,8 +2031,8 @@ static int route_get_traffic_distortion(struct route_graph_segment *seg, int dir
     }
     for (tmp = start->end; tmp; tmp = tmp->end_next) {
         if (tmp->data.item.type == type_traffic_distortion && tmp->end == start && tmp->start == end) {
-            if ((tmp->data.flags & (dir < 0 ? profile->flags_forward_mask : profile->flags_reverse_mask)) !=
-                profile->flags)
+            if ((tmp->data.flags & (dir < 0 ? profile->flags_forward_mask : profile->flags_reverse_mask))
+                != profile->flags)
                 continue;
             if (tmp->data.len > result.delay)
                 result.delay = tmp->data.len;
@@ -2100,16 +2100,16 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
         return INT_MAX;
     if (over->data.item.type == type_traffic_distortion)
         return INT_MAX;
-    if ((over->start->flags & RP_TRAFFIC_DISTORTION) && (over->end->flags & RP_TRAFFIC_DISTORTION) &&
-        route_get_traffic_distortion(over, dir, profile, &dist) && dir != 2 && dir != -2) {
+    if ((over->start->flags & RP_TRAFFIC_DISTORTION) && (over->end->flags & RP_TRAFFIC_DISTORTION)
+        && route_get_traffic_distortion(over, dir, profile, &dist) && dir != 2 && dir != -2) {
         /* we have a traffic distortion */
         distp = &dist;
     }
     ret = route_time_seg(profile, &over->data, distp);
     if (ret == INT_MAX)
         return ret;
-    if (!route_through_traffic_allowed(profile, over) && from && from->seg &&
-        route_through_traffic_allowed(profile, from->seg))
+    if (!route_through_traffic_allowed(profile, over) && from && from->seg
+        && route_through_traffic_allowed(profile, from->seg))
         ret += profile->through_traffic_penalty;
     return ret;
 }
@@ -2126,8 +2126,8 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
 static int route_graph_segment_match(struct route_graph_segment *s1, struct route_graph_segment *s2) {
     if (!s1 || !s2)
         return 0;
-    return (s1->start->c.x == s2->start->c.x && s1->start->c.y == s2->start->c.y && s1->end->c.x == s2->end->c.x &&
-            s1->end->c.y == s2->end->c.y);
+    return (s1->start->c.x == s2->start->c.x && s1->start->c.y == s2->start->c.y && s1->end->c.x == s2->end->c.x
+            && s1->end->c.y == s2->end->c.y);
 }
 
 /**
@@ -2456,8 +2456,8 @@ static void route_graph_remove_traffic_distortion(struct route_graph *this, stru
             curr = prev->end_next;
         }
 
-        size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data) +
-               route_segment_data_size(found->data.flags);
+        size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data)
+               + route_segment_data_size(found->data.flags);
         g_slice_free1(size, found);
 #endif
 
@@ -2870,9 +2870,10 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
         return NULL;
     }
 
-    if (profile->mode == 2 ||
-        (profile->mode == 0 &&
-         pos->lenextra + dst->lenextra > transform_distance(map_projection(pos->street->item.map), &pos->c, &dst->c)))
+    if (profile->mode == 2
+        || (profile->mode == 0
+            && pos->lenextra + dst->lenextra
+                   > transform_distance(map_projection(pos->street->item.map), &pos->c, &dst->c)))
         return route_path_new_offroad(this, pos, dst);
     while ((s = route_graph_get_segment(this, pos->street, s))) {
         val = route_value_seg(profile, NULL, s, 2);
@@ -2994,9 +2995,9 @@ static int is_turn_allowed(struct route_graph_point *p, struct route_graph_segme
         next = to->start;
     tmp1 = p->end;
     while (tmp1) {
-        if (tmp1->start->c.x == prev->c.x && tmp1->start->c.y == prev->c.y &&
-            (tmp1->data.item.type == type_street_turn_restriction_no ||
-             tmp1->data.item.type == type_street_turn_restriction_only)) {
+        if (tmp1->start->c.x == prev->c.x && tmp1->start->c.y == prev->c.y
+            && (tmp1->data.item.type == type_street_turn_restriction_no
+                || tmp1->data.item.type == type_street_turn_restriction_only)) {
             tmp2 = p->start;
             dbg(lvl_debug, "found %s (0x%x,0x%x) (0x%x,0x%x)-(0x%x,0x%x) %p-%p", item_to_name(tmp1->data.item.type),
                 tmp1->data.item.id_hi, tmp1->data.item.id_lo, tmp1->start->c.x, tmp1->start->c.y, tmp1->end->c.x,
@@ -3013,14 +3014,14 @@ static int is_turn_allowed(struct route_graph_point *p, struct route_graph_segme
             if (tmp2) {
                 dbg(lvl_debug, "%s tmp2->end=%p next=%p", item_to_name(tmp1->data.item.type), tmp2->end, next);
             }
-            if (tmp1->data.item.type == type_street_turn_restriction_no && tmp2 && tmp2->end->c.x == next->c.x &&
-                tmp2->end->c.y == next->c.y) {
+            if (tmp1->data.item.type == type_street_turn_restriction_no && tmp2 && tmp2->end->c.x == next->c.x
+                && tmp2->end->c.y == next->c.y) {
                 dbg(lvl_debug, "from 0x%x,0x%x over 0x%x,0x%x to 0x%x,0x%x not allowed (no)", prev->c.x, prev->c.y,
                     p->c.x, p->c.y, next->c.x, next->c.y);
                 return 0;
             }
-            if (tmp1->data.item.type == type_street_turn_restriction_only && tmp2 &&
-                (tmp2->end->c.x != next->c.x || tmp2->end->c.y != next->c.y)) {
+            if (tmp1->data.item.type == type_street_turn_restriction_only && tmp2
+                && (tmp2->end->c.x != next->c.x || tmp2->end->c.y != next->c.y)) {
                 dbg(lvl_debug, "from 0x%x,0x%x over 0x%x,0x%x to 0x%x,0x%x not allowed (only)", prev->c.x, prev->c.y,
                     p->c.x, p->c.y, next->c.x, next->c.y);
                 return 0;
@@ -3080,9 +3081,9 @@ static void route_graph_process_restriction_segment(struct route_graph *this, st
     }
     tmp = p->start;
     while (tmp) {
-        if (tmp != s && tmp->data.item.type != type_street_turn_restriction_no &&
-            tmp->data.item.type != type_street_turn_restriction_only && !(tmp->data.flags & AF_ONEWAYREV) &&
-            is_turn_allowed(p, s, tmp)) {
+        if (tmp != s && tmp->data.item.type != type_street_turn_restriction_no
+            && tmp->data.item.type != type_street_turn_restriction_only && !(tmp->data.flags & AF_ONEWAYREV)
+            && is_turn_allowed(p, s, tmp)) {
             route_graph_clone_segment(this, tmp, pn, tmp->end, AF_ONEWAY);
             dbg(lvl_debug, "To start %s", item_to_name(tmp->data.item.type));
         }
@@ -3090,9 +3091,9 @@ static void route_graph_process_restriction_segment(struct route_graph *this, st
     }
     tmp = p->end;
     while (tmp) {
-        if (tmp != s && tmp->data.item.type != type_street_turn_restriction_no &&
-            tmp->data.item.type != type_street_turn_restriction_only && !(tmp->data.flags & AF_ONEWAY) &&
-            is_turn_allowed(p, s, tmp)) {
+        if (tmp != s && tmp->data.item.type != type_street_turn_restriction_no
+            && tmp->data.item.type != type_street_turn_restriction_only && !(tmp->data.flags & AF_ONEWAY)
+            && is_turn_allowed(p, s, tmp)) {
             route_graph_clone_segment(this, tmp, tmp->start, pn, AF_ONEWAYREV);
             dbg(lvl_debug, "To end %s", item_to_name(tmp->data.item.type));
         }
@@ -3105,15 +3106,15 @@ static void route_graph_process_restriction_point(struct route_graph *this, stru
     tmp = p->start;
     dbg(lvl_debug, "node 0x%x,0x%x", p->c.x, p->c.y);
     while (tmp) {
-        if (tmp->data.item.type != type_street_turn_restriction_no &&
-            tmp->data.item.type != type_street_turn_restriction_only)
+        if (tmp->data.item.type != type_street_turn_restriction_no
+            && tmp->data.item.type != type_street_turn_restriction_only)
             route_graph_process_restriction_segment(this, p, tmp, 1);
         tmp = tmp->start_next;
     }
     tmp = p->end;
     while (tmp) {
-        if (tmp->data.item.type != type_street_turn_restriction_no &&
-            tmp->data.item.type != type_street_turn_restriction_only)
+        if (tmp->data.item.type != type_street_turn_restriction_no
+            && tmp->data.item.type != type_street_turn_restriction_only)
             route_graph_process_restriction_segment(this, p, tmp, -1);
         tmp = tmp->end_next;
     }
@@ -3395,8 +3396,9 @@ static struct route_info *route_find_nearest_street(struct vehicleprofile *vehic
                 if (!sd)
                     continue;
                 dist = transform_distance_polyline_sq(sd->c, sd->count, &c, &lp, &pos);
-                if (dist < mindist && ((sd->flags & vehicleprofile->flags_forward_mask) == vehicleprofile->flags ||
-                                       (sd->flags & vehicleprofile->flags_reverse_mask) == vehicleprofile->flags)) {
+                if (dist < mindist
+                    && ((sd->flags & vehicleprofile->flags_forward_mask) == vehicleprofile->flags
+                        || (sd->flags & vehicleprofile->flags_reverse_mask) == vehicleprofile->flags)) {
                     mindist = dist;
                     if (ret->street) {
                         street_data_free(ret->street);
@@ -3558,8 +3560,8 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
                 g_free(mr->str);
             /* Build the text displayed close to the destination cursor.
              * It will contain the sequence number of the waypoint (1, 2...) */
-            mr->str = g_strdup_printf("%d", route->reached_destinations_count +
-                                                g_list_position(route->destinations, mr->dest) + 1);
+            mr->str = g_strdup_printf("%d", route->reached_destinations_count
+                                                + g_list_position(route->destinations, mr->dest) + 1);
             attr->u.str = mr->str;
             return 1;
         }
@@ -3581,8 +3583,8 @@ static int rm_coord_get(void *priv_data, struct coord *c, int count) {
 
     if (pro == projection_none)
         return 0;
-    if (mr->item.type == type_route_start || mr->item.type == type_route_start_reverse ||
-        mr->item.type == type_route_end || mr->item.type == type_waypoint) {
+    if (mr->item.type == type_route_start || mr->item.type == type_route_start_reverse
+        || mr->item.type == type_route_end || mr->item.type == type_waypoint) {
         if (!count || mr->last_coord)
             return 0;
         mr->last_coord = 1;
@@ -3877,8 +3879,8 @@ static void rm_rect_destroy(struct map_rect_priv *mr) {
     }
     if (mr->path) {
         mr->path->in_use--;
-        if (mr->path->update_required && (mr->path->in_use == 1) &&
-            (mr->mpriv->route->route_status & ~route_status_destination_set))
+        if (mr->path->update_required && (mr->path->in_use == 1)
+            && (mr->mpriv->route->route_status & ~route_status_destination_set))
             route_path_update_done(mr->mpriv->route, mr->path->update_required - 1);
         else if (!mr->path->in_use)
             g_free(mr->path);
@@ -4291,8 +4293,9 @@ int route_get_attr(struct route *this_, enum attr_type type, struct attr *attr, 
         attr->u.num = this_->route_status;
         break;
     case attr_destination_time:
-        if (this_->path2 && (this_->route_status == route_status_path_done_new ||
-                             this_->route_status == route_status_path_done_incremental)) {
+        if (this_->path2
+            && (this_->route_status == route_status_path_done_new
+                || this_->route_status == route_status_path_done_incremental)) {
             struct route_path *path = this_->path2;
             attr->u.num = 0;
             while (path) {
@@ -4304,8 +4307,9 @@ int route_get_attr(struct route *this_, enum attr_type type, struct attr *attr, 
             ret = 0;
         break;
     case attr_destination_length:
-        if (this_->path2 && (this_->route_status == route_status_path_done_new ||
-                             this_->route_status == route_status_path_done_incremental)) {
+        if (this_->path2
+            && (this_->route_status == route_status_path_done_new
+                || this_->route_status == route_status_path_done_incremental)) {
             struct route_path *path = this_->path2;
             attr->u.num = 0;
             while (path) {
