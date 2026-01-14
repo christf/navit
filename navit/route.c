@@ -4035,11 +4035,28 @@ static struct item *rm_get_item_byid(struct map_rect_priv *mr, int id_hi, int id
 }
 
 static struct map_methods route_meth = {
-    projection_mg, "utf-8", rm_destroy, rm_rect_new, rm_rect_destroy, rm_get_item, rm_get_item_byid, NULL, NULL, NULL,
+    .pro = projection_mg,
+    .charset = "utf-8",
+    .map_destroy = rm_destroy,
+    .map_rect_new = rm_rect_new,
+    .map_rect_destroy = rm_rect_destroy,
+    .map_rect_get_item = rm_get_item,
+    .map_rect_get_item_byid = rm_get_item_byid,
+    .map_search_new = NULL,
+    .map_search_destroy = NULL,
+    .map_search_get_item = NULL,
 };
-
 static struct map_methods route_graph_meth = {
-    projection_mg, "utf-8", rp_destroy, rp_rect_new, rm_rect_destroy, rp_get_item, rp_get_item_byid, NULL, NULL, NULL,
+    .pro = projection_mg,
+    .charset = "utf-8",
+    .map_destroy = rp_destroy,
+    .map_rect_new = rp_rect_new,
+    .map_rect_destroy = rm_rect_destroy,
+    .map_rect_get_item = rp_get_item,
+    .map_rect_get_item_byid = rp_get_item_byid,
+    .map_search_new = NULL,
+    .map_search_destroy = NULL,
+    .map_search_get_item = NULL,
 };
 
 static struct map_priv *route_map_new_helper(struct map_methods *meth, struct attr **attrs, int graph) {
