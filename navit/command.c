@@ -305,9 +305,7 @@ static int command_object_remove_attr(struct context *ctx, struct attr *object, 
  */
 static void command_get_attr(struct context *ctx, struct result *res) {
     int result;
-    struct result tmp = {
-        0,
-    };
+    struct result tmp = {0};
     enum attr_type attr_type = command_attr_type(res);
     enum attr_type parent_type = res->attr.type; /* for debugging only */
     if (ctx->skip)
