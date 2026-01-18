@@ -52,6 +52,11 @@
 #include "libc.h"
 #endif
 
+#if HAVE_GLIB
+#else
+#include "gthreadprivate.h"
+#endif
+
 int main_argc;
 char * const* main_argv;
 
