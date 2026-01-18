@@ -659,12 +659,13 @@ static void transform_screen_to_3d(struct transformation *t, struct point *p, na
 }
 
 static int transform_reverse_near_far(struct transformation *t, struct point *p, struct coord *c, int near, int far) {
-    double xc,yc;
-    dbg(lvl_debug,"%d,%d",p->x,p->y);
+    double xc, yc;
+    dbg(lvl_debug, "%d,%d", p->x, p->y);
     if (t->ddd) {
-        struct coord_geo_cart nearc,farc,nears,fars,intersection;
-        transform_screen_to_3d(t, p, near, &nearc);
-        transform_screen_to_3d(t, p, far, &farc);
+        ;
+        struct coord_geo_cart nearc, farc, nears, fars, intersection = {};
+        transform_screen_to_3d(t, p, (navit_float)near, &nearc);
+        transform_screen_to_3d(t, p, (navit_float)far, &farc);
         transform_apply_inverse_matrix(t, &nearc, &nears);
         transform_apply_inverse_matrix(t, &farc, &fars);
         if (transform_zplane_intersection(&nears, &fars, HOG(*t), &intersection) != 1)
