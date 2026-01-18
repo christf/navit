@@ -1,4 +1,5 @@
 #include "command.h"
+#include "attr.h"
 #include "callback.h"
 #include "debug.h"
 #include "event.h"

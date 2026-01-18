@@ -20,6 +20,11 @@
 #ifndef NAVIT_OSD_H
 #define NAVIT_OSD_H
 
+#include "attr_type_def.h"
+#include "color.h"
+#include "item.h"
+#include "point.h"
+
 struct osd_priv;
 struct attr;
 

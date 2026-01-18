@@ -20,6 +20,8 @@
 #ifndef NAVIT_COMMAND_H
 #define NAVIT_COMMAND_H
 
+#include "attr.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

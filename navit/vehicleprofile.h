@@ -21,6 +21,7 @@
 #define NAVIT_VEHICLEPROFILE_H
 
 #include "attr.h"
+#include "navit.h"
 
 #ifdef __cplusplus
 extern "C" {

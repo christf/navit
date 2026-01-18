@@ -20,10 +20,12 @@
 #ifndef NAVIT_LAYOUT_H
 #define NAVIT_LAYOUT_H
 
-#include "item.h"
 #include "color.h"
 #include "coord.h"
+#include "item.h"
 
+#include "glib.h"
+#include "navit.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,7 +36,17 @@ struct poly_hole {
 };
 
 struct element {
-    enum { element_point, element_polyline, element_polygon, element_circle, element_text, element_icon, element_image, element_arrows, element_spikes } type;
+    enum {
+        element_point,
+        element_polyline,
+        element_polygon,
+        element_circle,
+        element_text,
+        element_icon,
+        element_image,
+        element_arrows,
+        element_spikes
+    } type;
     struct color color;
     int text_size;
     int oneway;
@@ -86,9 +98,8 @@ struct element {
     struct coord *coord;
 };
 
-
 struct itemgra {
-    struct range order,sequence_range,speed_range,angle_range;
+    struct range order, sequence_range, speed_range, angle_range;
     GList *type;
     GList *elements;
 };
@@ -107,7 +118,7 @@ struct cursor {
     struct attr **attrs;
     struct range *sequence_range;
     char *name;
-    int w,h;
+    int w, h;
     int interval;
 };
 
@@ -115,8 +126,8 @@ struct layout {
     NAVIT_OBJECT
     struct navit *navit;
     char *name;
-    char* dayname;
-    char* nightname;
+    char *dayname;
+    char *nightname;
     char *font;
     struct color color;
     int underground_alpha;
@@ -145,7 +156,7 @@ struct polygon;
 struct polyline;
 struct text;
 struct layout *layout_new(struct attr *parent, struct attr **attrs);
-struct attr_iter *layout_attr_iter_new(void* unused);
+struct attr_iter *layout_attr_iter_new(void *unused);
 void layout_attr_iter_destroy(struct attr_iter *iter);
 int layout_get_attr(struct layout *layout, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 int layout_add_attr(struct layout *layout, struct attr *attr);

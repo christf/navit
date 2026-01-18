@@ -30,6 +30,7 @@ extern "C" {
 #ifndef __CEGCC__
 #    include <time.h>
 #endif
+#include "glib.h"
 #include "param.h"
 #include <stdio.h>
 

@@ -28,6 +28,9 @@
 #ifndef NAVIT_ROUTE_H
 #define NAVIT_ROUTE_H
 
+#include "coord.h"
+#include "item.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
