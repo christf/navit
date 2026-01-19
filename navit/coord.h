@@ -68,7 +68,7 @@ struct coord_rect {
  * It is better on these platforms to use single precision floating points
  * over double precision ones since performance is much better.
  */
-typedef float navit_float;
+typedef double navit_float;
 #define navit_sin(x) sinf(x)
 #define navit_cos(x) cosf(x)
 #define navit_tan(x) tanf(x)
