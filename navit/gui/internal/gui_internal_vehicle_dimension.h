@@ -8,7 +8,6 @@
 #ifndef NAVIT_GUI_INTERNAL_GUI_INTERNAL_VEHICLE_DIMENSION_H_
 #define NAVIT_GUI_INTERNAL_GUI_INTERNAL_VEHICLE_DIMENSION_H_
 
-
 /* prototypes */
 struct gui_priv;
 struct widget;
@@ -20,8 +19,7 @@ void gui_internal_cmd_change_vehicle_dimensions_height(struct gui_priv *this, st
 void gui_internal_cmd_change_vehicle_dimensions_hazmat(struct gui_priv *this, struct widget *wm, void *data);
 void gui_internal_cmd_change_vehicle_dimensions_emissionclass(struct gui_priv *this, struct widget *wm, void *data);
 void gui_internal_cmd_change_vehicle_dimensions_lez(struct gui_priv *this, struct widget *wm, void *data);
-//void gui_internal_add_emissionclass(struct gui_priv *this, struct widget *parent, char *data);
+// void gui_internal_add_emissionclass(struct gui_priv *this, struct widget *parent, char *data);
 /* end of prototypes */
-
 
 #endif /* NAVIT_GUI_INTERNAL_GUI_INTERNAL_VEHICLE_DIMENSION_H_ */

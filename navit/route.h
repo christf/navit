@@ -74,10 +74,10 @@ struct street_data {
     struct item item; /**< The map item for this street */
     int count;        /**< Number of coordinates this street has */
     int flags;
-    int maxspeed;      /**< Maximum speed allowed on this street. */
-	int maxspeed_conditional;
-	int maxspeed_conditional_fwd;
-	int maxspeed_conditional_bwd;
+    int maxspeed; /**< Maximum speed allowed on this street. */
+    int maxspeed_conditional;
+    int maxspeed_conditional_fwd;
+    int maxspeed_conditional_bwd;
     struct coord c[0]; /**< Pointer to the coordinates of this street.
                         *   DO NOT INSERT FIELDS AFTER THIS. */
 };

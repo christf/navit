@@ -265,10 +265,7 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
                            struct route_graph_segment *over, int dir);
 static void route_graph_init(struct route_graph *this, struct route_info *dst, struct vehicleprofile *profile);
 static void route_graph_reset(struct route_graph *this);
-static int are_intersecting(
-    int v1x1, int v1y1, int v1x2, int v1y2,
-    int v2x1, int v2y1, int v2x2, int v2y2
-);
+static int are_intersecting(int v1x1, int v1y1, int v1x2, int v1y2, int v2x1, int v2y1, int v2x2, int v2y2);
 
 #define NO 0
 #define YES 1
@@ -281,10 +278,10 @@ static int is_inside_lez(struct coord *coords, int number, struct coord point1, 
     int i;
     struct coord min;
 
-    min.x=coords[0].x;
-    min.y=coords[0].y;
+    min.x = coords[0].x;
+    min.y = coords[0].y;
 
-    //get min for x and y of the coords
+    // get min for x and y of the coords
     for (i = 0; i < number; i++) {
 
         if (coords[i].x < min.x)
@@ -293,16 +290,18 @@ static int is_inside_lez(struct coord *coords, int number, struct coord point1, 
             min.y = coords[i].y;
     }
 
-    //count intersections. odd=inside, even=outside
-    for (i = 0; i < (number-1); i++) {
+    // count intersections. odd=inside, even=outside
+    for (i = 0; i < (number - 1); i++) {
 
-        //start inside ?
-        if(are_intersecting(min.x-1, point1.y, point1.x, point1.y, coords[i].x, coords[i].y, coords[i+1].x, coords[i+1].y)) {
+        // start inside ?
+        if (are_intersecting(min.x - 1, point1.y, point1.x, point1.y, coords[i].x, coords[i].y, coords[i + 1].x,
+                             coords[i + 1].y)) {
             intersection1++;
         }
 
-        //end inside ?
-        if(are_intersecting(min.x-1, point2.y, point2.x, point2.y, coords[i].x, coords[i].y, coords[i+1].x, coords[i+1].y)) {
+        // end inside ?
+        if (are_intersecting(min.x - 1, point2.y, point2.x, point2.y, coords[i].x, coords[i].y, coords[i + 1].x,
+                             coords[i + 1].y)) {
             intersection2++;
         }
     }
@@ -310,16 +309,13 @@ static int is_inside_lez(struct coord *coords, int number, struct coord point1, 
     return ((intersection1 & 1) == 1 || (intersection2 & 1) == 1);
 }
 
-
 // Taken from https://stackoverflow.com/questions/217578/how-can-i-determine-whether-a-2d-point-is-within-a-polygon
-static int are_intersecting(
-    int v1x1, int v1y1, int v1x2, int v1y2,
-    int v2x1, int v2y1, int v2x2, int v2y2
-) {
+static int are_intersecting(int v1x1, int v1y1, int v1x2, int v1y2, int v2x1, int v2y1, int v2x2, int v2y2) {
     int d1, d2;
     int a1, a2, b1, b2, c1, c2;
 
-    dbg(lvl_debug, "Point 1: %i / %i, Point 2: %i / %i, Point 3: %i / %i, Point 4: %i / %i", v1x1, v1y1, v1x2, v1y2, v2x1, v2y1, v2x2, v2y2);
+    dbg(lvl_debug, "Point 1: %i / %i, Point 2: %i / %i, Point 3: %i / %i, Point 4: %i / %i", v1x1, v1y1, v1x2, v1y2,
+        v2x1, v2y1, v2x2, v2y2);
 
     // Convert vector 1 to a line (line 1) of infinite length.
     // We want the line in linear equation standard form: A*x + B*y + C = 0
@@ -382,7 +378,8 @@ static int are_intersecting(
         return COLLINEAR;
     }
 
-    dbg(lvl_debug, "Point 1: %i / %i, Point 2: %i / %i, Point 3: %i / %i, Point 4: %i / %i", v1x1, v1y1, v1x2, v1y2, v2x1, v2y1, v2x2, v2y2);
+    dbg(lvl_debug, "Point 1: %i / %i, Point 2: %i / %i, Point 3: %i / %i, Point 4: %i / %i", v1x1, v1y1, v1x2, v1y2,
+        v2x1, v2y1, v2x2, v2y2);
     dbg(lvl_debug, "INTERSECTION");
 
     // If they are not collinear, they must intersect in exactly one point.
@@ -661,13 +658,14 @@ void route_set_mapset(struct route *this, struct mapset *ms) {
  */
 
 void route_set_profile(struct route *this, struct vehicleprofile *prof) {
-    //if (this->vehicleprofile != prof) { // When changing profile settings the route should be recalculated even for the same profile
-        int dest_count = g_list_length(this->destinations);
-        struct pcoord *pc;
-        this->vehicleprofile = prof;
-        pc = g_alloca(dest_count * sizeof(struct pcoord));
-        route_get_destinations(this, pc, dest_count);
-        route_set_destinations(this, pc, dest_count, 1);
+    // if (this->vehicleprofile != prof) { // When changing profile settings the route should be recalculated even for
+    // the same profile
+    int dest_count = g_list_length(this->destinations);
+    struct pcoord *pc;
+    this->vehicleprofile = prof;
+    pc = g_alloca(dest_count * sizeof(struct pcoord));
+    route_get_destinations(this, pc, dest_count);
+    route_set_destinations(this, pc, dest_count, 1);
     //}
 }
 
@@ -852,7 +850,7 @@ static void route_path_update_done(struct route *this, int new_graph) {
         int path_time = 0, path_len = 0;
         while (seg) {
             /* FIXME */
-            int seg_time=route_time_seg(this->vehicleprofile, seg->data, NULL, seg->direction);
+            int seg_time = route_time_seg(this->vehicleprofile, seg->data, NULL, seg->direction);
             if (seg_time == INT_MAX) {
                 dbg(lvl_debug, "seg_time == INT_MAX");
             } else
@@ -1658,29 +1656,29 @@ void *route_segment_data_field_pos(struct route_segment_data *seg, enum attr_typ
     }
     if (seg->flags & AF_CONDITIONAL_SPEED_LIMIT) {
         if (type == attr_maxspeed_conditional_speed)
-            return (void*) ptr;
+            return (void *)ptr;
         ptr += sizeof(int);
         if (type == attr_maxspeed_conditional_condition) {
-            dbg(lvl_debug, "condition: -> %s %i %x", ptr, *ptr, (char) *ptr);
-            return (void*) ptr;
+            dbg(lvl_debug, "condition: -> %s %i %x", ptr, *ptr, (char)*ptr);
+            return (void *)ptr;
         }
-        ptr += sizeof(char*);
+        ptr += sizeof(char *);
         if (type == attr_maxspeed_fwd_conditional_speed)
-            return (void*) ptr;
+            return (void *)ptr;
         ptr += sizeof(int);
         if (type == attr_maxspeed_fwd_conditional_condition) {
-            dbg(lvl_debug, "fwdcondition: -> %s %i %x", ptr, *ptr, (char) *ptr);
-            return (void*) ptr;
+            dbg(lvl_debug, "fwdcondition: -> %s %i %x", ptr, *ptr, (char)*ptr);
+            return (void *)ptr;
         }
-        ptr += sizeof(char*);
+        ptr += sizeof(char *);
         if (type == attr_maxspeed_bwd_conditional_speed)
-            return (void*) ptr;
+            return (void *)ptr;
         ptr += sizeof(int);
         if (type == attr_maxspeed_bwd_conditional_condition) {
-            dbg(lvl_debug, "bwdcondition: -> %s %i %x", ptr, *ptr, (char) *ptr);
-            return (void*) ptr;
+            dbg(lvl_debug, "bwdcondition: -> %s %i %x", ptr, *ptr, (char)*ptr);
+            return (void *)ptr;
         }
-        ptr += sizeof(char*);
+        ptr += sizeof(char *);
     }
     if (seg->flags & AF_SEGMENTED) {
         if (type == attr_offset)
@@ -1688,7 +1686,7 @@ void *route_segment_data_field_pos(struct route_segment_data *seg, enum attr_typ
         ptr += sizeof(int);
     }
     if (seg->flags & AF_SIZE_OR_WEIGHT_LIMIT) {
-        if (type == attr_vehicle_width) //TODO: What about weight, length?
+        if (type == attr_vehicle_width)  // TODO: What about weight, length?
             return (void *)ptr;
         ptr += sizeof(struct size_weight_limit);
     }
@@ -1710,13 +1708,13 @@ static int route_segment_data_size(int flags) {
     int ret = sizeof(struct route_segment_data);
     if (flags & AF_SPEED_LIMIT)
         ret += sizeof(int);
-    if (flags & AF_CONDITIONAL_SPEED_LIMIT){
-        ret+=sizeof(int);       //cond speed
-        ret+=sizeof(char*);     //condition
-        ret+=sizeof(int);       //fwd_cond speed
-        ret+=sizeof(char*);     //cond condition
-        ret+=sizeof(int);       //bwd_cond speed
-        ret+=sizeof(char*);     //cond condition
+    if (flags & AF_CONDITIONAL_SPEED_LIMIT) {
+        ret += sizeof(int);     // cond speed
+        ret += sizeof(char *);  // condition
+        ret += sizeof(int);     // fwd_cond speed
+        ret += sizeof(char *);  // cond condition
+        ret += sizeof(int);     // bwd_cond speed
+        ret += sizeof(char *);  // cond condition
     }
     if (flags & AF_SEGMENTED)
         ret += sizeof(int);
@@ -1762,7 +1760,8 @@ int route_graph_segment_is_duplicate(struct route_graph_point *start, struct rou
  * @param len The length of this segment
  * @param item The item that is represented by this segment
  * @param flags Flags for this segment
- * @param offset If the item passed in "item" is segmented (i.e. divided into several segments), this indicates the position of this segment within the item
+ * @param offset If the item passed in "item" is segmented (i.e. divided into several segments), this indicates the
+ * position of this segment within the item
  * @param maxspeed The maximum speed allowed on this segment in km/h. -1 if not known.
  */
 void route_graph_add_segment(struct route_graph *this, struct route_graph_point *start, struct route_graph_point *end,
@@ -1772,7 +1771,7 @@ void route_graph_add_segment(struct route_graph *this, struct route_graph_point 
     gchar *condition, *fwdcondition, *bwdcondition;
     struct coord res;
 
-    //dbg(lvl_error,"add seg %s", item_to_name(data->item->type));
+    // dbg(lvl_error,"add seg %s", item_to_name(data->item->type));
 
     size = sizeof(struct route_graph_segment) - sizeof(struct route_segment_data)
            + route_segment_data_size(data->flags);
@@ -1795,27 +1794,27 @@ void route_graph_add_segment(struct route_graph *this, struct route_graph_point 
 
     struct attr attr;
 
-    //check lez
-    if(this->lezs) {
-        if(this->lezs->next) {
-            int inside=is_inside_lez(&this->lezs->next->coord[0], this->lezs->next->ncoords, start->c, end->c);
+    // check lez
+    if (this->lezs) {
+        if (this->lezs->next) {
+            int inside = is_inside_lez(&this->lezs->next->coord[0], this->lezs->next->ncoords, start->c, end->c);
 
-            if(inside) {
-                s->data.inside_lez=1;
+            if (inside) {
+                s->data.inside_lez = 1;
             } else {
-                s->data.inside_lez=0;
+                s->data.inside_lez = 0;
             }
         }
     }
 
     if (data->flags & AF_SPEED_LIMIT)
         RSD_MAXSPEED(&s->data) = data->maxspeed;
-    if (data->flags & AF_CONDITIONAL_SPEED_LIMIT){
+    if (data->flags & AF_CONDITIONAL_SPEED_LIMIT) {
         RSD_MAXCONDSPEED(&s->data) = data->maxspeedcond;
         if (data->condition) {
             condition = g_strdup(data->condition);
             RSD_MAXCONDSPEEDCOND(&s->data) = (unsigned char *)condition;
-        }else {
+        } else {
             RSD_MAXCONDSPEEDCOND(&s->data) = 0;
         }
         RSD_MAXCONDSPEEDFWD(&s->data) = data->maxspeedcondfwd;
@@ -1829,7 +1828,7 @@ void route_graph_add_segment(struct route_graph *this, struct route_graph_point 
         if (data->bwdcondition) {
             bwdcondition = g_strdup(data->bwdcondition);
             RSD_MAXCONDSPEEDBWDCOND(&s->data) = (unsigned char *)bwdcondition;
-        }else {
+        } else {
             RSD_MAXCONDSPEEDBWDCOND(&s->data) = 0;
         }
     }
@@ -2092,25 +2091,25 @@ static void route_graph_destroy(struct route_graph *this) {
 
 int route_evaluate_condition(struct vehicleprofile *profile, char *condition, int speed) {
 
-    if(!condition)
+    if (!condition)
         return 0;
 
     int weight = profile->weight;
-    int cnt=1, tempweight=0;
+    int cnt = 1, tempweight = 0;
 
-    char temp[strlen(condition)+1];
+    char temp[strlen(condition) + 1];
 
     //(weight>3.5), 30 @ (12:00-18:00)
 
-    if(strtok(strcpy(temp, condition), ";")) {
-        while(strtok(NULL,";")) {
+    if (strtok(strcpy(temp, condition), ";")) {
+        while (strtok(NULL, ";")) {
             cnt++;
         }
         dbg(lvl_debug, "Found %i conditions", cnt);
     }
 
     if (strstr(condition, "wet")) {
-        return 0; //We don't know if it's wet
+        return 0;  // We don't know if it's wet
     }
 
     if (strstr(condition, "hgv")) {
@@ -2119,11 +2118,11 @@ int route_evaluate_condition(struct vehicleprofile *profile, char *condition, in
     }
 
     if (strstr(condition, "weight>")) {
-        //weight condition
-        speed = atoi(strtok(strcpy(temp, condition), ">"));  //store the speed value
+        // weight condition
+        speed = atoi(strtok(strcpy(temp, condition), ">"));  // store the speed value
         tempweight = atoi(strtok(NULL, ">"));
 
-        if(tempweight <= weight) {
+        if (tempweight <= weight) {
             dbg(lvl_debug, "Weight condition met: %i < vehicle weight %i - speed: %i", tempweight, weight, speed);
             return speed;
         }
@@ -2140,29 +2139,29 @@ int route_get_conditional_speed(struct route_segment_data *over, struct vehiclep
     char *ptr;
 
     dbg(lvl_debug, "Get conditional speed limit for attr_type: %s",
-        type == attr_maxspeed_conditional_speed ? "attr_maxspeed_conditional_speed" :
-        type == attr_maxspeed_fwd_conditional_speed ? "attr_maxspeed_fwd_conditional_speed" :
-        type == attr_maxspeed_bwd_conditional_speed ?
-        "attr_maxspeed_bwd_conditional_speed" : "UNKNOWN ATTRIBUTE USED");
+        type == attr_maxspeed_conditional_speed       ? "attr_maxspeed_conditional_speed"
+        : type == attr_maxspeed_fwd_conditional_speed ? "attr_maxspeed_fwd_conditional_speed"
+        : type == attr_maxspeed_bwd_conditional_speed ? "attr_maxspeed_bwd_conditional_speed"
+                                                      : "UNKNOWN ATTRIBUTE USED");
 
     switch (type) {
 
     case attr_maxspeed_conditional_speed:
-        if ((speed = RSD_MAXCONDSPEED(over)) >0) {
+        if ((speed = RSD_MAXCONDSPEED(over)) > 0) {
             if ((ptr = route_segment_data_field_pos(over, attr_maxspeed_conditional_condition)) != NULL) {
                 ret = route_evaluate_condition(profile, ptr, speed);
             }
         }
         break;
     case attr_maxspeed_fwd_conditional_speed:
-        if ((speed = RSD_MAXCONDSPEEDFWD(over)) >0) {
+        if ((speed = RSD_MAXCONDSPEEDFWD(over)) > 0) {
             if ((ptr = route_segment_data_field_pos(over, attr_maxspeed_fwd_conditional_condition)) != NULL) {
                 ret = route_evaluate_condition(profile, ptr, speed);
             }
         }
         break;
     case attr_maxspeed_bwd_conditional_speed:
-        if ((speed = RSD_MAXCONDSPEED(over)) >0) {
+        if ((speed = RSD_MAXCONDSPEED(over)) > 0) {
             if ((ptr = route_segment_data_field_pos(over, attr_maxspeed_bwd_conditional_condition)) != NULL) {
                 ret = route_evaluate_condition(profile, ptr, speed);
             }
@@ -2210,22 +2209,22 @@ static int route_seg_speed(struct vehicleprofile *profile, struct route_segment_
     if (!vehicleroadprofile || !vehicleroadprofile->speed)
         calculatedspeed = 0;
 
-    int speed,maxspeed=-1,maxspeedtemp=-1;
-    speed=vehicleroadprofile->route_weight;
+    int speed, maxspeed = -1, maxspeedtemp = -1;
+    speed = vehicleroadprofile->route_weight;
     if (profile->maxspeed_handling != maxspeed_ignore) {
         if (over->flags & AF_SPEED_LIMIT) {
-            maxspeed=RSD_MAXSPEED(over);
+            maxspeed = RSD_MAXSPEED(over);
             if (profile->maxspeed_handling == maxspeed_enforce)
-                speed=maxspeed;
+                speed = maxspeed;
         } else if (over->flags & AF_CONDITIONAL_SPEED_LIMIT) {
-            if (RSD_MAXCONDSPEED(over)!=-1)
+            if (RSD_MAXCONDSPEED(over) != -1)
                 maxspeedtemp = route_get_conditional_speed(over, profile, attr_maxspeed_conditional_speed);
-            if(maxspeedtemp>0) //check broken conditions
-                maxspeed=maxspeedtemp;
-            if ((RSD_MAXCONDSPEEDFWD(over)!=-1) && (RSD_MAXCONDSPEEDFWD(over) < maxspeed) && dir>0)
+            if (maxspeedtemp > 0)  // check broken conditions
+                maxspeed = maxspeedtemp;
+            if ((RSD_MAXCONDSPEEDFWD(over) != -1) && (RSD_MAXCONDSPEEDFWD(over) < maxspeed) && dir > 0)
                 maxspeed = RSD_MAXCONDSPEEDFWD(over);
-            if ((RSD_MAXCONDSPEEDBWD(over)!=-1) && (RSD_MAXCONDSPEEDBWD(over) < maxspeed) && dir<0)
-                            maxspeed = RSD_MAXCONDSPEEDBWD(over);
+            if ((RSD_MAXCONDSPEEDBWD(over) != -1) && (RSD_MAXCONDSPEEDBWD(over) < maxspeed) && dir < 0)
+                maxspeed = RSD_MAXCONDSPEEDBWD(over);
             if (maxspeed == -1)
                 maxspeed = speed;
             else {
@@ -2233,12 +2232,12 @@ static int route_seg_speed(struct vehicleprofile *profile, struct route_segment_
                     speed = maxspeed;
             }
         } else {
-            maxspeed=INT_MAX;
+            maxspeed = INT_MAX;
         }
         if (dist && maxspeed > dist->maxspeed)
-            maxspeed=dist->maxspeed;
+            maxspeed = dist->maxspeed;
         if (maxspeed != INT_MAX && (profile->maxspeed_handling != maxspeed_restrict || maxspeed < speed))
-            speed=maxspeed;
+            speed = maxspeed;
     }
     calculatedspeed = speed;
     if (over->flags & AF_DANGEROUS_GOODS) {
@@ -2299,7 +2298,7 @@ static int route_seg_speed(struct vehicleprofile *profile, struct route_segment_
 static int route_time_seg(struct vehicleprofile *profile, struct route_segment_data *over,
                           struct route_traffic_distortion *dist, int dir) {
     int time = INT_MAX;
-    int speed=route_seg_speed(profile, over, dist, dir);
+    int speed = route_seg_speed(profile, over, dist, dir);
 
     if (speed)
         time = over->len * MPS_TO_KPH * 10 / speed + (dist ? dist->delay : 0);
@@ -2406,11 +2405,11 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
     struct route_traffic_distortion dist, *distp = NULL;
     struct attr attr;
 
-//    if(from) {
-//    if(item_attr_get(&from->start->data.item, attr_osm_nodeid, &attr)) {
-//        dbg(lvl_error, "OSM_ID: %li", attr.u.num64);
-//    }
-//    }
+    //    if(from) {
+    //    if(item_attr_get(&from->start->data.item, attr_osm_nodeid, &attr)) {
+    //        dbg(lvl_error, "OSM_ID: %li", attr.u.num64);
+    //    }
+    //    }
 
     if (!dir) {
         dbg(lvl_warning, "dir is zero, assuming positive");
@@ -2421,7 +2420,8 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
         return INT_MAX;
     }
     if ((over->data.flags & (dir >= 0 ? profile->flags_forward_mask : profile->flags_reverse_mask)) != profile->flags) {
-        dbg(lvl_debug, "INT_MAX 2, DIR (>=0 FWMask %i, FwdMask: %i, RwdMask: %i, Profile Flags: %i", dir, over->data.flags, profile->flags_forward_mask, profile->flags_reverse_mask);
+        dbg(lvl_debug, "INT_MAX 2, DIR (>=0 FWMask %i, FwdMask: %i, RwdMask: %i, Profile Flags: %i", dir,
+            over->data.flags, profile->flags_forward_mask, profile->flags_reverse_mask);
         return INT_MAX;
     }
     if (dir > 0 && (over->start->flags & RP_TURN_RESTRICTION)) {
@@ -2445,7 +2445,7 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
         /* we have a traffic distortion */
         distp = &dist;
     }
-    ret=route_time_seg(profile, &over->data, distp, dir);
+    ret = route_time_seg(profile, &over->data, distp, dir);
     if (ret == INT_MAX) {
         dbg(lvl_debug, "INT_MAX 7");
         return ret;
@@ -2454,12 +2454,13 @@ static int route_value_seg(struct vehicleprofile *profile, struct route_graph_po
         && route_through_traffic_allowed(profile, from->seg))
         ret += profile->through_traffic_penalty;
     if (over->data.inside_lez) {
-        dbg(lvl_debug, "inside lez - start(%p): %i / %i, end(%llx): %i / %i", over->start, over->start->c.x, over->start->c.y, (long long int)over->end, over->end->c.x, over->end->c.y);
-        if(!profile->lez_allowed)
+        dbg(lvl_debug, "inside lez - start(%p): %i / %i, end(%llx): %i / %i", over->start, over->start->c.x,
+            over->start->c.y, (long long int)over->end, over->end->c.x, over->end->c.y);
+        if (!profile->lez_allowed)
             ret = INT_MAX;
     } else {
-        dbg(lvl_debug, "not inside lez - start(%p): %i / %i, end(%llx): %i / %i", over->start, over->start->c.x, over->start->c.y, (long long int)over->end, over->end->c.x, over->end->c.y);
-
+        dbg(lvl_debug, "not inside lez - start(%p): %i / %i, end(%llx): %i / %i", over->start, over->start->c.x,
+            over->start->c.y, (long long int)over->end, over->end->c.x, over->end->c.y);
     }
     return ret;
 }
@@ -2885,28 +2886,28 @@ static void route_graph_add_lez(struct route_graph *this, struct item *item, str
     // if we have a lez polygon, create a data structure with all the coordinates to be checked later against
     // start and end point of a segment to be inside the lez polygon
 
-    if(!strcmp(item_to_name(item->type), "poly_low_emission_zone")) {
+    if (!strcmp(item_to_name(item->type), "poly_low_emission_zone")) {
 
         item_coord_rewind(item);
-        co_cnt=item_coords_left(item);
+        co_cnt = item_coords_left(item);
 
-        //we need co_cnt coords in the lez data
-        lez=malloc(sizeof(struct route_graph_lez) + co_cnt * sizeof(struct coord));
-        lez->next=lez->coord; // set next to point to first coordinate
-        lez->ncoords=co_cnt;  // store cnt of coordinates
+        // we need co_cnt coords in the lez data
+        lez = malloc(sizeof(struct route_graph_lez) + co_cnt * sizeof(struct coord));
+        lez->next = lez->coord;  // set next to point to first coordinate
+        lez->ncoords = co_cnt;   // store cnt of coordinates
 
-        if(!this->lezs) {
-            this->lezs=malloc(sizeof(struct route_graph_lezs));
-            this->lezs->nlezs=0;
+        if (!this->lezs) {
+            this->lezs = malloc(sizeof(struct route_graph_lezs));
+            this->lezs->nlezs = 0;
         }
 
-        //add the new lez to the lezs structure
-        this->lezs->next=lez;
+        // add the new lez to the lezs structure
+        this->lezs->next = lez;
         this->lezs->nlezs++;
 
-        for (i=0; i<co_cnt;i++) {
+        for (i = 0; i < co_cnt; i++) {
             item_coord_get(item, &lez->coord[i], 1);
-            dbg(lvl_debug,"coord[%i}: %i / %i", i, lez->coord[i].x, lez->coord[i].y);
+            dbg(lvl_debug, "coord[%i}: %i / %i", i, lez->coord[i].x, lez->coord[i].y);
         }
     }
 }
@@ -2938,14 +2939,13 @@ static void route_graph_add_street(struct route_graph *this, struct item *item, 
     data.flags = 0;
     data.offset = 1;
     data.maxspeed = -1;
-    data.maxspeedcond=-1;
-    data.maxspeedcondfwd=-1;
-    data.maxspeedcondbwd=-1;
-    data.condition=0;
-    data.fwdcondition=0;
-    data.bwdcondition=0;
+    data.maxspeedcond = -1;
+    data.maxspeedcondfwd = -1;
+    data.maxspeedcondbwd = -1;
+    data.condition = 0;
+    data.fwdcondition = 0;
+    data.bwdcondition = 0;
     data.item = item;
-
 
     roadp = vehicleprofile_get_roadprofile(profile, item->type);
 
@@ -2967,16 +2967,21 @@ static void route_graph_add_street(struct route_graph *this, struct item *item, 
             data.maxspeed = attr.u.num;
         if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_conditional_speed, &attr)))
             data.maxspeedcond = attr.u.num;
-        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_conditional_condition, &attr)))
+        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT)
+            && (item_attr_get(item, attr_maxspeed_conditional_condition, &attr)))
             data.condition = attr.u.str;
-        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_fwd_conditional_speed, &attr)))
+        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT)
+            && (item_attr_get(item, attr_maxspeed_fwd_conditional_speed, &attr)))
             data.maxspeedcondfwd = attr.u.num;
-        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_fwd_conditional_condition, &attr))) {
+        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT)
+            && (item_attr_get(item, attr_maxspeed_fwd_conditional_condition, &attr))) {
             data.fwdcondition = attr.u.str;
         }
-        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_bwd_conditional_speed, &attr)))
+        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT)
+            && (item_attr_get(item, attr_maxspeed_bwd_conditional_speed, &attr)))
             data.maxspeedcondbwd = attr.u.num;
-        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT) && (item_attr_get(item, attr_maxspeed_bwd_conditional_condition, &attr)))
+        if ((data.flags & AF_CONDITIONAL_SPEED_LIMIT)
+            && (item_attr_get(item, attr_maxspeed_bwd_conditional_condition, &attr)))
             data.bwdcondition = attr.u.str;
         if (data.flags & AF_DANGEROUS_GOODS) {
             if (item_attr_get(item, attr_vehicle_dangerous_goods, &attr))
@@ -3293,8 +3298,8 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
             }
         }
         if (s->end->value == INT_MAX) {
-                    dbg(lvl_error,"no route found, pos blocked");
-                }
+            dbg(lvl_error, "no route found, pos blocked");
+        }
         val = route_value_seg(profile, NULL, s, -2);
         if (val != INT_MAX && s->start->value != INT_MAX) {
             val = val * pos->percent / 100;
@@ -3310,7 +3315,7 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
             }
         }
         if (s->start->value == INT_MAX) {
-            dbg(lvl_error,"no route found, pos blocked");
+            dbg(lvl_error, "no route found, pos blocked");
         }
     }
     if (val1 == INT_MAX && val2 == INT_MAX) {
@@ -3450,10 +3455,10 @@ static void route_graph_clone_segment(struct route_graph *this, struct route_gra
     data.flags = s->data.flags | flags;
     data.len = s->data.len + 1;
     data.maxspeed = -1;
-    data.maxspeedcond=-1;
-    data.maxspeedcondfwd=-1;
-    data.maxspeedcondbwd=-1;
-    data.condition=0;
+    data.maxspeedcond = -1;
+    data.maxspeedcondfwd = -1;
+    data.maxspeedcondbwd = -1;
+    data.condition = 0;
     data.fwdcondition = 0;
     data.bwdcondition = 0;
     data.dangerous_goods = 0;
@@ -3462,25 +3467,24 @@ static void route_graph_clone_segment(struct route_graph *this, struct route_gra
     if (s->data.flags & AF_SPEED_LIMIT)
         data.maxspeed = RSD_MAXSPEED(&s->data);
     if (s->data.flags & AF_CONDITIONAL_SPEED_LIMIT) {
-        data.maxspeedcond=RSD_MAXCONDSPEED(&s->data);
-        if((char*)RSD_MAXCONDSPEEDCOND(&s->data)!=0xffffffffffffffff)
-            data.condition=(char*)RSD_MAXCONDSPEEDCOND(&s->data);
-        data.maxspeedcondfwd=RSD_MAXCONDSPEEDFWD(&s->data);
-        if((char*)RSD_MAXCONDSPEEDFWDCOND(&s->data)!=0xffffffffffffffff)
-            data.fwdcondition=(char*)RSD_MAXCONDSPEEDFWDCOND(&s->data);
-        data.maxspeedcondbwd=RSD_MAXCONDSPEEDBWD(&s->data);
-        if((char*)RSD_MAXCONDSPEEDBWDCOND(&s->data)!=0xffffffffffffffff)
-            data.bwdcondition = (char*)RSD_MAXCONDSPEEDBWDCOND(&s->data);
-        dbg(lvl_debug,"maxspeedcond: %i", data.maxspeedcond);
-        if(data.condition)
-        dbg(lvl_debug,"maxspeedcond condition: %s", data.condition);
-        dbg(lvl_debug,"maxspeedfwdcond: %i", data.maxspeedcondfwd);
-        if(data.fwdcondition < 0xFFFFFF)
-        dbg(lvl_debug,"maxspeedfwd condition: %s", data.fwdcondition);
-        dbg(lvl_debug,"maxspeedbwdcond: %i", data.maxspeedcondbwd);
-        if(data.bwdcondition < 0xFFFFFF)
-        dbg(lvl_debug,"maxspeedbwd condition: %s", data.bwdcondition);
-
+        data.maxspeedcond = RSD_MAXCONDSPEED(&s->data);
+        if ((char *)RSD_MAXCONDSPEEDCOND(&s->data) != 0xffffffffffffffff)
+            data.condition = (char *)RSD_MAXCONDSPEEDCOND(&s->data);
+        data.maxspeedcondfwd = RSD_MAXCONDSPEEDFWD(&s->data);
+        if ((char *)RSD_MAXCONDSPEEDFWDCOND(&s->data) != 0xffffffffffffffff)
+            data.fwdcondition = (char *)RSD_MAXCONDSPEEDFWDCOND(&s->data);
+        data.maxspeedcondbwd = RSD_MAXCONDSPEEDBWD(&s->data);
+        if ((char *)RSD_MAXCONDSPEEDBWDCOND(&s->data) != 0xffffffffffffffff)
+            data.bwdcondition = (char *)RSD_MAXCONDSPEEDBWDCOND(&s->data);
+        dbg(lvl_debug, "maxspeedcond: %i", data.maxspeedcond);
+        if (data.condition)
+            dbg(lvl_debug, "maxspeedcond condition: %s", data.condition);
+        dbg(lvl_debug, "maxspeedfwdcond: %i", data.maxspeedcondfwd);
+        if (data.fwdcondition < 0xFFFFFF)
+            dbg(lvl_debug, "maxspeedfwd condition: %s", data.fwdcondition);
+        dbg(lvl_debug, "maxspeedbwdcond: %i", data.maxspeedcondbwd);
+        if (data.bwdcondition < 0xFFFFFF)
+            dbg(lvl_debug, "maxspeedbwd condition: %s", data.bwdcondition);
     }
     if (s->data.flags & AF_SEGMENTED)
         data.offset = RSD_OFFSET(&s->data);
@@ -3585,7 +3589,7 @@ static void route_graph_process_restrictions(struct route_graph *this) {
  * @param cancel True if the process was aborted before completing, false if it completed normally
  */
 void route_graph_build_lez_done(struct route_graph *rg, int cancel) {
-    dbg(lvl_debug,"cancel=%d",cancel);
+    dbg(lvl_debug, "cancel=%d", cancel);
     if (rg->idle_ev)
         event_remove_idle(rg->idle_ev);
     if (rg->idle_cb)
@@ -3593,17 +3597,17 @@ void route_graph_build_lez_done(struct route_graph *rg, int cancel) {
     map_rect_destroy(rg->mr);
     mapset_close(rg->h);
     route_free_selection(rg->sel);
-    rg->idle_ev=NULL;
-    rg->idle_cb=NULL;
-    rg->mr=NULL;
-    rg->h=NULL;
-    rg->sel=NULL;
-    if (! cancel) {
+    rg->idle_ev = NULL;
+    rg->idle_cb = NULL;
+    rg->mr = NULL;
+    rg->h = NULL;
+    rg->sel = NULL;
+    if (!cancel) {
         route_graph_process_restrictions(rg);
         if (rg->done_cb)
             callback_call_0(rg->done_cb);
     }
-    rg->busy=0;
+    rg->busy = 0;
 }
 
 /**
@@ -3642,7 +3646,7 @@ void route_graph_build_done(struct route_graph *rg, int cancel) {
 }
 
 static void route_graph_build_lez(struct route_graph *rg, struct vehicleprofile *profile) {
-    int count=1000;
+    int count = 1000;
     struct item *item;
 
     if (!rg->lezs && !profile->lez_allowed) {
@@ -3663,13 +3667,10 @@ static void route_graph_build_lez(struct route_graph *rg, struct vehicleprofile 
             }
             count--;
         }
-        count=1000;
+        count = 1000;
     } else {
         route_graph_build_lez_done(rg, 0);
     }
-
-
-
 }
 
 static void route_graph_build_idle(struct route_graph *rg, struct vehicleprofile *profile) {
@@ -3695,7 +3696,6 @@ static void route_graph_build_idle(struct route_graph *rg, struct vehicleprofile
             route_graph_add_street(rg, item, profile);
         count--;
     }
-
 }
 
 /**
@@ -3711,22 +3711,21 @@ static void route_graph_build_idle(struct route_graph *rg, struct vehicleprofile
  * @param done_cb The callback which will be called when graph is complete
  * @return The new route graph.
  */
-static struct route_graph *route_graph_build_lezs(struct mapset *ms, struct coord *c, int count, struct callback *done_cb,
-                    int async,
-            struct vehicleprofile *profile) {
-    struct route_graph *ret=g_new0(struct route_graph, 1);
+static struct route_graph *route_graph_build_lezs(struct mapset *ms, struct coord *c, int count,
+                                                  struct callback *done_cb, int async, struct vehicleprofile *profile) {
+    struct route_graph *ret = g_new0(struct route_graph, 1);
 
-    dbg(lvl_debug,"enter");
+    dbg(lvl_debug, "enter");
 
-    ret->sel=route_calc_selection(c, count, profile);
-    ret->h=mapset_open(ms);
-    ret->done_cb=done_cb;
-    ret->busy=1;
+    ret->sel = route_calc_selection(c, count, profile);
+    ret->h = mapset_open(ms);
+    ret->done_cb = done_cb;
+    ret->busy = 1;
     ret->heap = fh_makekeyheap();
     if (route_graph_build_next_map(ret)) {
         if (async) {
-            ret->idle_cb=callback_new_2(callback_cast(route_graph_build_lez), ret, profile);
-            ret->idle_ev=event_add_idle(50, ret->idle_cb);
+            ret->idle_cb = callback_new_2(callback_cast(route_graph_build_lez), ret, profile);
+            ret->idle_ev = event_add_idle(50, ret->idle_cb);
         }
     } else
         route_graph_build_lez_done(ret, 0);
@@ -3748,14 +3747,14 @@ static struct route_graph *route_graph_build_lezs(struct mapset *ms, struct coor
  * @return The new route graph.
  */
 static struct route_graph *route_graph_build(struct mapset *ms, struct coord *c, int count, struct callback *done_cb,
-                                             int async, struct vehicleprofile *profile, struct route_graph * ret) {
+                                             int async, struct vehicleprofile *profile, struct route_graph *ret) {
     dbg(lvl_debug, "enter");
 
     ret->sel = route_calc_selection(c, count, profile);
     ret->h = mapset_open(ms);
     ret->done_cb = done_cb;
     ret->busy = 1;
-    //ret->heap = fh_makekeyheap();
+    // ret->heap = fh_makekeyheap();
     if (route_graph_build_next_map(ret)) {
         if (async) {
             ret->idle_cb = callback_new_2(callback_cast(route_graph_build_idle), ret, profile);
@@ -3774,24 +3773,25 @@ static void route_graph_update_done(struct route *this, struct callback *cb) {
 
 static void route_graph_update_lezs_done(struct route *this, struct callback *cb, int async) {
     struct attr route_status;
-    struct coord *c=g_alloca(sizeof(struct coord)*(1+g_list_length(this->destinations)));
-    int i=0;
+    struct coord *c = g_alloca(sizeof(struct coord) * (1 + g_list_length(this->destinations)));
+    int i = 0;
     GList *tmp;
 
-    route_status.type=attr_route_status;
+    route_status.type = attr_route_status;
     callback_destroy(this->route_graph_done_cb);
-    this->route_graph_done_cb=callback_new_2(callback_cast(route_graph_update_done), this, cb);
-    route_status.u.num=route_status_building_graph;
+    this->route_graph_done_cb = callback_new_2(callback_cast(route_graph_update_done), this, cb);
+    route_status.u.num = route_status_building_graph;
     route_set_attr(this, &route_status);
-    c[i++]=this->pos->c;
-    tmp=this->destinations;
+    c[i++] = this->pos->c;
+    tmp = this->destinations;
     while (tmp) {
-        struct route_info *dst=tmp->data;
-        c[i++]=dst->c;
-        tmp=g_list_next(tmp);
+        struct route_info *dst = tmp->data;
+        c[i++] = dst->c;
+        tmp = g_list_next(tmp);
     }
-    this->graph=route_graph_build(this->ms, c, i, this->route_graph_done_cb, async, this->vehicleprofile, this->graph);
-    if (! async) {
+    this->graph =
+        route_graph_build(this->ms, c, i, this->route_graph_done_cb, async, this->vehicleprofile, this->graph);
+    if (!async) {
         while (this->graph->busy)
             route_graph_build_idle(this->graph, this->vehicleprofile);
     }
@@ -3817,7 +3817,7 @@ static void route_graph_update(struct route *this, struct callback *cb, int asyn
     route_graph_destroy(this->graph);
     this->graph = NULL;
     callback_destroy(this->route_graph_done_cb);
-    this->route_graph_done_cb=callback_new_3(callback_cast(route_graph_update_lezs_done), this, cb, async);
+    this->route_graph_done_cb = callback_new_3(callback_cast(route_graph_update_lezs_done), this, cb, async);
     route_status.u.num = route_status_building_graph;
     route_set_attr(this, &route_status);
     c[i++] = this->pos->c;
@@ -3827,13 +3827,12 @@ static void route_graph_update(struct route *this, struct callback *cb, int asyn
         c[i++] = dst->c;
         tmp = g_list_next(tmp);
     }
-    this->graph=route_graph_build_lezs(this->ms, c, i, this->route_graph_done_cb, async, this->vehicleprofile);
+    this->graph = route_graph_build_lezs(this->ms, c, i, this->route_graph_done_cb, async, this->vehicleprofile);
     if (!async) {
         while (this->graph->busy)
             route_graph_build_lez(this->graph, this->vehicleprofile);
     }
 }
-
 
 /**
  * @brief Gets street data for an item
@@ -3883,7 +3882,7 @@ struct street_data *street_get_data(struct item *item) {
     }
 
     if (ret->flags & AF_CONDITIONAL_SPEED_LIMIT) {
-        if ((ret->maxspeed_conditional=item_attr_get(item, attr_maxspeed_conditional_speed, &maxspeed_cond_attr))) {
+        if ((ret->maxspeed_conditional = item_attr_get(item, attr_maxspeed_conditional_speed, &maxspeed_cond_attr))) {
             // Is there a condition?
             if (maxspeed_cond_attr.u.num) {
                 // if there is no condition set the speed to 0 to ignore it
@@ -3893,13 +3892,14 @@ struct street_data *street_get_data(struct item *item) {
             }
         }
         if (item_attr_get(item, attr_maxspeed_fwd_conditional_speed, &maxspeed_fwd_cond_attr)) {
-            if ((ret->maxspeed_conditional_fwd=maxspeed_fwd_cond_attr.u.num)) {
+            if ((ret->maxspeed_conditional_fwd = maxspeed_fwd_cond_attr.u.num)) {
                 if (!item_attr_get(item, attr_maxspeed_fwd_conditional_condition, &maxspeed_fwd_cond_attr)) {
                     ret->maxspeed_conditional_fwd = 0;
                 }
             }
         }
-        if ((ret->maxspeed_conditional_bwd=item_attr_get(item, attr_maxspeed_bwd_conditional_speed, &maxspeed_bwd_cond_attr))) {
+        if ((ret->maxspeed_conditional_bwd =
+                 item_attr_get(item, attr_maxspeed_bwd_conditional_speed, &maxspeed_bwd_cond_attr))) {
             if (maxspeed_bwd_cond_attr.u.num) {
                 if (!item_attr_get(item, attr_maxspeed_bwd_conditional_condition, &maxspeed_bwd_cond_attr)) {
                     ret->maxspeed_conditional_bwd = 0;
@@ -4103,7 +4103,7 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
     case attr_maxspeed_conditional_speed:
         mr->attr_next = attr_maxspeed_fwd_conditional_speed;
         if (seg && (seg->data->flags & AF_CONDITIONAL_SPEED_LIMIT)) {
-            attr->u.num=RSD_MAXCONDSPEED(seg->data);
+            attr->u.num = RSD_MAXCONDSPEED(seg->data);
 
         } else {
             return 0;
@@ -4112,7 +4112,7 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
     case attr_maxspeed_fwd_conditional_speed:
         mr->attr_next = attr_maxspeed_bwd_conditional_speed;
         if (seg && (seg->data->flags & AF_CONDITIONAL_SPEED_LIMIT)) {
-            attr->u.num=RSD_MAXCONDSPEEDFWD(seg->data);
+            attr->u.num = RSD_MAXCONDSPEEDFWD(seg->data);
 
         } else {
             return 0;
@@ -4121,7 +4121,7 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
     case attr_maxspeed_bwd_conditional_speed:
         mr->attr_next = attr_street_item;
         if (seg && (seg->data->flags & AF_CONDITIONAL_SPEED_LIMIT)) {
-            attr->u.num=RSD_MAXCONDSPEEDBWD(seg->data);
+            attr->u.num = RSD_MAXCONDSPEEDBWD(seg->data);
 
         } else {
             return 0;
@@ -4157,7 +4157,7 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
          * to be used anywhere */
         mr->attr_next = attr_speed;
         if (seg)
-            attr->u.num=route_time_seg(route->vehicleprofile, seg->data, NULL, seg->direction);
+            attr->u.num = route_time_seg(route->vehicleprofile, seg->data, NULL, seg->direction);
         else
             return 0;
         return 1;
@@ -4166,7 +4166,7 @@ static int rm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
          * to be used anywhere */
         mr->attr_next = attr_label;
         if (seg)
-            attr->u.num=route_seg_speed(route->vehicleprofile, seg->data, NULL, seg->direction);
+            attr->u.num = route_seg_speed(route->vehicleprofile, seg->data, NULL, seg->direction);
         else
             return 0;
         return 1;
@@ -4275,7 +4275,7 @@ static int rp_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
             return 0;
         if (seg && (seg->data.flags & AF_CONDITIONAL_SPEED_LIMIT)) {
             attr->type = attr_maxspeed_conditional_speed;
-            attr->u.num=RSD_MAXCONDSPEED(&seg->data);
+            attr->u.num = RSD_MAXCONDSPEED(&seg->data);
             return 1;
         } else {
             return 0;
@@ -4286,7 +4286,7 @@ static int rp_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
             return 0;
         if (seg && (seg->data.flags & AF_CONDITIONAL_SPEED_LIMIT)) {
             attr->type = attr_maxspeed_fwd_conditional_speed;
-            attr->u.num=RSD_MAXCONDSPEEDFWD(&seg->data);
+            attr->u.num = RSD_MAXCONDSPEEDFWD(&seg->data);
             return 1;
         } else {
             return 0;
@@ -4297,7 +4297,7 @@ static int rp_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
             return 0;
         if (seg && (seg->data.flags & AF_CONDITIONAL_SPEED_LIMIT)) {
             attr->type = attr_maxspeed_bwd_conditional_speed;
-            attr->u.num=RSD_MAXCONDSPEEDBWD(&seg->data);
+            attr->u.num = RSD_MAXCONDSPEEDBWD(&seg->data);
             return 1;
         } else {
             return 0;
@@ -4314,8 +4314,8 @@ static int rp_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
                 mr->str = g_strdup("-");
         } else {
             int len = seg->data.len;
-            int speed=route_seg_speed(route->vehicleprofile, &seg->data, NULL, 0);
-            int time=route_time_seg(route->vehicleprofile, &seg->data, NULL, 0);
+            int speed = route_seg_speed(route->vehicleprofile, &seg->data, NULL, 0);
+            int time = route_time_seg(route->vehicleprofile, &seg->data, NULL, 0);
             if (speed)
                 mr->str = g_strdup_printf("%dm %dkm/h %d.%ds", len, speed, time / 10, time % 10);
             else if (len)
@@ -4387,8 +4387,9 @@ static int rp_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
         case type_rg_segment:
             if (!seg)
                 return 0;
-            mr->str=g_strdup_printf("len %d time %d start %p: %i / %i, end %p: %i / %i", seg->data.len, route_time_seg(route->vehicleprofile,
-                                    &seg->data, NULL, 0), seg->start, seg->start->c.x, seg->start->c.y, seg->end, seg->end->c.x, seg->end->c.y);
+            mr->str = g_strdup_printf("len %d time %d start %p: %i / %i, end %p: %i / %i", seg->data.len,
+                                      route_time_seg(route->vehicleprofile, &seg->data, NULL, 0), seg->start,
+                                      seg->start->c.x, seg->start->c.y, seg->end, seg->end->c.x, seg->end->c.y);
             attr->u.str = mr->str;
             return 1;
             break;

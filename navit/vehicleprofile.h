@@ -37,7 +37,7 @@ enum maxspeed_handling {
 };
 
 enum emissionclass {
-    //Truck
+    // Truck
     Euro_0,
     Euro_1,
     Euro_2,
@@ -45,7 +45,7 @@ enum emissionclass {
     Euro_4,
     Euro_5,
     Euro_6,
-    //Car, use label colors and Euro_6d_TEMP for now
+    // Car, use label colors and Euro_6d_TEMP for now
     Cat_RED,
     Cat_YLW,
     Cat_GRN,
@@ -54,21 +54,9 @@ enum emissionclass {
 };
 
 static struct emissionclasstxt {
-  char  *classes[EMISSION_CLASS_MAX];
-} ectxt = {
-            "Euro 0",
-            "Euro 1",
-            "Euro 2",
-            "Euro 3",
-            "Euro 4",
-            "Euro 5",
-            "Euro 6",
-            "Red Label",
-            "Yellow Label",
-            "Green Label",
-            "Euro 6d temp"
-};
-
+    char *classes[EMISSION_CLASS_MAX];
+} ectxt = {"Euro 0", "Euro 1",    "Euro 2",       "Euro 3",      "Euro 4",      "Euro 5",
+           "Euro 6", "Red Label", "Yellow Label", "Green Label", "Euro 6d temp"};
 
 struct vehicleprofile {
     NAVIT_OBJECT
@@ -110,9 +98,9 @@ struct roadprofile *vehicleprofile_get_roadprofile(struct vehicleprofile *this_,
 char *vehicleprofile_get_name(struct vehicleprofile *this_);
 int vehicleprofile_store_dimensions(struct vehicleprofile *profile);
 int vehicleprofile_read_dimensions(struct vehicleprofile *profile);
-char* getTagValue(char *xmlstring, char *tag);
+char *getTagValue(char *xmlstring, char *tag);
 
 #ifdef __cplusplus
 }
 #endif
-#endif //NAVIT_VEHICLEPROFILE_H
+#endif  // NAVIT_VEHICLEPROFILE_H

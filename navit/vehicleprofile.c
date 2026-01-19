@@ -17,26 +17,25 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <glib.h>
-#include <string.h>
-#include "debug.h"
-#include "item.h"
-#include "xmlconfig.h"
-#include "roadprofile.h"
 #include "vehicleprofile.h"
 #include "callback.h"
+#include "debug.h"
+#include "item.h"
 #include "navit.h"
-
+#include "roadprofile.h"
+#include "xmlconfig.h"
+#include <glib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define DIMENSIONSFILE "dimensions.txt"
 #define TEMPFILE "tempfile.txt"
 
 /* The error code set by various library functions.  */
-//extern int *__errno_location (void) __THROW __attribute_const__;
-//# define errno (*__errno_location ())
+// extern int *__errno_location (void) __THROW __attribute_const__;
+// # define errno (*__errno_location ())
 static void vehicleprofile_set_attr_do(struct vehicleprofile *this_, struct attr *attr) {
     dbg(lvl_debug, "%s:%ld", attr_to_name(attr->type), attr->u.num);
     switch (attr->type) {
@@ -216,7 +215,7 @@ static void vehicleprofile_update(struct vehicleprofile *this_) {
         if (active.u.num)
             vehicleprofile_apply_attrs(this_, profile_option.u.navit_object, 1);
     }
-    //vehicleprofile_store_dimensions(this_);
+    // vehicleprofile_store_dimensions(this_);
     vehicleprofile_read_dimensions(this_);
     vehicleprofile_attr_iter_destroy(iter);
     dbg(lvl_debug, "result l %d w %d h %d wg %d awg %d pen %d", this_->length, this_->width, this_->height,
@@ -227,8 +226,7 @@ static void vehicleprofile_update(struct vehicleprofile *this_) {
     g_hash_table_foreach(this_->roadprofile_hash, vehicleprofile_debug_roadprofile, NULL);
 }
 
-
-char* getTagValue(char *xmlstring, char *tag) {
+char *getTagValue(char *xmlstring, char *tag) {
 
     if (xmlstring == 0 || tag == 0)
         return 0;
@@ -243,13 +241,13 @@ char* getTagValue(char *xmlstring, char *tag) {
     opentag[0] = '<';
     strcpy(&opentag[1], tag);
     opentag[strlen(opentag)] = '>';
-    opentag[sizeof(opentag)-1] = 0;
+    opentag[sizeof(opentag) - 1] = 0;
 
     closetag[0] = '<';
     closetag[1] = '/';
     strcpy(&closetag[2], tag);
     closetag[strlen(closetag)] = '>';
-    closetag[sizeof(closetag)-1] = 0;
+    closetag[sizeof(closetag) - 1] = 0;
 
     ptr_valstart = strstr(xmlstring, opentag) + strlen(opentag);
     if (ptr_valstart) {
@@ -312,7 +310,7 @@ int vehicleprofile_store_dimensions(struct vehicleprofile *profile) {
     }
 
     if (profile->lez_allowed < 2) {
-            sprintf(lez_allowed, "<lez_allowed>%i</lez_allowed>", profile->lez_allowed);
+        sprintf(lez_allowed, "<lez_allowed>%i</lez_allowed>", profile->lez_allowed);
     }
 
     filename = g_strjoin("/", navit_get_user_data_directory(TRUE), DIMENSIONSFILE, NULL);
@@ -321,7 +319,8 @@ int vehicleprofile_store_dimensions(struct vehicleprofile *profile) {
     document = fopen(filename, "r");
     newdocument = fopen(tmpfilename, "w+");
 
-    // Create new file if it doesn't exist. Workaround for Android as fgets will always return NULL when mode a, a+ is used
+    // Create new file if it doesn't exist. Workaround for Android as fgets will always return NULL when mode a, a+ is
+    // used
     if (document == 0) {
         document = fopen(filename, "a");
         fclose(document);
@@ -331,7 +330,7 @@ int vehicleprofile_store_dimensions(struct vehicleprofile *profile) {
     if (document == 0 || newdocument == 0)
         return 0;
 
-    test=fgets(line, (int)sizeof(line), document);
+    test = fgets(line, (int)sizeof(line), document);
     while (test) {
         value = getTagValue(line, "name");
         if (value) {
@@ -343,11 +342,12 @@ int vehicleprofile_store_dimensions(struct vehicleprofile *profile) {
                 fprintf(newdocument, "%s", line);
             }
         }
-        test=fgets(line, (int)sizeof(line), document);
+        test = fgets(line, (int)sizeof(line), document);
     }
 
     if (!profilefound) {
-        fprintf(newdocument, "<name>%s</name>%s%s%s%s%s%s%s%s\r\n", profile->name, weight, axle_weight, length, width, height, hazmat, emissionclass, lez_allowed);
+        fprintf(newdocument, "<name>%s</name>%s%s%s%s%s%s%s%s\r\n", profile->name, weight, axle_weight, length, width,
+                height, hazmat, emissionclass, lez_allowed);
     }
 
     fclose(newdocument);
@@ -386,7 +386,7 @@ int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
     FILE *document;
     char line[250];
     char *value;
-    int profilefound=0;
+    int profilefound = 0;
 
     filename = g_strjoin("/", navit_get_user_data_directory(TRUE), DIMENSIONSFILE, NULL);
 
@@ -394,7 +394,7 @@ int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
 
     g_free(filename);
 
-    if (document == 0) {   //first startup of this version. Need to create the dimensions file.
+    if (document == 0) {  // first startup of this version. Need to create the dimensions file.
         vehicleprofile_store_dimensions(profile);
     } else {
         while (fgets(line, sizeof(line), document)) {
@@ -404,7 +404,7 @@ int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
             if (value) {
                 if (!strcmp(value, profile->name)) {
                     free(value);
-                    profilefound=1;
+                    profilefound = 1;
                     value = getTagValue(line, "weight");
                     if (value) {
                         attr.type = attr_vehicle_weight;
@@ -462,7 +462,7 @@ int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
                         free(value);
                     } else {
                         attr.type = attr_vehicle_lez_allowed;
-                        attr.u.num = 1; // Default to 1
+                        attr.u.num = 1;  // Default to 1
                         vehicleprofile_set_attr(profile, &attr);
                     }
                 } else {
@@ -473,11 +473,10 @@ int vehicleprofile_read_dimensions(struct vehicleprofile *profile) {
 
         fclose(document);
 
-        if(!profilefound) {
-            //if the profile is not in the dimension.txt yet add it
+        if (!profilefound) {
+            // if the profile is not in the dimension.txt yet add it
             vehicleprofile_store_dimensions(profile);
         }
-
     }
 
     return 1;
@@ -512,7 +511,7 @@ void vehicleprofile_attr_iter_destroy(struct attr_iter *iter) {
 int vehicleprofile_get_attr(struct vehicleprofile *this_, enum attr_type type, struct attr *attr,
                             struct attr_iter *iter) {
     if (this_) {
-    return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
+        return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
     } else {
         dbg(lvl_error, "vehicleprofile_get_attr vehicleprofile is NULL");
         return 0;
@@ -558,9 +557,18 @@ static int vehicleprofile_init(struct vehicleprofile *this_) {
     return 0;
 }
 
-struct object_func vehicleprofile_func = { attr_vehicleprofile, (object_func_new) vehicleprofile_new,
-            (object_func_get_attr) vehicleprofile_get_attr, (object_func_iter_new) vehicleprofile_attr_iter_new,
-            (object_func_iter_destroy) vehicleprofile_attr_iter_destroy, (object_func_set_attr) vehicleprofile_set_attr,
-            (object_func_add_attr) vehicleprofile_add_attr, (object_func_remove_attr) vehicleprofile_remove_attr,
-            (object_func_init) vehicleprofile_init, (object_func_destroy) NULL, (object_func_dup) NULL,
-            (object_func_ref) navit_object_ref, (object_func_unref) navit_object_unref, };
+struct object_func vehicleprofile_func = {
+    attr_vehicleprofile,
+    (object_func_new)vehicleprofile_new,
+    (object_func_get_attr)vehicleprofile_get_attr,
+    (object_func_iter_new)vehicleprofile_attr_iter_new,
+    (object_func_iter_destroy)vehicleprofile_attr_iter_destroy,
+    (object_func_set_attr)vehicleprofile_set_attr,
+    (object_func_add_attr)vehicleprofile_add_attr,
+    (object_func_remove_attr)vehicleprofile_remove_attr,
+    (object_func_init)vehicleprofile_init,
+    (object_func_destroy)NULL,
+    (object_func_dup)NULL,
+    (object_func_ref)navit_object_ref,
+    (object_func_unref)navit_object_unref,
+};

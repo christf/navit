@@ -41,8 +41,8 @@
 #    define M_PI_4 0.785398163397448309616
 #endif
 
-#define BELOW_DEFAULT_HEIGHT_VALUE "2.5"                //Use this height when maxheight=below_default
-#define HGV_WEIGHT_NO_CONDITION_FOUND "(weight>3.5)"    //Use this weight if maxspped:conditional:hgv without confition
+#define BELOW_DEFAULT_HEIGHT_VALUE "2.5"              // Use this height when maxheight=below_default
+#define HGV_WEIGHT_NO_CONDITION_FOUND "(weight>3.5)"  // Use this weight if maxspped:conditional:hgv without confition
 
 #define ANSI_RED "\e[30;31m"
 #define ANSI_YEL "\e[30;43m"
@@ -69,11 +69,11 @@ int maxspeed_attr_value;
 int maxheight_attr_value;
 int maxlength_attr_value;
 int maxwidth_attr_value;
-int maxweight_attr_value;                       //actual weight
-int maxaxleload_attr_value;                     //axle weight
-struct conditionallimit condlimit_attr_value;   //conditional limit
-struct conditionallimit condlimit_fwd_attr_value;   //conditional limit
-struct conditionallimit condlimit_bwd_attr_value;   //conditional limit
+int maxweight_attr_value;                          // actual weight
+int maxaxleload_attr_value;                        // axle weight
+struct conditionallimit condlimit_attr_value;      // conditional limit
+struct conditionallimit condlimit_fwd_attr_value;  // conditional limit
+struct conditionallimit condlimit_bwd_attr_value;  // conditional limit
 
 char debug_attr_buffer[BUFFER_SIZE];
 
@@ -853,62 +853,70 @@ static char *attrmap = {
 // Conversion to meters internally, choose multiplier as required. 1 is return value is in meters
 static int convert_length_unit_to_integer(char *value, int multiplier) {
     int result = 0;
-    char *ptri = strstr(value, "'");     //inch value id
-    char *ptrf = strstr(value, "\"");    //feet value id
-    char *ptrm = strstr(value, "m");     //meter value id
+    char *ptri = strstr(value, "'");   // inch value id
+    char *ptrf = strstr(value, "\"");  // feet value id
+    char *ptrm = strstr(value, "m");   // meter value id
 
     // Hardening:
     if (!value)
         return 0;
 
-    //Need to have both else erroneous values like <7"0> will crash
+    // Need to have both else erroneous values like <7"0> will crash
     if (ptrf && !ptri) {
-//        fprintf(stderr,ANSI_YEL"\nWarning -- Node: %lli unit length conversion can't convert. value was: %s"ANSI_DEF"\n", getcurrentid(), value);
+        //        fprintf(stderr,ANSI_YEL"\nWarning -- Node: %lli unit length conversion can't convert. value was:
+        //        %s"ANSI_DEF"\n", getcurrentid(), value);
         return 0;
     }
 
     // Height not known exactly, use a value based on 2.5 meters height to exclude this way from routing for trucks
     if (!strcmp(value, "below_default")) {
-//        fprintf(stderr, ANSI_YEL"\nWarning -- Node: %lli unit length conversion 'below_default' - Setting value to "BELOW_DEFAULT_HEIGHT_VALUE" meters"ANSI_DEF"\n", getcurrentid());
+        //        fprintf(stderr, ANSI_YEL"\nWarning -- Node: %lli unit length conversion 'below_default' - Setting
+        //        value to "BELOW_DEFAULT_HEIGHT_VALUE" meters"ANSI_DEF"\n", getcurrentid());
         value = BELOW_DEFAULT_HEIGHT_VALUE;
     }
 
-//    fprintf(stderr,ANSI_GRN"\nNode: %lli unit length conversion value: %s, multiplier: %i\n", getcurrentid(), value, multiplier);
+    //    fprintf(stderr,ANSI_GRN"\nNode: %lli unit length conversion value: %s, multiplier: %i\n", getcurrentid(),
+    //    value, multiplier);
 
-    if (ptrm) { // We have metric unit and need to remove the "m"
-//        ptrm--;
-//        *ptrm=0;
-        result = (int) (atof(value) * multiplier);
-//        fprintf(stderr,"Node: %lli unit length conversion converted value metric: %i"ANSI_DEF"\n", getcurrentid(), result);
+    if (ptrm) {  // We have metric unit and need to remove the "m"
+                 //        ptrm--;
+                 //        *ptrm=0;
+        result = (int)(atof(value) * multiplier);
+        //        fprintf(stderr,"Node: %lli unit length conversion converted value metric: %i"ANSI_DEF"\n",
+        //        getcurrentid(), result);
         return result;
     }
 
     // We have an imperial value or meter without unit identifier
     if (ptrf) {
-//        *ptrf=0; // remove inch value identifier and calculate inches
-        result = (int) (atof(++ptri) * 2.54);
-//        fprintf(stderr,"Node: %lli unit length conversion value inches: %i"ANSI_DEF"\n", getcurrentid(), result);
+        //        *ptrf=0; // remove inch value identifier and calculate inches
+        result = (int)(atof(++ptri) * 2.54);
+        //        fprintf(stderr,"Node: %lli unit length conversion value inches: %i"ANSI_DEF"\n", getcurrentid(),
+        //        result);
     }
 
-    if (ptri) { // We have an imperial value and need to add feet
-//        ptri--;
-//        *ptri=0;
-        result += (int) (atof(value) * 0.3048 * multiplier);
-//        fprintf(stderr,ANSI_GRN"Node: %lli unit length conversion converted value from inches + feet: %i"ANSI_DEF"\n", getcurrentid(), result);
+    if (ptri) {  // We have an imperial value and need to add feet
+                 //        ptri--;
+                 //        *ptri=0;
+        result += (int)(atof(value) * 0.3048 * multiplier);
+        //        fprintf(stderr,ANSI_GRN"Node: %lli unit length conversion converted value from inches + feet:
+        //        %i"ANSI_DEF"\n", getcurrentid(), result);
         return result;
     }
 
     // We have meters without unit id
-    result = (int) (atof(value) * multiplier);
+    result = (int)(atof(value) * multiplier);
 
     // Ignore some defaults, but warn if other content
     if (result == 0 && strcmp(value, "default") && strcmp(value, "none") && strcmp(value, "no_sign")
-                && strcmp(value, "unsigned"))
+        && strcmp(value, "unsigned"))
         fprintf(stderr,
-                    ANSI_YEL"\nWarning -- Node: %lli unit length conversion converted value from meters no unit id: %i, value was %s"ANSI_DEF"\n",
-                    getcurrentid(), result, value);
-//    else
-//        fprintf(stderr,"Node: %lli unit length conversion converted value from meters: %i"ANSI_DEF"\n", getcurrentid(), result);
+                ANSI_YEL "\nWarning -- Node: %lli unit length conversion converted value from meters no unit id: %i, "
+                         "value was %s" ANSI_DEF "\n",
+                getcurrentid(), result, value);
+    //    else
+    //        fprintf(stderr,"Node: %lli unit length conversion converted value from meters: %i"ANSI_DEF"\n",
+    //        getcurrentid(), result);
 
     return result;
 }
@@ -916,70 +924,79 @@ static int convert_length_unit_to_integer(char *value, int multiplier) {
 // Conversion to metric tons internally, choose multiplier as required. 1 is return value is in metric tons
 static int convert_weight_unit_to_integer(char *value, int multiplier) {
     int result = 0;
-    char *ptrst = strstr(value, "st");      //short ton value id
-    char *ptrlt = strstr(value, "lt");      //long ton value id
-    char *ptrlbs = strstr(value, "lbs");    //pound mass value id
-    char *ptrcwt = strstr(value, "cwt");    //long hundredweight value id
+    char *ptrst = strstr(value, "st");    // short ton value id
+    char *ptrlt = strstr(value, "lt");    // long ton value id
+    char *ptrlbs = strstr(value, "lbs");  // pound mass value id
+    char *ptrcwt = strstr(value, "cwt");  // long hundredweight value id
 
     // Hardening:
     if (!value)
         return 0;
 
-//    fprintf(stderr,ANSI_GRN"\nNode: %lli unit weight conversion value: %s, multiplier: %i\n", getcurrentid(), value, multiplier);
+    //    fprintf(stderr,ANSI_GRN"\nNode: %lli unit weight conversion value: %s, multiplier: %i\n", getcurrentid(),
+    //    value, multiplier);
 
     if (ptrst) {
-        result = (int) (atof(value) * 0.9071847 * multiplier);
-//            fprintf(stderr,"Node: %lli unit weight conversion converted value from short tons: %i"ANSI_DEF"\n",getcurrentid(), result);
+        result = (int)(atof(value) * 0.9071847 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from short tons:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
         return result;
     }
 
     if (ptrlt) {
-        result = (int) (atof(value) * 1.016047 * multiplier);
-//            fprintf(stderr,"Node: %lli unit weight conversion converted value from long tons: %i"ANSI_DEF"\n",getcurrentid(), result);
+        result = (int)(atof(value) * 1.016047 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from long tons:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
         return result;
     }
 
     if (ptrlbs) {
-        result = (int) (atof(value) * 0.00045359237 * multiplier);
-//            fprintf(stderr,"Node: %lli unit weight conversion converted value from pound mass: %i"ANSI_DEF"\n",getcurrentid(), result);
+        result = (int)(atof(value) * 0.00045359237 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from pound mass:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
         return result;
     }
 
     if (ptrcwt) {
-        result = (int) (atof(value) * 50.80 * multiplier);
-//            fprintf(stderr,"Node: %lli unit weight conversion converted value from long hundredweight: %i"ANSI_DEF"\n",getcurrentid(), result);
+        result = (int)(atof(value) * 50.80 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from long hundredweight:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
         return result;
     }
 
-    result = (int) (atof(value) * multiplier);
+    result = (int)(atof(value) * multiplier);
 
     // Ignore default and none, but warn if other content
     if (result == 0 && strcmp(value, "default") && strcmp(value, "none") && strcmp(value, "no_sign")
-                && strcmp(value, "unsigned"))
+        && strcmp(value, "unsigned"))
         fprintf(stderr,
-                    ANSI_YEL"\nWarning -- Node: %lli unit weight conversion converted value from metric tons no unit id: %i, value was: %s"ANSI_DEF"\n",
-                    getcurrentid(), result, value);
-//    else
-//        fprintf(stderr,"Node: %lli unit weight conversion converted value from metric tons: %i"ANSI_DEF"\n", getcurrentid(), result);
+                ANSI_YEL "\nWarning -- Node: %lli unit weight conversion converted value from metric tons no unit id: "
+                         "%i, value was: %s" ANSI_DEF "\n",
+                getcurrentid(), result, value);
+    //    else
+    //        fprintf(stderr,"Node: %lli unit weight conversion converted value from metric tons: %i"ANSI_DEF"\n",
+    //        getcurrentid(), result);
 
     return result;
 }
 
-static char* cleanCondition(char* condition) {
+static char *cleanCondition(char *condition) {
 
-    while(*condition==32) {
+    while (*condition == 32) {
         condition++;
     }
-    while(*(condition+strlen(condition)-1)==32) {
-        *(condition+strlen(condition)-1)=0;
+    while (*(condition + strlen(condition) - 1) == 32) {
+        *(condition + strlen(condition) - 1) = 0;
     }
 
     return condition;
 }
 
-// this function converts the conditional maxpeed value to km/h and creates a struct of condition and converted speedvalue
+// this function converts the conditional maxpeed value to km/h and creates a struct of condition and converted
+// speedvalue
 static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *value, struct conditionallimit *limit,
-            struct conditionallimit *limitfwd, struct conditionallimit *limitbwd) {
+                                                  struct conditionallimit *limitfwd,
+                                                  struct conditionallimit *limitbwd) {
 
     char temp[strlen(value)];
     char cond[strlen(value)];
@@ -987,15 +1004,15 @@ static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *val
     int hgv = 0;
 
     if (strstr(conditiontype, ":hgv")) {
-        fprintf(stderr, ANSI_GRN"\nTest -- Node: %lli maxspeed conditional HGV: %s -- %s"ANSI_DEF"\n", getcurrentid(),
-                    conditiontype, value);
+        fprintf(stderr, ANSI_GRN "\nTest -- Node: %lli maxspeed conditional HGV: %s -- %s" ANSI_DEF "\n",
+                getcurrentid(), conditiontype, value);
         hgv = 1;
     } else {
-        fprintf(stderr, ANSI_GRN"\nTest -- Node: %lli maxspeed conditional NON HGV: %s -- %s"ANSI_DEF"\n",
-                    getcurrentid(), conditiontype, value);
+        fprintf(stderr, ANSI_GRN "\nTest -- Node: %lli maxspeed conditional NON HGV: %s -- %s" ANSI_DEF "\n",
+                getcurrentid(), conditiontype, value);
     }
 
-    speed = strtok(strcpy(temp, value), "@");  //store the speed value
+    speed = strtok(strcpy(temp, value), "@");  // store the speed value
     temp1 = strtok(NULL, "@");
 
     if (temp1) {
@@ -1005,13 +1022,14 @@ static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *val
     } else {
         if (hgv) {
             temp2 = malloc(strlen(HGV_WEIGHT_NO_CONDITION_FOUND) + 1);
-            strcpy(temp2, HGV_WEIGHT_NO_CONDITION_FOUND); //TODO: 3.5 or 7.5?
+            strcpy(temp2, HGV_WEIGHT_NO_CONDITION_FOUND);  // TODO: 3.5 or 7.5?
             fprintf(stderr,
-                        ANSI_YEL"\nWarning -- :hgv - no condition found. Setting '" "' %lli"ANSI_DEF"\n",
-                        getcurrentid());
+                    ANSI_YEL "\nWarning -- :hgv - no condition found. Setting '"
+                             "' %lli" ANSI_DEF "\n",
+                    getcurrentid());
         } else {
             sprintf(cond, "No condition found for this tag %lli", getcurrentid());
-            fprintf(stderr, ANSI_YEL"\nWarning -- No condition found for this tag %lli"ANSI_DEF"\n", getcurrentid());
+            fprintf(stderr, ANSI_YEL "\nWarning -- No condition found for this tag %lli" ANSI_DEF "\n", getcurrentid());
             return;
         }
     }
@@ -1020,13 +1038,13 @@ static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *val
         limitfwd->condition = temp2;
 
         if (strstr(speed, "mph")) {
-            limitfwd->speed = (int) (atof(speed) * 1.609344);
+            limitfwd->speed = (int)(atof(speed) * 1.609344);
             //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limitfwd->speed);
             return;
         }
 
         if (strstr(speed, "knots")) {
-            limitfwd->speed = (int) (atof(speed) * 1.609344);
+            limitfwd->speed = (int)(atof(speed) * 1.609344);
             //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limitfwd->speed);
             return;
         }
@@ -1037,13 +1055,13 @@ static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *val
         limitbwd->condition = temp2;
 
         if (strstr(speed, "mph")) {
-            limitbwd->speed = (int) (atof(speed) * 1.609344);
+            limitbwd->speed = (int)(atof(speed) * 1.609344);
             //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limitbwd->speed);
             return;
         }
 
         if (strstr(speed, "knots")) {
-            limitbwd->speed = (int) (atof(speed) * 1.609344);
+            limitbwd->speed = (int)(atof(speed) * 1.609344);
             //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limitbwd->speed);
             return;
         }
@@ -1054,19 +1072,19 @@ static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *val
         limit->condition = temp2;
 
         if (strstr(speed, "mph")) {
-            limit->speed = (int) (atof(speed) * 1.609344);
-//        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limit->speed);
+            limit->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limit->speed);
             return;
         }
 
         if (strstr(speed, "knots")) {
-            limit->speed = (int) (atof(speed) * 1.609344);
-//        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limit->speed);
+            limit->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limit->speed);
             return;
         }
 
         limit->speed = atoi(speed);
-//    fprintf(stderr,"speed conversion converted value from km/h: %i"ANSI_DEF"\n", limit->speed);
+        //    fprintf(stderr,"speed conversion converted value from km/h: %i"ANSI_DEF"\n", limit->speed);
     }
 }
 
@@ -1275,7 +1293,7 @@ static int node_is_tagged;
 static void relation_add_tag(char *k, char *v);
 
 static int access_value(char *v) {
-    //fprintf(stderr,"access_value %s\n",v);
+    // fprintf(stderr,"access_value %s\n",v);
     if (!g_strcmp0(v, "1"))
         return 1;
     if (!g_strcmp0(v, "yes"))
@@ -1314,7 +1332,7 @@ static int access_value(char *v) {
 static void osm_update_attr_present(char *k, char *v);
 
 void osm_add_tag(char *k, char *v) {
-    //fprintf(stderr,"tag_value %s\n",k);
+    // fprintf(stderr,"tag_value %s\n",k);
     int level = 2;
     if (in_relation) {
         relation_add_tag(k, v);
@@ -1372,18 +1390,15 @@ void osm_add_tag(char *k, char *v) {
     if (strstr(k, "maxspeed") && strstr(k, "conditional") && !strstr(k, "source")) {
 
         convert_maxspeed_to_integer_and_flags(k, v, &condlimit_attr_value, &condlimit_fwd_attr_value,
-                    &condlimit_bwd_attr_value);
-
+                                              &condlimit_bwd_attr_value);
 
         if (condlimit_attr_value.condition) {
             attr_strings_save(attr_string_maxspeed_conditional_condition, condlimit_attr_value.condition);
             free(condlimit_attr_value.condition);
-
         }
 
         flags[0] |= AF_CONDITIONAL_SPEED_LIMIT;
         condlimit_attr_value.condition = 0;
-
 
         if (condlimit_fwd_attr_value.condition) {
             attr_strings_save(attr_string_maxspeed_fwd_conditional_condition, condlimit_fwd_attr_value.condition);
@@ -1391,7 +1406,6 @@ void osm_add_tag(char *k, char *v) {
         }
 
         condlimit_fwd_attr_value.condition = 0;
-
 
         if (condlimit_bwd_attr_value.condition) {
             attr_strings_save(attr_string_maxspeed_bwd_conditional_condition, condlimit_bwd_attr_value.condition);
@@ -2100,7 +2114,7 @@ void osm_add_member(enum relation_member_type type, osmid ref, char *role) {
 }
 
 static void relation_add_tag(char *k, char *v) {
-    //fprintf(stderr,"access_value %s\n",k);
+    // fprintf(stderr,"access_value %s\n",k);
     int add_tag = 1;
     if (!g_strcmp0(k, "type")) {
         g_strlcpy(relation_type, v, sizeof(relation_type));
@@ -2119,7 +2133,7 @@ static void relation_add_tag(char *k, char *v) {
             osm_warning("relation", osmid_attr_value, 0, "Unknown restriction %s\n", v);
         }
     } else if (!g_strcmp0(k, "boundary")) {
-        //fprintf(stderr,"access_value %s\n",v);
+        // fprintf(stderr,"access_value %s\n",v);
         if (!g_strcmp0(v, "administrative") || !g_strcmp0(v, "postal_code")) {
             boundary = 1;
         }
@@ -2249,14 +2263,14 @@ void osm_end_way(struct maptool_osm *osm) {
         if (condlimit_attr_value.speed) {
             item_bin_add_attr_int(item_bin, attr_maxspeed_conditional_speed, condlimit_attr_value.speed);
             item_bin_add_attr_string(item_bin, attr_maxspeed_conditional_condition,
-                        attr_strings[attr_string_maxspeed_conditional_condition]);
+                                     attr_strings[attr_string_maxspeed_conditional_condition]);
             fprintf(stderr, "condition: \"%s\"\n", attr_strings[attr_string_maxspeed_conditional_condition]);
         }
 
         if (condlimit_fwd_attr_value.speed) {
             item_bin_add_attr_int(item_bin, attr_maxspeed_fwd_conditional_speed, condlimit_fwd_attr_value.speed);
             item_bin_add_attr_string(item_bin, attr_maxspeed_fwd_conditional_condition,
-                        attr_strings[attr_string_maxspeed_fwd_conditional_condition]);
+                                     attr_strings[attr_string_maxspeed_fwd_conditional_condition]);
             fprintf(stderr, "fwdcondition: \"%s\"\n", attr_strings[attr_string_maxspeed_fwd_conditional_condition]);
         }
 
@@ -2264,11 +2278,11 @@ void osm_end_way(struct maptool_osm *osm) {
             item_bin_add_attr_int(item_bin, attr_maxspeed_bwd_conditional_speed, condlimit_bwd_attr_value.speed);
 
             // set condition
-            if(!attr_strings[attr_string_maxspeed_bwd_conditional_condition]) {
-                        fprintf(stderr, "NODE> %li, bwdcondition: NO CONDITION AVAILABLE\n", getcurrentid());
+            if (!attr_strings[attr_string_maxspeed_bwd_conditional_condition]) {
+                fprintf(stderr, "NODE> %li, bwdcondition: NO CONDITION AVAILABLE\n", getcurrentid());
             } else {
                 item_bin_add_attr_string(item_bin, attr_maxspeed_bwd_conditional_condition,
-                                   attr_strings[attr_string_maxspeed_bwd_conditional_condition]);
+                                         attr_strings[attr_string_maxspeed_bwd_conditional_condition]);
             }
 
             fprintf(stderr, "bwdcondition: \"%s\"\n", attr_strings[attr_string_maxspeed_bwd_conditional_condition]);
