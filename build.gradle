@@ -109,13 +109,6 @@ android {
     buildFeatures {
         renderScript = true
     }
-    lint {
-        abortOnError = true
-        disable 'UnusedResources'
-    }
-    buildFeatures {
-        renderScript = true
-    }
 
     androidComponents {
         onVariants(selector().all(), { variant ->
