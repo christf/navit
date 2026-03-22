@@ -5,7 +5,7 @@
 #ifndef NAVIT_GPRIMES_H
 #define NAVIT_GPRIMES_H
 
-#include <glib.h>
+#include "gtypes.h"
 
 guint g_spaced_primes_closest (guint num);
 
