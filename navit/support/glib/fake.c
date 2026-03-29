@@ -18,11 +18,11 @@
 #include <stdio.h>              /* fputs/fprintf */
 
 char* g_convert (const char  *in,
-	int        len,            
+	int        len,
 	const char  *to_codeset,
 	const char  *from_codeset,
-	int        *bytes_read,     
-	int        *bytes_written,  
+	int        *bytes_read,
+	int        *bytes_written,
 	void      **error)
 {
 	return g_strdup(in);
@@ -113,7 +113,7 @@ g_get_current_time (GTimeVal *result)
 }
 
 // FIXME: should use real utf8-aware function
-gchar * g_utf8_casefold(const gchar *s, gssize len) 
+gchar * g_utf8_casefold(const gchar *s, gssize len)
 {
   return g_ascii_strdown(s,len);
 }
