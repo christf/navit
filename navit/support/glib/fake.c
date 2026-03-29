@@ -47,6 +47,10 @@ CRITICAL_SECTION* g_mutex_new_navit(void)
 #endif
 #endif
 
+#ifndef HAVE_API_WIN32_BASE
+static pthread_key_t key;
+#endif
+
 GPrivate*
 g_private_new_navit (void)
 {
@@ -61,7 +65,6 @@ g_private_new_navit (void)
 	printf("return dwTlsIndex = 0x%x\n",dwTlsIndex);
 	return dwTlsIndex;
 #else
-	pthread_key_t key;
 	if (pthread_key_create(&key, NULL)) {
 		fprintf(stderr,"pthread_key_create failed\n");
 	}
