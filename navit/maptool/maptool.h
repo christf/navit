@@ -418,6 +418,8 @@ int zip_write_directory(struct zip_info *info);
 struct zip_info *zip_new(void);
 void zip_set_zip64(struct zip_info *info, int on);
 void zip_set_compression_level(struct zip_info *info, int level);
+void zip_set_compression_method(struct zip_info *info, int method);
+int zip_get_compression_method(struct zip_info *info);
 void zip_set_maxnamelen(struct zip_info *info, int max);
 int zip_get_maxnamelen(struct zip_info *info);
 int zip_add_member(struct zip_info *info);
