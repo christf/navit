@@ -273,7 +273,7 @@ static void write_tile(char *key, struct tile_head *th, gpointer dummy) {
 }
 #endif
 
-static void write_item(char *tile, struct item_bin *ib, FILE *reference) {
+static void write_item(char *tile, struct item_bin *ib, FILE *reference, struct tile_info *info) {
     struct tile_head *th;
     int size;
 
@@ -316,6 +316,10 @@ static void write_item(char *tile, struct item_bin *ib, FILE *reference) {
         if (th->zip_data)
             memcpy(th->zip_data + th->total_size_used, ib, size);
         th->total_size_used += size;
+        if (th->total_size_used == th->total_size && info && info->tile_compress_queue && th->name[0]) {
+            g_async_queue_push((GAsyncQueue *)info->tile_compress_queue, th);
+            info->tiles_pushed++;
+        }
     } else {
         fprintf(stderr, "no tile hash found for %s\n", tile);
         exit(1);
@@ -324,7 +328,7 @@ static void write_item(char *tile, struct item_bin *ib, FILE *reference) {
 
 void tile_write_item_to_tile(struct tile_info *info, struct item_bin *ib, FILE *reference, char *name) {
     if (info->write)
-        write_item(name, ib, reference);
+        write_item(name, ib, reference, info);
     else
         tile_extend(name, ib, info->tiles_list);
 }

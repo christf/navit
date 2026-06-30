@@ -420,6 +420,7 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
     struct tile_head *th;
     char *slice_data, *zip_data;
     int zipfiles = 0;
+    int tile_count;
     struct tile_info info;
     int i;
 
@@ -441,45 +442,77 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
             fseek(reference[i], 0, SEEK_SET);
         }
     }
+    /* count named tiles in this slice */
+    tile_count = 0;
+    th = tile_head_root;
+    while (th) {
+        if (th->process && th->name[0])
+            tile_count++;
+        th = th->next;
+    }
+
     info.write = 1;
     info.maxlen = zip_get_maxnamelen(zip_info);
     info.suffix = suffix;
     info.tiles_list = NULL;
     info.tilesdir_out = NULL;
-    phase34(&info, zip_info, in, reference, in_count, with_range);
+    info.tile_compress_queue = (worker_threads && tile_count > 0) ? tile_queue : NULL;
+    info.compression_level = 0;
+    info.compression_method = 0;
+    info.tiles_pushed = 0;
 
-    {
-        int tile_count = 0;
+    /* set compression level and method before phase34 so workers can use them */
+    if (info.tile_compress_queue) {
+        info.compression_level = zip_get_compression_level(zip_info);
+        info.compression_method = zip_get_compression_method(zip_info);
         th = tile_head_root;
         while (th) {
-            if (th->process && th->name[0])
-                tile_count++;
+            if (th->process && th->name[0]) {
+                th->compression_level = info.compression_level;
+                th->compression_method = info.compression_method;
+            }
             th = th->next;
         }
+    }
 
-        if (tile_count > 0 && worker_threads) {
-            int compression_level = zip_get_compression_level(zip_info);
-            int compression_method = zip_get_compression_method(zip_info);
+    /* phase34 reads items and pushes completed tiles to tile_compress_queue */
+    phase34(&info, zip_info, in, reference, in_count, with_range);
 
-            /* write index/empty-name tiles directly (no compression needed) */
-            for (th = tile_head_root; th; th = th->next) {
-                if (th->process && !th->name[0]) {
-                    dbg_assert(fwrite(th->zip_data, th->total_size, 1, zip_get_index(zip_info)) == 1);
-                }
+    /* verify all tiles were populated */
+    if (info.tile_compress_queue && info.tiles_pushed != tile_count) {
+        fprintf(stderr, "Only %d of %d tiles were fully populated\n", info.tiles_pushed, tile_count);
+        exit(1);
+    }
+
+    /* write index/empty-name tiles directly (no compression needed) */
+    for (th = tile_head_root; th; th = th->next) {
+        if (th->process && !th->name[0]) {
+            dbg_assert(fwrite(th->zip_data, th->total_size, 1, zip_get_index(zip_info)) == 1);
+        }
+    }
+
+    if (info.tile_compress_queue) {
+        /* threaded: consume completed tiles from the done queue */
+        while (tile_count > 0) {
+            th = g_async_queue_pop(tile_done_queue);
+            if (th->total_size != th->total_size_used) {
+                fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
+                exit(1);
             }
-
-            th = tile_head_root;
-            while (th) {
-                if (th->process && th->name[0]) {
-                    th->compression_level = compression_level;
-                    th->compression_method = compression_method;
-                    g_async_queue_push(tile_queue, th);
-                }
-                th = th->next;
-            }
-
-            while (tile_count > 0) {
-                th = g_async_queue_pop(tile_done_queue);
+            write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info), th->comp_data, th->comp_size,
+                                th->total_size, th->crc, th->zipmthd);
+            if (th->comp_data != th->zip_data)
+                g_free(th->comp_data);
+            th->comp_data = NULL;
+            zipfiles++;
+            tile_count--;
+        }
+    } else {
+        /* sequential: compress and write each tile */
+        for (th = tile_head_root; th; th = th->next) {
+            if (!th->process)
+                continue;
+            if (th->name[0]) {
                 if (th->total_size != th->total_size_used) {
                     fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
                     exit(1);

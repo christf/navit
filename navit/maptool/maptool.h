@@ -69,8 +69,10 @@ struct tile_info {
     char *suffix;
     GList **tiles_list;
     FILE *tilesdir_out;
+    void *tile_compress_queue;
     int compression_level;
     int compression_method;
+    int tiles_pushed;
 };
 
 extern struct tile_head {
