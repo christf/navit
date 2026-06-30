@@ -25,6 +25,7 @@
 #include "main.h"
 #include "map.h"
 #include "plugin.h"
+#include "stream.h"
 #include "util.h"
 #include <assert.h>
 #include <errno.h>
@@ -53,7 +54,7 @@ GHashTable *dedupe_ways_hash;
 int phase;
 int slices;
 int unknown_country;
-char ch_suffix[] = "r"; /* Used to make compiler happy due to Bug 35903 in gcc */
+
 /** Textual description of available experimental features, or NULL (=none available). */
 char *experimental_feature_description = "Move coastline data to order 6 tiles. Makes map look more smooth, but may "
                                          "affect drawing/searching performance."; /* add description here */
@@ -212,35 +213,8 @@ void sig_alrm_end(void) {
 #endif
 }
 
-static struct files_relation_processing *files_relation_processing_new(FILE *line2poi, char *suffix) {
-    struct files_relation_processing *result = g_new(struct files_relation_processing, 1);
-    result->ways_in = tempfile(suffix, "ways_split", 0);
-    result->ways_out = tempfile(suffix, "ways_split_relproc_tmp", 1);
-    result->nodes_in = tempfile(suffix, "nodes", 0);
-    result->nodes_out = tempfile(suffix, "nodes_relproc_tmp", 1);
-    result->nodes2_in = NULL;
-    result->nodes2_out = NULL;
-    if (line2poi) {
-        result->nodes2_in = tempfile(suffix, "way2poi_result", 0);
-        result->nodes2_out = tempfile(suffix, "way2poi_result_relproc_tmp", 1);
-    }
-    return result;
-}
-
-static void files_relation_processing_destroy(struct files_relation_processing *files_relproc, char *suffix) {
-    fclose(files_relproc->ways_in);
-    fclose(files_relproc->nodes_in);
-    fclose(files_relproc->ways_out);
-    fclose(files_relproc->nodes_out);
-    tempfile_rename(suffix, "ways_split_relproc_tmp", "ways_split");
-    tempfile_rename(suffix, "nodes_relproc_tmp", "nodes");
-    if (files_relproc->nodes2_in) {
-        fclose(files_relproc->nodes2_in);
-        fclose(files_relproc->nodes2_out);
-        tempfile_rename(suffix, "way2poi_result_relproc_tmp", "way2poi_result");
-    }
-    g_free(files_relproc);
-}
+/* files_relation_processing_new/destroy were removed along with phases 10-11
+ * (relation enrichment now happens in the streaming pass via stream.c indices). */
 
 static struct plugins *plugins;
 
@@ -307,7 +281,7 @@ static void usage(void) {
     fprintf(f, "-U (--unknown-country)            : add objects with unknown country to index\n");
     fprintf(f, "-x (--index-size)                 : set maximum country index size in bytes\n");
     fprintf(f, "-z (--compression-level) <level>  : set the compression level\n");
-    fprintf(f, "-C (--compression-method) <method>: compression method (zlib or lzma, default zlib)\n");
+    fprintf(f, "-C (--compression-method) <type> : set compression method (zlib or lzma, default: zlib)\n");
     fprintf(f, "Internal options (undocumented):\n");
     fprintf(f, "-b (--binfile)\n");
     fprintf(f, "-B \n");
@@ -347,7 +321,6 @@ struct maptool_params {
     char *dbstr;
     int node_table_loaded;
     int countries_loaded;
-    int tilesdir_loaded;
     int max_index_size;
 };
 
@@ -364,6 +337,7 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         {"binfile",           0, 0, 'b'},
         {"compression-level", 1, 0, 'z'},
         {"compression-method", 1, 0, 'C'},
+
 #ifdef HAVE_POSTGRESQL
         {"db",                1, 0, 'd'},
 #endif
@@ -393,11 +367,11 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         {0,                   0, 0, 0  }
     };
     c = getopt_long(argc, argv,
-                    "36B:C:DEMNO:PS:Wa:bc"
+                    "36B:DEMNO:PS:Wa:bc"
 #ifdef HAVE_POSTGRESQL
                     "d:"
 #endif
-                    "e:hi:knm:p:r:s:t:T:wu:z:Ux:",
+                    "e:hi:knm:p:r:s:t:T:u:z:C:Ux:",
                     long_options, option_index);
     if (c == -1)
         return 1;
@@ -529,15 +503,15 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
     case 'x':
         p->max_index_size = atoi(optarg);
         break;
-    case 'C':
-        if (!strcmp(optarg, "lzma"))
-            p->compression_method = 14;
-        else
-            p->compression_method = 8;
-        break;
 #if defined(HAVE_ZLIB) || defined(HAVE_LZMA)
     case 'z':
         p->compression_level = atoi(optarg);
+        break;
+    case 'C':
+        if (!g_strcmp0(optarg, "lzma"))
+            p->compression_method = 14;
+        else
+            p->compression_method = 8;
         break;
 #endif
     case '?':
@@ -670,7 +644,43 @@ static void osm_count_references(struct maptool_params *p, char *suffix, int cle
     }
 }
 
-static void osm_resolve_coords_and_split_at_intersections(struct maptool_params *p, char *suffix) {
+struct early_phase_ctx {
+    struct relations *boundary_rel;
+    GList *boundary_list;
+
+    struct relations **turn_rel;
+    int turn_n;
+    GList **turn_results;
+
+    struct relations **mp_rel;
+    int mp_n;
+    GList **mp_results;
+};
+
+static struct early_phase_ctx *g_ep_ctx = NULL;
+
+struct cb_ctx {
+    struct stream_state *ss;
+    struct early_phase_ctx *ep;
+};
+static struct cb_ctx g_cb_ctx = {NULL, NULL};
+
+static void stream_item_callback(struct item_bin *ib, void *ctx) {
+    struct cb_ctx *cb = ctx;
+    if (cb->ss)
+        stream_feed(cb->ss, ib);
+    if (cb->ep) {
+        if (cb->ep->boundary_rel)
+            relations_process_item(cb->ep->boundary_rel, ib);
+        if (cb->ep->turn_rel)
+            relations_process_items_multi(cb->ep->turn_rel, cb->ep->turn_n, ib);
+        if (cb->ep->mp_rel)
+            relations_process_items_multi(cb->ep->mp_rel, cb->ep->mp_n, ib);
+    }
+}
+
+static void osm_resolve_coords_and_split_at_intersections(struct maptool_params *p, char *suffix,
+                                                          struct stream_state *ss) {
     FILE *ways, *ways_split, *ways_split_index, *graph, *coastline;
     int i;
 
@@ -683,7 +693,9 @@ static void osm_resolve_coords_and_split_at_intersections(struct maptool_params 
         coastline = tempfile(suffix, "coastline", 1);
         if (i)
             load_buffer(coord_tmp_path, &node_buffer, i * slice_size, slice_size);
-        map_resolve_coords_and_split_at_intersections(ways, ways_split, ways_split_index, graph, coastline, final);
+        g_cb_ctx.ss = ss;
+        map_resolve_coords_and_split_at_intersections(ways, ways_split, ways_split_index, graph, coastline, final,
+                                                      (ss || g_ep_ctx) ? stream_item_callback : NULL, &g_cb_ctx);
         fclose(ways_split);
         if (ways_split_index)
             fclose(ways_split_index);
@@ -784,50 +796,25 @@ static void maptool_dump(struct maptool_params *p, char *suffix) {
     }
 }
 
-static void maptool_generate_tiles(struct maptool_params *p, char *suffix, char **filenames, int filename_count,
-                                   int first, char *suffix0) {
-    struct zip_info *zip_info;
-    FILE *tilesdir;
-    FILE *files[10];
-    int zipnum, f;
-    zip_info = zip_new();
-    zip_set_zip64(zip_info, p->zip64);
-    zip_set_timestamp(zip_info, p->timestamp);
-    zipnum = zip_get_zipnum(zip_info);
-    tilesdir = tempfile(suffix, "tilesdir", 1);
-    if (!g_strcmp0(suffix, ch_suffix)) { /* Makes compiler happy due to bug 35903 in gcc */
-        ch_generate_tiles(suffix0, suffix, tilesdir, zip_info);
-    } else {
-        for (f = 0; f < filename_count; f++)
-            files[f] = tempfile(suffix, filenames[f], 0);
-        phase4(files, filename_count, 0, suffix, tilesdir, zip_info);
-        for (f = 0; f < filename_count; f++) {
-            if (files[f])
-                fclose(files[f]);
-        }
-    }
-    fclose(tilesdir);
-    zip_set_zipnum(zip_info, zipnum);
-    zip_destroy(zip_info);
-}
+static struct stream_state *g_ss;
+static struct zip_info *g_zip_info;
 
-static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **filenames, char **referencenames,
-                                 int filename_count, int first, int last, char *suffix0) {
-    FILE *files[10];
-    FILE *references[10];
-    struct zip_info *zip_info;
-    int zipnum, f;
+static void maptool_streaming_assemble(struct maptool_params *p, char *suffix, char **filenames, int filename_count,
+                                       int first, int last, char *suffix0) {
+    FILE *files[32];
+    struct item_bin *ib;
+    int f;
 
-    if (first) {
+    if (!g_zip_info) {
         char *zipdir = tempfile_name("zipdir", "");
         char *zipindex = tempfile_name("index", "");
-        zip_info = zip_new();
-        zip_set_zip64(zip_info, p->zip64);
-        zip_set_timestamp(zip_info, p->timestamp);
-        zip_set_maxnamelen(zip_info, 14 + strlen(suffix0));
-        zip_set_compression_level(zip_info, p->compression_level);
-        zip_set_compression_method(zip_info, p->compression_method);
-        if (!zip_open(zip_info, p->result, zipdir, zipindex)) {
+        g_zip_info = zip_new();
+        zip_set_zip64(g_zip_info, p->zip64);
+        zip_set_timestamp(g_zip_info, p->timestamp);
+        zip_set_maxnamelen(g_zip_info, 14 + strlen(suffix0));
+        zip_set_compression_level(g_zip_info, p->compression_level);
+        zip_set_compression_method(g_zip_info, p->compression_method);
+        if (!zip_open(g_zip_info, p->result, zipdir, zipindex)) {
             fprintf(stderr, "Fatal: Could not write output file.\n");
             exit(1);
         }
@@ -835,28 +822,49 @@ static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **
             map_information_attrs[1].type = attr_url;
             map_information_attrs[1].u.str = p->url;
         }
-        index_init(zip_info, 15);
+        index_init(g_zip_info, 15);
         g_free(zipdir);
         g_free(zipindex);
     }
-    if (!g_strcmp0(suffix, ch_suffix)) { /* Makes compiler happy due to bug 35903 in gcc */
-        ch_assemble_map(suffix0, suffix, zip_info);
-    } else {
-        for (f = 0; f < filename_count; f++) {
-            files[f] = tempfile(suffix, filenames[f], 0);
-            if (referencenames[f])
-                references[f] = tempfile(suffix, referencenames[f], 1);
-            else
-                references[f] = NULL;
+    if (!g_ss) {
+        struct tile_info info;
+        memset(&info, 0, sizeof(info));
+        info.write = 1;
+        info.dynamic = 1;
+        info.maxlen = zip_get_maxnamelen(g_zip_info);
+        info.suffix = suffix;
+        info.tiles_list = NULL;
+        info.tilesdir_out = NULL;
+        info.compression_level = zip_get_compression_level(g_zip_info);
+        info.compression_method = zip_get_compression_method(g_zip_info);
+        if (thread_count > 1) {
+            tile_worker_pool_init(thread_count, info.compression_level, info.compression_method);
+            info.tile_compress_queue = tile_get_compress_queue();
         }
-        phase5(files, references, filename_count, 0, suffix, zip_info);
-        for (f = 0; f < filename_count; f++) {
-            if (files[f])
-                fclose(files[f]);
-            if (references[f])
-                fclose(references[f]);
-        }
+        g_ss = stream_new(g_zip_info, suffix, &info);
     }
+
+    /* open and process each input file through the streaming pipeline.
+     * ways_split is already fed via callback during the split phase
+     * for OSM XML input. For binfile input it must be read here. */
+    for (f = 0; f < filename_count; f++) {
+        if (p->input == 0 && !g_strcmp0(filenames[f], "ways_split"))
+            continue;
+        files[f] = tempfile(suffix, filenames[f], 0);
+        if (!files[f])
+            continue;
+        while ((ib = read_item(files[f])))
+            stream_feed(g_ss, ib);
+        fclose(files[f]);
+    }
+
+    stream_flush(g_ss);
+    stream_destroy(g_ss);
+    g_ss = NULL;
+
+    if (tile_get_compress_queue())
+        tile_worker_pool_fini();
+
     if (!p->keep_tmpfiles) {
         tempfile_unlink(suffix, "relations");
         tempfile_unlink(suffix, "multipolygons_out");
@@ -877,15 +885,16 @@ static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **
         unlink(coord_tmp_path);
     }
     if (last) {
-        zipnum = zip_get_zipnum(zip_info);
-        add_aux_tiles("auxtiles.txt", zip_info);
-        write_countrydir(zip_info, p->max_index_size);
-        zip_set_zipnum(zip_info, zipnum);
-        write_aux_tiles(zip_info);
-        zip_write_index(zip_info);
-        zip_write_directory(zip_info);
-        zip_close(zip_info);
-        zip_destroy(zip_info);
+        int zipnum = zip_get_zipnum(g_zip_info);
+        add_aux_tiles("auxtiles.txt", g_zip_info);
+        write_countrydir(g_zip_info, p->max_index_size);
+        zip_set_zipnum(g_zip_info, zipnum);
+        write_aux_tiles(g_zip_info);
+        zip_write_index(g_zip_info);
+        zip_write_directory(g_zip_info);
+        zip_close(g_zip_info);
+        zip_destroy(g_zip_info);
+        g_zip_info = NULL;
         if (!p->keep_tmpfiles) {
             remove_countryfiles();
             tempfile_unlink("index", "");
@@ -910,20 +919,11 @@ static void maptool_load_countries(struct maptool_params *p) {
     }
 }
 
-static void maptool_load_tilesdir(struct maptool_params *p, char *suffix) {
-    if (!p->tilesdir_loaded) {
-        FILE *tilesdir = tempfile(suffix, "tilesdir", 0);
-        load_tilesdir(tilesdir);
-        p->tilesdir_loaded = 1;
-    }
-}
-
 int main(int argc, char **argv) {
     struct maptool_params p;
     char *suffixes[] = {""};
     char *suffix = suffixes[0];
     char *filenames[20];
-    char *referencenames[20];
     int filename_count = 0;
 
     int suffix_count = sizeof(suffixes) / sizeof(char *);
@@ -939,9 +939,9 @@ int main(int argc, char **argv) {
 
     memset(&p, 0, sizeof(p));
     p.zip64 = 1; /* default to 64 bit zip */
-    p.compression_method = 8; /* default to zlib */
 #if defined(HAVE_ZLIB) || defined(HAVE_LZMA)
     p.compression_level = 6;
+    p.compression_method = 8; /* zlib default */
 #endif
     p.start = 1;
     p.end = 99;
@@ -1015,10 +1015,85 @@ int main(int argc, char **argv) {
         if (start_phase(&p, "converting ways to pois")) {
             osm_process_way2poi(&p, suffix);
         }
+        /* Set up early phases (boundaries, turn restrictions, multipolygons)
+         * before the splitter so they receive way items via callback,
+         * eliminating their ways_split re-read. */
+        if (p.process_ways && !p.dump) {
+            FILE *boundaries = tempfile(suffix, "boundaries", 0);
+            FILE *turn_restrictions = (p.process_relations ? tempfile(suffix, "turn_restrictions", 0) : NULL);
+            FILE *multipolygons = (p.process_relations ? tempfile(suffix, "multipolygons", 0) : NULL);
+            if (boundaries || turn_restrictions || multipolygons) {
+                g_ep_ctx = g_new0(struct early_phase_ctx, 1);
+                g_cb_ctx.ep = g_ep_ctx;
+                if (boundaries) {
+                    struct relations *rel = relations_new();
+                    g_ep_ctx->boundary_list = process_boundaries_setup(boundaries, rel);
+                    g_ep_ctx->boundary_rel = rel;
+                    fclose(boundaries);
+                }
+                if (turn_restrictions) {
+                    int i;
+                    g_ep_ctx->turn_n = thread_count;
+                    g_ep_ctx->turn_rel = g_malloc0(sizeof(struct relations *) * g_ep_ctx->turn_n);
+                    for (i = 0; i < g_ep_ctx->turn_n; i++)
+                        g_ep_ctx->turn_rel[i] = relations_new();
+                    g_ep_ctx->turn_results =
+                        process_turn_restrictions_setup(turn_restrictions, g_ep_ctx->turn_n, g_ep_ctx->turn_rel);
+                    fclose(turn_restrictions);
+                }
+                if (multipolygons) {
+                    int i;
+                    g_ep_ctx->mp_n = thread_count;
+                    g_ep_ctx->mp_rel = g_malloc0(sizeof(struct relations *) * g_ep_ctx->mp_n);
+                    for (i = 0; i < g_ep_ctx->mp_n; i++)
+                        g_ep_ctx->mp_rel[i] = relations_new();
+                    g_ep_ctx->mp_results = process_multipolygons_setup(multipolygons, g_ep_ctx->mp_n, g_ep_ctx->mp_rel);
+                    fclose(multipolygons);
+                }
+            }
+        }
         if (start_phase(&p, "splitting at intersections")) {
             if (p.process_ways) {
                 maptool_load_node_table(&p, 0);
-                osm_resolve_coords_and_split_at_intersections(&p, suffix);
+                /* set up streaming infrastructure if not done yet */
+                if (!g_zip_info && !p.dump) {
+                    char *zipdir = tempfile_name("zipdir", "");
+                    char *zipindex = tempfile_name("index", "");
+                    char *suffix0 = suffixes[0];
+                    struct tile_info info;
+                    g_zip_info = zip_new();
+                    zip_set_zip64(g_zip_info, p.zip64);
+                    zip_set_timestamp(g_zip_info, p.timestamp);
+                    zip_set_maxnamelen(g_zip_info, 14 + strlen(suffix0));
+                    zip_set_compression_level(g_zip_info, p.compression_level);
+                    zip_set_compression_method(g_zip_info, p.compression_method);
+                    if (!zip_open(g_zip_info, p.result, zipdir, zipindex)) {
+                        fprintf(stderr, "Fatal: Could not write output file.\n");
+                        exit(1);
+                    }
+                    if (p.url) {
+                        map_information_attrs[1].type = attr_url;
+                        map_information_attrs[1].u.str = p.url;
+                    }
+                    index_init(g_zip_info, 15);
+                    g_free(zipdir);
+                    g_free(zipindex);
+                    memset(&info, 0, sizeof(info));
+                    info.write = 1;
+                    info.dynamic = 1;
+                    info.maxlen = zip_get_maxnamelen(g_zip_info);
+                    info.suffix = suffix;
+                    info.tiles_list = NULL;
+                    info.tilesdir_out = NULL;
+                    info.compression_level = zip_get_compression_level(g_zip_info);
+                    info.compression_method = zip_get_compression_method(g_zip_info);
+                    if (thread_count > 1) {
+                        tile_worker_pool_init(thread_count, info.compression_level, info.compression_method);
+                        info.tile_compress_queue = tile_get_compress_queue();
+                    }
+                    g_ss = stream_new(g_zip_info, suffix, &info);
+                }
+                osm_resolve_coords_and_split_at_intersections(&p, suffix, g_ss);
             }
         }
         g_free(node_buffer.base);
@@ -1037,13 +1112,21 @@ int main(int argc, char **argv) {
         osm_process_coastlines(&p, suffix);
     }
     if (start_phase(&p, "assigning towns to countries")) {
-        FILE *towns = tempfile(suffix, "towns", 0), *boundaries = NULL, *ways = NULL;
+        FILE *towns = tempfile(suffix, "towns", 0);
         if (towns) {
-            boundaries = tempfile(suffix, "boundaries", 0);
-            ways = tempfile(suffix, "ways_split", 0);
-            osm_process_towns(towns, boundaries, ways, suffix);
-            fclose(ways);
-            fclose(boundaries);
+            if (g_ep_ctx && g_ep_ctx->boundary_rel) {
+                GList *bl = process_boundaries_finish(g_ep_ctx->boundary_list);
+                relations_destroy(g_ep_ctx->boundary_rel);
+                g_ep_ctx->boundary_rel = NULL;
+                g_ep_ctx->boundary_list = NULL;
+                osm_process_towns(towns, NULL, NULL, bl, suffix);
+            } else {
+                FILE *boundaries = tempfile(suffix, "boundaries", 0);
+                FILE *ways = tempfile(suffix, "ways_split", 0);
+                osm_process_towns(towns, boundaries, ways, NULL, suffix);
+                fclose(ways);
+                fclose(boundaries);
+            }
             fclose(towns);
             if (!p.keep_tmpfiles)
                 tempfile_unlink(suffix, "towns");
@@ -1055,86 +1138,75 @@ int main(int argc, char **argv) {
     }
     if (start_phase(&p, "generating turn restrictions")) {
         if (p.process_relations) {
-            osm_process_turn_restrictions(&p, suffix);
+            if (g_ep_ctx && g_ep_ctx->turn_rel) {
+                FILE *relations_file = tempfile(suffix, "relations", 1);
+                int i;
+                for (i = 0; i < g_ep_ctx->turn_n; i++) {
+                    process_turn_restrictions_finish(g_ep_ctx->turn_results[i], relations_file);
+                    relations_destroy(g_ep_ctx->turn_rel[i]);
+                }
+                fclose(relations_file);
+                g_free(g_ep_ctx->turn_results);
+                g_free(g_ep_ctx->turn_rel);
+                g_ep_ctx->turn_rel = NULL;
+            } else {
+                osm_process_turn_restrictions(&p, suffix);
+            }
         }
     }
     if (start_phase(&p, "generating multipolygons")) {
         if (p.process_relations) {
-            osm_process_multipolygons(&p, suffix);
+            if (g_ep_ctx && g_ep_ctx->mp_rel) {
+                FILE *mp_out = tempfile(suffix, "multipolygons_out", 1);
+                int i;
+                for (i = 0; i < g_ep_ctx->mp_n; i++) {
+                    process_multipolygons_finish(g_ep_ctx->mp_results[i], mp_out);
+                    relations_destroy(g_ep_ctx->mp_rel[i]);
+                }
+                fclose(mp_out);
+                g_free(g_ep_ctx->mp_results);
+                g_free(g_ep_ctx->mp_rel);
+                g_ep_ctx->mp_rel = NULL;
+            } else {
+                osm_process_multipolygons(&p, suffix);
+            }
         }
+    }
+    if (g_ep_ctx && !g_ep_ctx->boundary_rel && !g_ep_ctx->turn_rel && !g_ep_ctx->mp_rel) {
+        g_free(g_ep_ctx);
+        g_ep_ctx = NULL;
+        g_cb_ctx.ep = NULL;
     }
     if (!p.keep_tmpfiles)
         tempfile_unlink(suffix, "ways_split_index");
 
-    if (p.process_relations && p.process_ways && p.process_nodes
-        && start_phase(&p, "processing associated street relations")) {
-        struct files_relation_processing *files_relproc = files_relation_processing_new(p.osm.line2poi, suffix);
-        p.osm.associated_streets = tempfile(suffix, "associated_streets", 0);
-        if (p.osm.associated_streets) {
-
-            process_associated_streets(p.osm.associated_streets, files_relproc);
-
-            fclose(p.osm.associated_streets);
-            files_relation_processing_destroy(files_relproc, suffix);
-            if (!p.keep_tmpfiles) {
-                tempfile_unlink(suffix, "associated_streets");
-            }
-        }
-    }
-    if (p.process_relations && p.process_ways && p.process_nodes
-        && start_phase(&p, "processing house number interpolations")) {
-        // OSM house number interpolations are handled like a relation.
-        struct files_relation_processing *files_relproc = files_relation_processing_new(p.osm.line2poi, suffix);
-        p.osm.house_number_interpolations = tempfile(suffix, "house_number_interpolations", 0);
-        if (p.osm.house_number_interpolations) {
-
-            process_house_number_interpolations(p.osm.house_number_interpolations, files_relproc);
-
-            fclose(p.osm.house_number_interpolations);
-            files_relation_processing_destroy(files_relproc, suffix);
-            if (!p.keep_tmpfiles) {
-                tempfile_unlink(suffix, "house_number_interpolations");
-            }
-        }
-    }
+    /* Relation enrichment (associated streets, house number interpolations) now happens
+     * during the streaming pass via pre-built indices in stream.c */
     if (p.dump == 1 && start_phase(&p, "dumping")) {
         maptool_dump(&p, suffix);
         exit(0);
     }
     if (p.process_relations) {
-        filenames[filename_count] = "multipolygons_out";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "relations";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "towns_poly";
-        referencenames[filename_count++] = NULL;
+        filenames[filename_count++] = "multipolygons_out";
+        filenames[filename_count++] = "relations";
+        filenames[filename_count++] = "towns_poly";
     }
     if (p.process_ways) {
-        filenames[filename_count] = "ways_split";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "coastline_result";
-        referencenames[filename_count++] = NULL;
+        filenames[filename_count++] = "ways_split";
+        filenames[filename_count++] = "coastline_result";
     }
     if (p.process_nodes) {
-        filenames[filename_count] = "nodes";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "way2poi_result";
-        referencenames[filename_count++] = NULL;
+        filenames[filename_count++] = "nodes";
+        filenames[filename_count++] = "way2poi_result";
     }
     for (i = suffix_start; i < suffix_count; i++) {
         suffix = suffixes[i];
-        if (start_phase(&p, "generating tiles")) {
+        if (start_phase(&p, "assembling map (streaming)")) {
             maptool_load_countries(&p);
-            maptool_generate_tiles(&p, suffix, filenames, filename_count, i == suffix_start, suffixes[0]);
-            p.tilesdir_loaded = 1;
+            maptool_streaming_assemble(&p, suffix, filenames, filename_count, i == suffix_start,
+                                       i == suffix_count - 1, suffixes[0]);
         }
-        if (start_phase(&p, "assembling map")) {
-            maptool_load_countries(&p);
-            maptool_load_tilesdir(&p, suffix);
-            maptool_assemble_map(&p, suffix, filenames, referencenames, filename_count, i == suffix_start,
-                                 i == suffix_count - 1, suffixes[0]);
-        }
-        phase -= 2;
+        phase--;
     }
     phase += 2;
     start_phase(&p, "done");

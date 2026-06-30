@@ -8,9 +8,9 @@ if(BUILD_MAPTOOL)
 	add_definitions( -DMODULE=maptool ${NAVIT_COMPILE_FLAGS})
 
 	add_executable (maptool maptool.c)
-	add_library (maptool_core boundaries.c buffer.c ch.c coastline.c itembin.c
+	add_library (maptool_core boundaries.c buffer.c coastline.c itembin.c
 		itembin_buffer.c itembin_slicer.c misc.c osm.c osm_o5m.c osm_psql.c
-		osm_relations.c sourcesink.c tempfile.c tile.c zip.c osm_xml.c)
+		osm_relations.c pipeline.c sourcesink.c stream.c tempfile.c tile.c zip.c osm_xml.c)
 
 	if(NOT MSVC)
 		PROTOBUF_C_GENERATE_C (PROTO_SRCS PROTO_HDRS osmformat.proto)

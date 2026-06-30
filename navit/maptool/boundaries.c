@@ -60,7 +60,7 @@ static void process_boundaries_member(void *func_priv, void *relation_priv, stru
         b->segments = g_list_prepend(b->segments, item_bin_to_poly_segment(member, role));
 }
 
-static GList *process_boundaries_setup(FILE *boundaries, struct relations *relations) {
+GList *process_boundaries_setup(FILE *boundaries, struct relations *relations) {
     struct item_bin *ib;
     GList *boundaries_list = NULL;
     struct relations_func *relations_func;
@@ -314,7 +314,7 @@ static void boundary_write_debug(struct boundary *b) {
     }
 }
 
-static GList *process_boundaries_finish(GList *boundaries_list) {
+GList *process_boundaries_finish(GList *boundaries_list) {
     GList *l, *ret = NULL;
     l = boundaries_list;
     while (l) {

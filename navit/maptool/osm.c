@@ -2252,7 +2252,7 @@ static void osm_town_relations_to_poly(GList *boundaries, FILE *towns_poly) {
     }
 }
 
-void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
+void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, GList *pre_bl, char *suffix) {
     struct item_bin *ib;
     GList *bl;
     GHashTable *town_hash;
@@ -2262,7 +2262,12 @@ void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
     bytes_read = 0;
     sig_alrm(0);
 
-    bl = process_boundaries(boundaries, ways);
+    if (pre_bl)
+        bl = pre_bl;
+    else if (boundaries)
+        bl = process_boundaries(boundaries, ways);
+    else
+        bl = NULL;
 
     fprintf(stderr, "Processed boundaries\n");
 
@@ -3022,7 +3027,7 @@ static inline void dump_sequence(const char *string, int loop_count, int *scount
 #endif
 }
 
-static void process_multipolygons_finish(GList *tr, FILE *out) {
+void process_multipolygons_finish(GList *tr, FILE *out) {
     GList *l = tr;
     // fprintf(stderr,"process_multipolygons_finish\n");
     while (l) {
@@ -3294,7 +3299,7 @@ static gpointer process_multipolygons_setup_worker(gpointer data) {
  *
  * @returns array of GLists. One per thread containing the resulting structures.
  */
-static GList **process_multipolygons_setup(FILE *in, int thread_count, struct relations **relations) {
+GList **process_multipolygons_setup(FILE *in, int thread_count, struct relations **relations) {
     struct process_multipolygon_setup_thread *sthread;
 
     struct item_bin *ib;
@@ -3317,6 +3322,10 @@ static GList **process_multipolygons_setup(FILE *in, int thread_count, struct re
         sthread[i].multipolygons = NULL;
         sthread[i].thread =
             g_thread_new("process_multipolygons_setup_worker", process_multipolygons_setup_worker, &(sthread[i]));
+        if (!sthread[i].thread) {
+            fprintf(stderr, "Failed to create multipolygon worker thread %d\n", i);
+            exit(1);
+        }
     }
 
     while ((ib = read_item(in))) {
@@ -3461,7 +3470,7 @@ static void process_turn_restrictions_dump_coord(struct coord *c, int count) {
     }
 }
 
-static void process_turn_restrictions_finish(GList *tr, FILE *out) {
+void process_turn_restrictions_finish(GList *tr, FILE *out) {
     GList *l = tr;
     while (l) {
         struct turn_restriction *t = l->data;
@@ -3647,7 +3656,7 @@ static gpointer process_turn_restrictions_setup_worker(gpointer data) {
  *
  * @returns array of GLists. One per thread containing the resulting structures.
  */
-static GList **process_turn_restrictions_setup(FILE *in, int thread_count, struct relations **relations) {
+GList **process_turn_restrictions_setup(FILE *in, int thread_count, struct relations **relations) {
     struct process_turn_restrictions_setup_thread *sthread;
 
     struct item_bin *ib;
@@ -3670,6 +3679,10 @@ static GList **process_turn_restrictions_setup(FILE *in, int thread_count, struc
         sthread[i].turn_restrictions = NULL;
         sthread[i].thread = g_thread_new("process_turn_restrictions_setup_worker",
                                          process_turn_restrictions_setup_worker, &(sthread[i]));
+        if (!sthread[i].thread) {
+            fprintf(stderr, "Failed to create turn restrictions worker thread %d\n", i);
+            exit(1);
+        }
     }
 
     while ((ib = read_item(in))) {
@@ -3960,7 +3973,8 @@ static void write_item_way_subsection_index(FILE *out, FILE *out_index, FILE *ou
 }
 
 static void write_item_way_subsection(FILE *out, FILE *out_index, FILE *out_graph, struct item_bin *orig, int first,
-                                      int last, long long *last_id) {
+                                      int last, long long *last_id, void (*item_callback)(struct item_bin *, void *),
+                                      void *callback_ctx) {
     struct item_bin new;
     struct coord *c = (struct coord *)(orig + 1);
     char *attr = (char *)(c + orig->clen / 2);
@@ -3971,6 +3985,16 @@ static void write_item_way_subsection(FILE *out, FILE *out_index, FILE *out_grap
     new.len = new.clen + attr_len + 2;
     if (out_index)
         write_item_way_subsection_index(out, out_index, out_graph, orig, last_id);
+    if (item_callback) {
+        int coord_bytes = new.clen * 4;
+        int attr_bytes = attr_len * 4;
+        struct item_bin *cb_ib = g_malloc(sizeof(struct item_bin) + coord_bytes + attr_bytes + 256);
+        memcpy(cb_ib, &new, sizeof(new));
+        memcpy((struct coord *)(cb_ib + 1), c + first, coord_bytes);
+        memcpy((char *)(cb_ib + 1) + coord_bytes, attr, attr_bytes);
+        item_callback(cb_ib, callback_ctx);
+        g_free(cb_ib);
+    }
     dbg_assert(fwrite(&new, sizeof(new), 1, out) == 1);
     dbg_assert(fwrite(c + first, new.clen * 4, 1, out) == 1);
     dbg_assert(fwrite(attr, attr_len * 4, 1, out) == 1);
@@ -4039,13 +4063,15 @@ void process_way2poi(FILE *in, FILE *out, int type) {
                 geom_line_middle(c, count, &c1);
                 c[0] = c1;
             }
-            write_item_way_subsection(out, NULL, NULL, ib, 0, 0, NULL);
+            write_item_way_subsection(out, NULL, NULL, ib, 0, 0, NULL, NULL, NULL);
         }
     }
 }
 
 int map_resolve_coords_and_split_at_intersections(FILE *in, FILE *out, FILE *out_index, FILE *out_graph,
-                                                  FILE *out_coastline, int final) {
+                                                  FILE *out_coastline, int final,
+                                                  void (*item_callback)(struct item_bin *, void *),
+                                                  void *callback_ctx) {
     struct coord *c;
     int i, ccount, last, remaining;
     osmid ndref;
@@ -4067,7 +4093,8 @@ int map_resolve_coords_and_split_at_intersections(FILE *in, FILE *out, FILE *out
                 if (ni) {
                     c[i] = ni->c;
                     if (ni->ref_way > 1 && i != 0 && i != ccount - 1 && i != last && item_get_default_flags(ib->type)) {
-                        write_item_way_subsection(out, out_index, out_graph, ib, last, i, &last_id);
+                        write_item_way_subsection(out, out_index, out_graph, ib, last, i, &last_id, item_callback,
+                                                  callback_ctx);
                         last = i;
                     }
                 } else if (final) {
@@ -4083,9 +4110,10 @@ int map_resolve_coords_and_split_at_intersections(FILE *in, FILE *out, FILE *out
             }
         }
         if (ccount) {
-            write_item_way_subsection(out, out_index, out_graph, ib, last, ccount - 1, &last_id);
+            write_item_way_subsection(out, out_index, out_graph, ib, last, ccount - 1, &last_id, item_callback,
+                                      callback_ctx);
             if (final && ib->type == type_water_line && out_coastline) {
-                write_item_way_subsection(out_coastline, NULL, NULL, ib, last, ccount - 1, NULL);
+                write_item_way_subsection(out_coastline, NULL, NULL, ib, last, ccount - 1, NULL, NULL, NULL);
             }
         }
     }

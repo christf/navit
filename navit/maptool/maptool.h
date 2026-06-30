@@ -73,6 +73,7 @@ struct tile_info {
     int compression_level;
     int compression_method;
     int tiles_pushed;
+    int dynamic; /* 1 = dynamically grow tile buffers (g_realloc), no pre-allocation */
 };
 
 extern struct tile_head {
@@ -84,13 +85,13 @@ extern struct tile_head {
     int zipnum;
     int process;
     struct tile_head *next;
-    char *comp_data;       /**< compressed data buffer (malloc'd) */
-    int comp_size;         /**< compressed data size */
-    unsigned long crc;     /**< CRC32 of uncompressed data */
-    int zipmthd;           /**< compression method (0=stored, 8=deflate) */
-    int compression_level; /**< zlib/lzma level for worker */
-    int compression_method; /**< compression method (8=zlib, 14=lzma) */
-    // char subtiles[0];
+    char *comp_data;
+    int comp_size;
+    unsigned long crc;
+    int zipmthd;
+    int compression_level;
+    int compression_method;
+    int tile_id;
 } *tile_head_root;
 
 /**
@@ -143,6 +144,7 @@ struct node_item {
 };
 
 struct zip_info;
+struct relations;
 struct country_table;
 
 /**
@@ -179,6 +181,8 @@ char *osm_tag_value(struct item_bin *ib, char *key);
 osmid boundary_relid(struct boundary *b);
 
 GList *process_boundaries(FILE *boundaries, FILE *ways);
+GList *process_boundaries_setup(FILE *boundaries, struct relations *relations);
+GList *process_boundaries_finish(GList *boundaries_list);
 
 GList *boundary_find_matches(GList *bl, struct coord *c);
 
@@ -201,11 +205,6 @@ struct buffer {
 void save_buffer(char *filename, struct buffer *b, long long offset);
 int load_buffer(char *filename, struct buffer *b, long long offset, long long size);
 long long sizeof_buffer(char *filename);
-
-/* ch.c */
-
-void ch_generate_tiles(char *map_suffix, char *suffix, FILE *tilesdir_out, struct zip_info *zip_info);
-void ch_assemble_map(char *map_suffix, char *suffix, struct zip_info *zip_info);
 
 /* coastline.c */
 
@@ -286,8 +285,12 @@ int bbox_contains_bbox(struct rect *out, struct rect *in);
 long long bbox_area(struct rect const *r);
 void phase1_map(GList *maps, FILE *out_ways, FILE *out_nodes);
 void dump(FILE *in);
-int phase4(FILE **in, int in_count, int with_range, char *suffix, FILE *tilesdir_out, struct zip_info *zip_info);
-int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suffix, struct zip_info *zip_info);
+void tile_worker_pool_init(int n_threads, int compression_level, int compression_method);
+void tile_worker_pool_fini(void);
+void *tile_get_compress_queue(void);
+void tile_push_all_tiles(struct tile_info *info);
+void tile_write_index_tiles(struct zip_info *zi);
+void tile_consume_done_queue(struct zip_info *zi, int tile_count);
 void process_binfile(FILE *in, FILE *out);
 void add_aux_tiles(char *name, struct zip_info *info);
 void cat(FILE *in, FILE *out);
@@ -332,7 +335,11 @@ void sort_countries(int keep_tmpfiles);
 void process_associated_streets(FILE *in, struct files_relation_processing *files_relproc);
 void process_house_number_interpolations(FILE *in, struct files_relation_processing *files_relproc);
 void process_multipolygons(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
+GList **process_multipolygons_setup(FILE *in, int thread_count, struct relations **relations);
+void process_multipolygons_finish(GList *tr, FILE *out);
 void process_turn_restrictions(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
+GList **process_turn_restrictions_setup(FILE *in, int thread_count, struct relations **relations);
+void process_turn_restrictions_finish(GList *tr, FILE *out);
 void process_turn_restrictions_old(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
 void clear_node_item_buffer(void);
 void ref_ways(FILE *in);
@@ -342,9 +349,10 @@ unsigned long long item_bin_get_wayid(struct item_bin *ib);
 unsigned long long item_bin_get_relationid(struct item_bin *ib);
 void process_way2poi(FILE *in, FILE *out, int type);
 int map_resolve_coords_and_split_at_intersections(FILE *in, FILE *out, FILE *out_index, FILE *out_graph,
-                                                  FILE *out_coastline, int final);
+                                                  FILE *out_coastline, int final,
+                                                  void (*item_callback)(struct item_bin *, void *), void *callback_ctx);
 void write_countrydir(struct zip_info *zip_info, int max_index_size);
-void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix);
+void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, GList *pre_bl, char *suffix);
 void load_countries(void);
 void remove_countryfiles(void);
 struct country_table *country_from_iso2(char *iso);
@@ -369,6 +377,8 @@ void relations_add_relation_member_entry(struct relations *rel, struct relations
                                          void *member_priv, enum relation_member_type type, osmid id);
 void relations_add_func(struct relations *rel, struct relations_func *func);
 void relations_add_relation_default_entry(struct relations *rel, struct relations_func *func);
+void relations_process_item(struct relations *rel, struct item_bin *ib);
+void relations_process_items_multi(struct relations **rel, int count, struct item_bin *ib);
 void relations_process(struct relations *rel, FILE *nodes, FILE *ways);
 void relations_process_multi(struct relations **rel, int count, FILE *nodes, FILE *ways);
 void relations_destroy(struct relations *rel);
@@ -417,21 +427,17 @@ extern GList *aux_tile_list;
 int tile(struct rect *r, char *suffix, char *ret, int max, int overlap, struct rect *tr);
 void tile_bbox(char *tile, struct rect *r, int overlap);
 int tile_len(char *tile);
-void load_tilesdir(FILE *in);
 void tile_write_item_to_tile(struct tile_info *info, struct item_bin *ib, FILE *reference, char *name);
 void tile_write_item_minmax(struct tile_info *info, struct item_bin *ib, FILE *reference, int min, int max);
 int add_aux_tile(struct zip_info *zip_info, char *name, char *filename, int size);
 int write_aux_tiles(struct zip_info *zip_info);
 int create_tile_hash(void);
-void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out);
-void merge_tiles(struct tile_info *info);
 extern struct attr map_information_attrs[32];
 void index_init(struct zip_info *info, int version);
-void index_submap_add(struct tile_info *info, struct tile_head *th);
 
 /* zip.c */
-char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
-                        char **reuse_buf, size_t *reuse_size, void *lzma_alloc);
+char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method, char **reuse_buf,
+                       size_t *reuse_size, void *lzma_alloc);
 void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *data, int data_size);
 void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, char *compressed_data, int compressed_size,
                          int uncompressed_size, unsigned long crc, int zipmthd);
@@ -441,7 +447,6 @@ struct zip_info *zip_new(void);
 void zip_set_zip64(struct zip_info *info, int on);
 void zip_set_compression_level(struct zip_info *info, int level);
 void zip_set_compression_method(struct zip_info *info, int method);
-int zip_get_compression_method(struct zip_info *info);
 void zip_set_maxnamelen(struct zip_info *info, int max);
 int zip_get_maxnamelen(struct zip_info *info);
 int zip_add_member(struct zip_info *info);
@@ -450,6 +455,7 @@ int zip_open(struct zip_info *info, char *out, char *dir, char *index);
 FILE *zip_get_index(struct zip_info *info);
 int zip_get_zipnum(struct zip_info *info);
 int zip_get_compression_level(struct zip_info *info);
+int zip_get_compression_method(struct zip_info *info);
 void zip_set_zipnum(struct zip_info *info, int num);
 void zip_close(struct zip_info *info);
 void zip_destroy(struct zip_info *info);

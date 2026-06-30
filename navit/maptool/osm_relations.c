@@ -181,6 +181,47 @@ void relations_process(struct relations *rel, FILE *nodes, FILE *ways) {
  * @param in ways file containing items in item_bin format. This file may contain both nodes, ways, and relations in
  * that format.
  */
+void relations_process_item(struct relations *rel, struct item_bin *ib) {
+    GList *l = NULL;
+    osmid *id;
+
+    if (NULL != (id = item_bin_get_attr(ib, attr_osm_nodeid, NULL)))
+        l = g_hash_table_lookup(rel->member_hash[0], id);
+    else if (NULL != (id = item_bin_get_attr(ib, attr_osm_wayid, NULL)))
+        l = g_hash_table_lookup(rel->member_hash[1], id);
+    else if (NULL != (id = item_bin_get_attr(ib, attr_osm_relationid, NULL)))
+        l = g_hash_table_lookup(rel->member_hash[2], id);
+    if (!l)
+        l = rel->default_members;
+    while (l) {
+        struct relations_member *memb = l->data;
+        memb->func->func(memb->func->func_priv, memb->relation_priv, ib, memb->member_priv);
+        l = g_list_next(l);
+    }
+}
+
+void relations_process_items_multi(struct relations **rel, int count, struct item_bin *ib) {
+    int i;
+
+    for (i = 0; i < count; i++) {
+        GList *l = NULL;
+        osmid *id;
+        if (NULL != (id = item_bin_get_attr(ib, attr_osm_nodeid, NULL)))
+            l = g_hash_table_lookup(rel[i]->member_hash[0], id);
+        else if (NULL != (id = item_bin_get_attr(ib, attr_osm_wayid, NULL)))
+            l = g_hash_table_lookup(rel[i]->member_hash[1], id);
+        else if (NULL != (id = item_bin_get_attr(ib, attr_osm_relationid, NULL)))
+            l = g_hash_table_lookup(rel[i]->member_hash[2], id);
+        if (!l)
+            l = rel[i]->default_members;
+        while (l) {
+            struct relations_member *memb = l->data;
+            memb->func->func(memb->func->func_priv, memb->relation_priv, ib, memb->member_priv);
+            l = g_list_next(l);
+        }
+    }
+}
+
 void relations_process_multi(struct relations **rel, int count, FILE *nodes, FILE *ways) {
     char buffer[128];
     struct item_bin *ib = (struct item_bin *)buffer;
