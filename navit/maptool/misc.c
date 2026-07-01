@@ -37,6 +37,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zlib.h>
+#ifdef HAVE_LZMA
+#    include <lzma.h>
+#endif
 #ifndef _MSC_VER
 #    include <getopt.h>
 #    include <unistd.h>
@@ -316,6 +319,10 @@ struct tile_process_thread {
     char *scratch_buf;
     size_t scratch_size;
     int compression_method;
+#ifdef HAVE_LZMA
+    struct lzma_arena arena;
+    lzma_allocator allocator;
+#endif
 };
 
 static gpointer process_tile_worker(gpointer data) {
@@ -327,10 +334,18 @@ static gpointer process_tile_worker(gpointer data) {
         th->crc = crc32(0, NULL, 0);
         th->crc = crc32(th->crc, (unsigned char *)th->zip_data, data_size);
 
+#ifdef HAVE_LZMA
+        me->arena.pos = 0;
         th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level,
                                           me->compression_method,
                                           &th->comp_size, &th->zipmthd,
-                                          &me->scratch_buf, &me->scratch_size);
+                                          &me->scratch_buf, &me->scratch_size, &me->allocator);
+#else
+        th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level,
+                                          me->compression_method,
+                                          &th->comp_size, &th->zipmthd,
+                                          &me->scratch_buf, &me->scratch_size, NULL);
+#endif
         if (!th->comp_data) {
             th->comp_data = th->zip_data;
             th->zipmthd = 0;
@@ -343,7 +358,7 @@ static gpointer process_tile_worker(gpointer data) {
     return NULL;
 }
 
-static void tile_worker_pool_init(int n_threads, int compression_method) {
+static void tile_worker_pool_init(int n_threads, int compression_level, int compression_method) {
     int i;
     if (n_threads <= 0)
         return;
@@ -355,6 +370,21 @@ static void tile_worker_pool_init(int n_threads, int compression_method) {
         worker_threads[i].number = i;
         worker_threads[i].queue = tile_queue;
         worker_threads[i].compression_method = compression_method;
+#ifdef HAVE_LZMA
+        if (compression_level > 0) {
+            uint64_t mem = lzma_easy_encoder_memusage(compression_level);
+            if (mem == UINT64_MAX) {
+                fprintf(stderr, "Invalid LZMA compression level %d\n", compression_level);
+                exit(1);
+            }
+            worker_threads[i].arena.size = mem + 65536;
+            worker_threads[i].arena.buf = g_malloc0(worker_threads[i].arena.size);
+            worker_threads[i].arena.pos = 0;
+            worker_threads[i].allocator.alloc = arena_alloc;
+            worker_threads[i].allocator.free = arena_free;
+            worker_threads[i].allocator.opaque = &worker_threads[i].arena;
+        }
+#endif
         worker_threads[i].thread = g_thread_new("tile_worker", process_tile_worker, &worker_threads[i]);
         if (!worker_threads[i].thread) {
             fprintf(stderr, "Failed to create tile worker thread %d\n", i);
@@ -372,6 +402,9 @@ static void tile_worker_pool_fini(void) {
     for (i = 0; i < worker_count; i++) {
         g_thread_join(worker_threads[i].thread);
         g_free(worker_threads[i].scratch_buf);
+#ifdef HAVE_LZMA
+        g_free(worker_threads[i].arena.buf);
+#endif
     }
     g_async_queue_unref(tile_queue);
     g_async_queue_unref(tile_done_queue);
@@ -451,9 +484,8 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
                     fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
                     exit(1);
                 }
-                write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info),
-                                    th->comp_data, th->comp_size, th->total_size,
-                                    th->crc, th->zipmthd);
+                write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info), th->comp_data, th->comp_size,
+                                    th->total_size, th->crc, th->zipmthd);
                 if (th->comp_data != th->zip_data)
                     g_free(th->comp_data);
                 th->comp_data = NULL;
@@ -505,8 +537,9 @@ int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suf
     if (size)
         fprintf(stderr, "Slice %d is of size " LONGLONG_FMT "\n", slices, size);
     if (thread_count > 1) {
+        int level = zip_get_compression_level(zip_info);
         int compression_method = zip_get_compression_method(zip_info);
-        tile_worker_pool_init(thread_count, compression_method);
+        tile_worker_pool_init(thread_count, level, compression_method);
     }
 
     th = tile_head_root;

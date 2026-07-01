@@ -28,6 +28,15 @@
 #include "item.h"
 #include "item_type_def.h"
 #include "types.h"
+#ifdef HAVE_LZMA
+struct lzma_arena {
+    char *buf;
+    size_t size;
+    size_t pos;
+};
+void *arena_alloc(void *opaque, size_t nmemb, size_t size);
+void arena_free(void *opaque, void *ptr);
+#endif
 #include <glib.h>
 
 #define sq(x) ((double)(x) * (x))
@@ -420,11 +429,10 @@ void index_submap_add(struct tile_info *info, struct tile_head *th);
 
 /* zip.c */
 char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
-                        char **reuse_buf, size_t *reuse_size);
+                        char **reuse_buf, size_t *reuse_size, void *lzma_alloc);
 void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *data, int data_size);
-void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen,
-                          char *compressed_data, int compressed_size,
-                          int uncompressed_size, unsigned long crc, int zipmthd);
+void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, char *compressed_data, int compressed_size,
+                         int uncompressed_size, unsigned long crc, int zipmthd);
 int zip_write_index(struct zip_info *info);
 int zip_write_directory(struct zip_info *info);
 struct zip_info *zip_new(void);

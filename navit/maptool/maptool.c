@@ -835,7 +835,7 @@ static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **
             map_information_attrs[1].type = attr_url;
             map_information_attrs[1].u.str = p->url;
         }
-        index_init(zip_info, 1);
+        index_init(zip_info, 15);
         g_free(zipdir);
         g_free(zipindex);
     }
