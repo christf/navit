@@ -3379,15 +3379,13 @@ void process_multipolygons(FILE *in, FILE *coords, FILE *ways, FILE *ways_index,
     processed_relations = 0;
     processed_ways = 0;
     sig_alrm(0);
+    if (coords)
+        fseek(coords, 0, SEEK_SET);
+    if (ways)
+        fseek(ways, 0, SEEK_SET);
+    fprintf(stderr, "process_multipolygons:process (%d threads)\n", thread_count);
+    relations_process_multi(relations, thread_count, coords, ways);
     for (i = 0; i < thread_count; i++) {
-        if (coords)
-            fseek(coords, 0, SEEK_SET);
-        if (ways)
-            fseek(ways, 0, SEEK_SET);
-        fprintf(stderr, "process_multipolygons:process (thread %d)\n", i);
-        /* we could use relations_process_multi here as well, but this would
-         * use way more memory. */
-        relations_process(relations[i], coords, ways);
         fprintf(stderr, "process_multipolygons:finish (thread %d)\n", i);
         process_multipolygons_finish(multipolygons[i], out);
         relations_destroy(relations[i]);

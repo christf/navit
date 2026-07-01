@@ -48,7 +48,7 @@
 long long slice_size = SLIZE_SIZE_DEFAULT_GB * 1024ll * 1024 * 1024;
 int attr_debug_level = 1;
 int ignore_unknown = 0;
-int thread_count = 8; /* good default even on single cores */
+int thread_count = 0; /* 0 = auto-detect at startup */
 GHashTable *dedupe_ways_hash;
 int phase;
 int slices;
@@ -951,6 +951,9 @@ int main(int argc, char **argv) {
     p.process_relations = 1;
     p.timestamp = current_to_iso8601();
     p.max_index_size = 65536;
+
+    if (thread_count == 0)
+        thread_count = g_get_num_processors();
 
 #ifdef HAVE_SBRK
     start_brk = (long)sbrk(0);
