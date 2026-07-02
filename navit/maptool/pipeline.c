@@ -11,6 +11,7 @@ struct pipeline_stage {
 void pipeline_init(struct pipeline *p) {
     p->head = NULL;
     p->tail = NULL;
+    p->flush_stage = NULL;
 }
 
 void pipeline_add(struct pipeline *p, pipeline_consumer_fn process, pipeline_flush_fn flush, void *userdata) {
@@ -32,12 +33,22 @@ void pipeline_emit(struct pipeline *p, struct pipeline_item *item) {
         s->process(item, s->userdata);
 }
 
+void pipeline_emit_downstream(struct pipeline *p, struct pipeline_item *item) {
+    struct pipeline_stage *s = p->flush_stage;
+    if (!s)
+        return;
+    for (s = s->next; s; s = s->next)
+        s->process(item, s->userdata);
+}
+
 void pipeline_flush(struct pipeline *p) {
     struct pipeline_stage *s;
     for (s = p->head; s; s = s->next) {
+        p->flush_stage = s;
         if (s->flush)
             s->flush(s->userdata);
     }
+    p->flush_stage = NULL;
 }
 
 void pipeline_destroy(struct pipeline *p) {
@@ -49,4 +60,5 @@ void pipeline_destroy(struct pipeline *p) {
     }
     p->head = NULL;
     p->tail = NULL;
+    p->flush_stage = NULL;
 }
