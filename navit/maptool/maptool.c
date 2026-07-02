@@ -24,8 +24,8 @@
 #include "linguistics.h"
 #include "main.h"
 #include "map.h"
-#include "plugin.h"
 #include "pipeline.h"
+#include "plugin.h"
 #include "stream.h"
 #include "util.h"
 #include <assert.h>
@@ -332,40 +332,40 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
     int pos, c, i;
 
     static struct option long_options[] = {
-        {"32bit",             0, 0, '3'},
-        {"64bit",             0, 0, '6'},
-        {"attr-debug-level",  1, 0, 'a'},
-        {"binfile",           0, 0, 'b'},
-        {"compression-level", 1, 0, 'z'},
+        {"32bit",              0, 0, '3'},
+        {"64bit",              0, 0, '6'},
+        {"attr-debug-level",   1, 0, 'a'},
+        {"binfile",            0, 0, 'b'},
+        {"compression-level",  1, 0, 'z'},
         {"compression-method", 1, 0, 'C'},
 
 #ifdef HAVE_POSTGRESQL
-        {"db",                1, 0, 'd'},
+        {"db",                 1, 0, 'd'},
 #endif
-        {"dedupe-ways",       0, 0, 'w'},
-        {"dump",              0, 0, 'D'},
-        {"dump-coordinates",  0, 0, 'c'},
-        {"end",               1, 0, 'e'},
-        {"experimental",      0, 0, 'E'},
-        {"help",              0, 0, 'h'},
-        {"keep-tmpfiles",     0, 0, 'k'},
-        {"nodes-only",        0, 0, 'N'},
-        {"map",               1, 0, 'm'},
-        {"o5m",               0, 0, 'M'},
-        {"plugin",            1, 0, 'p'},
-        {"protobuf",          0, 0, 'P'},
-        {"start",             1, 0, 's'},
-        {"timestamp",         1, 0, 't'},
-        {"threads",           1, 0, 'T'},
-        {"input-file",        1, 0, 'i'},
-        {"rule-file",         1, 0, 'r'},
-        {"ignore-unknown",    0, 0, 'n'},
-        {"url",               1, 0, 'u'},
-        {"ways-only",         0, 0, 'W'},
-        {"slice-size",        1, 0, 'S'},
-        {"unknown-country",   0, 0, 'U'},
-        {"index-size",        0, 0, 'x'},
-        {0,                   0, 0, 0  }
+        {"dedupe-ways",        0, 0, 'w'},
+        {"dump",               0, 0, 'D'},
+        {"dump-coordinates",   0, 0, 'c'},
+        {"end",                1, 0, 'e'},
+        {"experimental",       0, 0, 'E'},
+        {"help",               0, 0, 'h'},
+        {"keep-tmpfiles",      0, 0, 'k'},
+        {"nodes-only",         0, 0, 'N'},
+        {"map",                1, 0, 'm'},
+        {"o5m",                0, 0, 'M'},
+        {"plugin",             1, 0, 'p'},
+        {"protobuf",           0, 0, 'P'},
+        {"start",              1, 0, 's'},
+        {"timestamp",          1, 0, 't'},
+        {"threads",            1, 0, 'T'},
+        {"input-file",         1, 0, 'i'},
+        {"rule-file",          1, 0, 'r'},
+        {"ignore-unknown",     0, 0, 'n'},
+        {"url",                1, 0, 'u'},
+        {"ways-only",          0, 0, 'W'},
+        {"slice-size",         1, 0, 'S'},
+        {"unknown-country",    0, 0, 'U'},
+        {"index-size",         0, 0, 'x'},
+        {0,                    0, 0, 0  }
     };
     c = getopt_long(argc, argv,
                     "36B:DEMNO:PS:Wa:bc"
@@ -681,7 +681,7 @@ static void osm_resolve_coords_and_split_at_intersections(struct maptool_params 
         if (i)
             load_buffer(coord_tmp_path, &node_buffer, i * slice_size, slice_size);
         map_resolve_coords_and_split_at_intersections(ways, ways_split, ways_split_index, graph, coastline, final,
-                                                       (ss || g_ep_ctx) ? stream_item_callback : NULL, NULL);
+                                                      (ss || g_ep_ctx) ? stream_item_callback : NULL, NULL);
         fclose(ways_split);
         if (ways_split_index)
             fclose(ways_split_index);
@@ -794,31 +794,33 @@ static void stream_feed_stage(struct pipeline_item *item, void *userdata) {
 }
 
 struct ep_stage_ctx {
-    struct early_phase_ctx *ep;
     char *suffix;
 };
 
+static void ep_stage_ctx_destroy(void *userdata) {
+    g_free(userdata);
+}
+
 static void turn_stage_process(struct pipeline_item *item, void *userdata) {
-    struct ep_stage_ctx *ctx = userdata;
-    if (ctx->ep && ctx->ep->turn_rel)
-        relations_process_items_multi(ctx->ep->turn_rel, ctx->ep->turn_n, item->ib);
+    (void)userdata;
+    if (g_ep_ctx && g_ep_ctx->turn_rel)
+        relations_process_items_multi(g_ep_ctx->turn_rel, g_ep_ctx->turn_n, item->ib);
 }
 
 static void turn_stage_flush(void *userdata) {
     struct ep_stage_ctx *ctx = userdata;
-    struct early_phase_ctx *ep = ctx->ep;
-    if (!ep || !ep->turn_rel)
+    if (!g_ep_ctx || !g_ep_ctx->turn_rel)
         return;
     FILE *f = tempfile(ctx->suffix, "relations", 1);
     int i;
-    for (i = 0; i < ep->turn_n; i++) {
-        process_turn_restrictions_finish(ep->turn_results[i], f);
-        relations_destroy(ep->turn_rel[i]);
+    for (i = 0; i < g_ep_ctx->turn_n; i++) {
+        process_turn_restrictions_finish(g_ep_ctx->turn_results[i], f);
+        relations_destroy(g_ep_ctx->turn_rel[i]);
     }
     fclose(f);
-    g_free(ep->turn_results);
-    g_free(ep->turn_rel);
-    ep->turn_rel = NULL;
+    g_free(g_ep_ctx->turn_results);
+    g_free(g_ep_ctx->turn_rel);
+    g_ep_ctx->turn_rel = NULL;
     f = tempfile(ctx->suffix, "relations", 0);
     if (f) {
         struct item_bin *ib;
@@ -831,26 +833,25 @@ static void turn_stage_flush(void *userdata) {
 }
 
 static void mp_stage_process(struct pipeline_item *item, void *userdata) {
-    struct ep_stage_ctx *ctx = userdata;
-    if (ctx->ep && ctx->ep->mp_rel)
-        relations_process_items_multi(ctx->ep->mp_rel, ctx->ep->mp_n, item->ib);
+    (void)userdata;
+    if (g_ep_ctx && g_ep_ctx->mp_rel)
+        relations_process_items_multi(g_ep_ctx->mp_rel, g_ep_ctx->mp_n, item->ib);
 }
 
 static void mp_stage_flush(void *userdata) {
     struct ep_stage_ctx *ctx = userdata;
-    struct early_phase_ctx *ep = ctx->ep;
-    if (!ep || !ep->mp_rel)
+    if (!g_ep_ctx || !g_ep_ctx->mp_rel)
         return;
     FILE *f = tempfile(ctx->suffix, "multipolygons_out", 1);
     int i;
-    for (i = 0; i < ep->mp_n; i++) {
-        process_multipolygons_finish(ep->mp_results[i], f);
-        relations_destroy(ep->mp_rel[i]);
+    for (i = 0; i < g_ep_ctx->mp_n; i++) {
+        process_multipolygons_finish(g_ep_ctx->mp_results[i], f);
+        relations_destroy(g_ep_ctx->mp_rel[i]);
     }
     fclose(f);
-    g_free(ep->mp_results);
-    g_free(ep->mp_rel);
-    ep->mp_rel = NULL;
+    g_free(g_ep_ctx->mp_results);
+    g_free(g_ep_ctx->mp_rel);
+    g_ep_ctx->mp_rel = NULL;
     f = tempfile(ctx->suffix, "multipolygons_out", 0);
     if (f) {
         struct item_bin *ib;
@@ -863,9 +864,9 @@ static void mp_stage_flush(void *userdata) {
 }
 
 static void boundary_stage(struct pipeline_item *item, void *userdata) {
-    struct ep_stage_ctx *ctx = userdata;
-    if (ctx->ep && ctx->ep->boundary_rel)
-        relations_process_item(ctx->ep->boundary_rel, item->ib);
+    (void)userdata;
+    if (g_ep_ctx && g_ep_ctx->boundary_rel)
+        relations_process_item(g_ep_ctx->boundary_rel, item->ib);
 }
 
 static void maptool_streaming_assemble(struct maptool_params *p, char *suffix, char **filenames, int filename_count,
@@ -918,7 +919,7 @@ static void maptool_streaming_assemble(struct maptool_params *p, char *suffix, c
      * for OSM XML input. For binfile input it must be read here. */
     if (!g_pipe.head) {
         pipeline_init(&g_pipe);
-        pipeline_add(&g_pipe, stream_feed_stage, NULL, NULL);
+        pipeline_add(&g_pipe, stream_feed_stage, NULL, NULL, NULL);
     }
 
     for (f = 0; f < filename_count; f++) {
@@ -1177,21 +1178,18 @@ int main(int argc, char **argv) {
                 if (g_ss || g_ep_ctx) {
                     pipeline_init(&g_pipe);
                     if (g_ss)
-                        pipeline_add(&g_pipe, stream_feed_stage, NULL, NULL);
+                        pipeline_add(&g_pipe, stream_feed_stage, NULL, NULL, NULL);
                     if (g_ep_ctx) {
                         g_pipeline_has_ep = 1;
                         struct ep_stage_ctx *turn_ctx = g_malloc(sizeof(*turn_ctx));
-                        turn_ctx->ep = g_ep_ctx;
                         turn_ctx->suffix = suffix;
-                        pipeline_add(&g_pipe, turn_stage_process, turn_stage_flush, turn_ctx);
+                        pipeline_add(&g_pipe, turn_stage_process, turn_stage_flush, ep_stage_ctx_destroy, turn_ctx);
                         struct ep_stage_ctx *mp_ctx = g_malloc(sizeof(*mp_ctx));
-                        mp_ctx->ep = g_ep_ctx;
                         mp_ctx->suffix = suffix;
-                        pipeline_add(&g_pipe, mp_stage_process, mp_stage_flush, mp_ctx);
+                        pipeline_add(&g_pipe, mp_stage_process, mp_stage_flush, ep_stage_ctx_destroy, mp_ctx);
                         struct ep_stage_ctx *boundary_ctx = g_malloc(sizeof(*boundary_ctx));
-                        boundary_ctx->ep = g_ep_ctx;
                         boundary_ctx->suffix = suffix;
-                        pipeline_add(&g_pipe, boundary_stage, NULL, boundary_ctx);
+                        pipeline_add(&g_pipe, boundary_stage, NULL, ep_stage_ctx_destroy, boundary_ctx);
                     }
                 }
                 osm_resolve_coords_and_split_at_intersections(&p, suffix, g_ss);
@@ -1237,10 +1235,7 @@ int main(int argc, char **argv) {
         sort_countries(p.keep_tmpfiles);
         p.countries_loaded = 1;
     }
-    /* flush pipeline stages that collected data during the split phase
-     * (turn restrictions, multipolygons). This processes the collected
-     * relations and emits result items downstream to the stream, so the
-     * traditional phase 8/9 and their temp file re-read are skipped. */
+
     if (g_pipe.head)
         pipeline_flush(&g_pipe);
     if (start_phase(&p, "generating turn restrictions")) {
@@ -1256,7 +1251,7 @@ int main(int argc, char **argv) {
                 g_free(g_ep_ctx->turn_results);
                 g_free(g_ep_ctx->turn_rel);
                 g_ep_ctx->turn_rel = NULL;
-            } else {
+            } else if (!g_pipeline_has_ep) {
                 osm_process_turn_restrictions(&p, suffix);
             }
         }
@@ -1274,7 +1269,7 @@ int main(int argc, char **argv) {
                 g_free(g_ep_ctx->mp_results);
                 g_free(g_ep_ctx->mp_rel);
                 g_ep_ctx->mp_rel = NULL;
-            } else {
+            } else if (!g_pipeline_has_ep) {
                 osm_process_multipolygons(&p, suffix);
             }
         }
@@ -1286,8 +1281,6 @@ int main(int argc, char **argv) {
     if (!p.keep_tmpfiles)
         tempfile_unlink(suffix, "ways_split_index");
 
-    /* Relation enrichment (associated streets, house number interpolations) now happens
-     * during the streaming pass via pre-built indices in stream.c */
     if (p.dump == 1 && start_phase(&p, "dumping")) {
         maptool_dump(&p, suffix);
         exit(0);
@@ -1311,8 +1304,8 @@ int main(int argc, char **argv) {
         suffix = suffixes[i];
         if (start_phase(&p, "assembling map (streaming)")) {
             maptool_load_countries(&p);
-            maptool_streaming_assemble(&p, suffix, filenames, filename_count, i == suffix_start,
-                                       i == suffix_count - 1, suffixes[0]);
+            maptool_streaming_assemble(&p, suffix, filenames, filename_count, i == suffix_start, i == suffix_count - 1,
+                                       suffixes[0]);
         }
         phase--;
     }
@@ -1320,6 +1313,7 @@ int main(int argc, char **argv) {
     start_phase(&p, "done");
     if (p.timestamp != NULL)
         g_free(p.timestamp);
+    tile_cleanup();
     tempfile_cleanup();
     return 0;
 }

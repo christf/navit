@@ -73,8 +73,8 @@ void arena_free(void *opaque, void *ptr) {
 static int compress_lzma_int(uint8_t *dest, size_t *destLen, const uint8_t *source, size_t sourceLen, int level,
                              const lzma_allocator *allocator) {
     size_t out_pos = 0;
-    lzma_ret ret = lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, allocator, source, sourceLen, dest, &out_pos,
-                                           *destLen);
+    lzma_ret ret =
+        lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, allocator, source, sourceLen, dest, &out_pos, *destLen);
     if (ret == LZMA_OK) {
         *destLen = out_pos;
         return 0;
@@ -116,7 +116,7 @@ static int compress2_int(Byte *dest, uLongf *destLen, const Bytef *source, uLong
 #endif
 
 char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
-                        char **reuse_buf, size_t *reuse_size, void *lzma_alloc) {
+                       char **reuse_buf, size_t *reuse_size, void *lzma_alloc) {
     size_t compbuflen = input_size + input_size / 3 + 200;
 
     if (*reuse_size < compbuflen) {
@@ -221,8 +221,8 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
 #if defined(HAVE_ZLIB)
         if (!lfh.zipmthd) {
             uLongf destlen = compbuflen;
-            int error = compress2_int((Byte *)compbuffer, &destlen, (Bytef *)data, data_size,
-                                      zip_info->compression_level);
+            int error =
+                compress2_int((Byte *)compbuffer, &destlen, (Bytef *)data, data_size, zip_info->compression_level);
             if (error == Z_OK) {
                 if (destlen < data_size) {
                     data = compbuffer;

@@ -291,6 +291,7 @@ void *tile_get_compress_queue(void);
 void tile_push_all_tiles(struct tile_info *info);
 void tile_write_index_tiles(struct zip_info *zi);
 void tile_consume_done_queue(struct zip_info *zi, int tile_count);
+void tile_cleanup(void);
 void process_binfile(FILE *in, FILE *out);
 void add_aux_tiles(char *name, struct zip_info *info);
 void cat(FILE *in, FILE *out);
@@ -436,8 +437,8 @@ extern struct attr map_information_attrs[32];
 void index_init(struct zip_info *info, int version);
 
 /* zip.c */
-char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method, char **reuse_buf,
-                       size_t *reuse_size, void *lzma_alloc);
+char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
+                       char **reuse_buf, size_t *reuse_size, void *lzma_alloc);
 void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *data, int data_size);
 void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, char *compressed_data, int compressed_size,
                          int uncompressed_size, unsigned long crc, int zipmthd);

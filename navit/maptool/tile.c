@@ -204,8 +204,6 @@ static void tile_extend(char *tile, struct item_bin *ib, GList **tiles_list) {
     g_hash_table_insert(tile_hash, string_hash_lookup(th->name), th);
 }
 
-
-
 static void write_item_dynamic(char *tile, struct item_bin *ib, struct tile_info *info) {
     struct tile_head *th;
     int size;
@@ -401,6 +399,27 @@ static int add_tile_hash(struct tile_head *th) {
     return maxnamelen;
 }
 
+void tile_cleanup(void) {
+    struct tile_head *th = tile_head_root;
+    while (th) {
+        struct tile_head *next = th->next;
+        g_free(th->zip_data);
+        if (th->comp_data && th->comp_data != th->zip_data)
+            g_free(th->comp_data);
+        g_free(th);
+        th = next;
+    }
+    tile_head_root = NULL;
+    if (tile_hash) {
+        g_hash_table_destroy(tile_hash);
+        tile_hash = NULL;
+    }
+    if (tile_hash2) {
+        g_hash_table_destroy(tile_hash2);
+        tile_hash2 = NULL;
+    }
+}
+
 int create_tile_hash(void) {
     struct tile_head *th;
     int len, maxnamelen = 0;
@@ -433,5 +452,3 @@ void index_init(struct zip_info *info, int version) {
     }
     item_bin_write(item_bin, zip_get_index(info));
 }
-
-

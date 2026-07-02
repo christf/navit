@@ -262,15 +262,12 @@ static gpointer process_tile_worker(gpointer data) {
 
 #ifdef HAVE_LZMA
         me->arena.pos = 0;
-        th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level,
-                                          me->compression_method,
-                                          &th->comp_size, &th->zipmthd,
-                                          &me->scratch_buf, &me->scratch_size, &me->allocator);
+        th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level, me->compression_method,
+                                         &th->comp_size, &th->zipmthd, &me->scratch_buf, &me->scratch_size,
+                                         &me->allocator);
 #else
-        th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level,
-                                          me->compression_method,
-                                          &th->comp_size, &th->zipmthd,
-                                          &me->scratch_buf, &me->scratch_size, NULL);
+        th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level, me->compression_method,
+                                         &th->comp_size, &th->zipmthd, &me->scratch_buf, &me->scratch_size, NULL);
 #endif
         if (!th->comp_data) {
             th->comp_data = th->zip_data;
@@ -345,7 +342,6 @@ void *tile_get_compress_queue(void) {
     return tile_queue;
 }
 
-/* Push all named tiles with data to the compression queue */
 void tile_push_all_tiles(struct tile_info *info) {
     struct tile_head *th;
     for (th = tile_head_root; th; th = th->next) {
@@ -359,7 +355,6 @@ void tile_push_all_tiles(struct tile_info *info) {
     }
 }
 
-/* Write empty-name (index) tiles directly to the zip index */
 void tile_write_index_tiles(struct zip_info *zi) {
     struct tile_head *th;
     for (th = tile_head_root; th; th = th->next) {
@@ -369,8 +364,6 @@ void tile_write_index_tiles(struct zip_info *zi) {
     }
 }
 
-/* Consume the tile done queue and write compressed tiles to the zip.
- * Call only after tile_push_all_tiles() or equivalent. */
 void tile_consume_done_queue(struct zip_info *zi, int tile_count) {
     int maxnamelen = zip_get_maxnamelen(zi);
     while (tile_count > 0) {

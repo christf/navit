@@ -4,6 +4,7 @@
 struct pipeline_stage {
     pipeline_consumer_fn process;
     pipeline_flush_fn flush;
+    pipeline_destroy_fn destroy;
     void *userdata;
     struct pipeline_stage *next;
 };
@@ -14,10 +15,12 @@ void pipeline_init(struct pipeline *p) {
     p->flush_stage = NULL;
 }
 
-void pipeline_add(struct pipeline *p, pipeline_consumer_fn process, pipeline_flush_fn flush, void *userdata) {
+void pipeline_add(struct pipeline *p, pipeline_consumer_fn process, pipeline_flush_fn flush,
+                  pipeline_destroy_fn destroy, void *userdata) {
     struct pipeline_stage *s = g_malloc(sizeof(*s));
     s->process = process;
     s->flush = flush;
+    s->destroy = destroy;
     s->userdata = userdata;
     s->next = NULL;
     if (p->tail)
@@ -55,6 +58,8 @@ void pipeline_destroy(struct pipeline *p) {
     struct pipeline_stage *s = p->head;
     while (s) {
         struct pipeline_stage *next = s->next;
+        if (s->destroy)
+            s->destroy(s->userdata);
         g_free(s);
         s = next;
     }

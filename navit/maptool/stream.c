@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/* --- Relation member parsing (mirrors osm.c's static helpers) --- */
 struct rel_member {
     enum relation_member_type type;
     osmid id;
@@ -21,8 +20,7 @@ static int parse_member_str(char *raw, struct rel_member *m) {
     return 1;
 }
 
-static int find_member_by_role(struct item_bin *ib, const char *role,
-                                struct rel_member *m, int *min_count) {
+static int find_member_by_role(struct item_bin *ib, const char *role, struct rel_member *m, int *min_count) {
     char *str = NULL;
     int count = 0;
     while ((str = item_bin_get_attr(ib, attr_osm_member, str))) {
@@ -40,7 +38,6 @@ static int find_member_by_role(struct item_bin *ib, const char *role,
     return 0;
 }
 
-/* --- Associated street index --- */
 struct assoc_street_index {
     GHashTable *way_to_name; /* (gpointer)(osmid) → g_strdup'd name or "" */
 };
@@ -68,8 +65,7 @@ static struct assoc_street_index *assoc_street_index_new(FILE *in) {
                     continue;
                 prev = g_hash_table_lookup(idx->way_to_name, (gpointer)(long)m.id);
                 if (!prev || prev[0] == '\0')
-                    g_hash_table_insert(idx->way_to_name, (gpointer)(long)m.id,
-                                        g_strdup(name && name[0] ? name : ""));
+                    g_hash_table_insert(idx->way_to_name, (gpointer)(long)m.id, g_strdup(name && name[0] ? name : ""));
                 roles_done = 1;
             }
         }
@@ -84,8 +80,7 @@ static struct assoc_street_index *assoc_street_index_new(FILE *in) {
                     continue;
                 prev = g_hash_table_lookup(idx->way_to_name, (gpointer)(long)m.id);
                 if (!prev || prev[0] == '\0')
-                    g_hash_table_insert(idx->way_to_name, (gpointer)(long)m.id,
-                                        g_strdup(name && name[0] ? name : ""));
+                    g_hash_table_insert(idx->way_to_name, (gpointer)(long)m.id, g_strdup(name && name[0] ? name : ""));
             }
         }
     }
@@ -105,7 +100,6 @@ static char *assoc_street_lookup(struct assoc_street_index *idx, osmid wayid) {
     return g_hash_table_lookup(idx->way_to_name, (gpointer)(long)wayid);
 }
 
-/* --- House-number interpolation index --- */
 struct hn_entry {
     osmid first_node;
     osmid last_node;
@@ -155,7 +149,6 @@ static struct hn_entry *hn_entry_lookup(struct hn_index *idx, osmid wayid) {
     return g_hash_table_lookup(idx->way_to_entry, (gpointer)(long)wayid);
 }
 
-/* --- Stream state --- */
 struct stream_state {
     struct assoc_street_index *assoc_idx;
     struct hn_index *hn_idx;
@@ -165,8 +158,7 @@ struct stream_state {
     char *suffix;
 };
 
-struct stream_state *stream_new(struct zip_info *zip_info, char *suffix,
-                                struct tile_info *tile_info) {
+struct stream_state *stream_new(struct zip_info *zip_info, char *suffix, struct tile_info *tile_info) {
     struct stream_state *ss;
     FILE *f;
 
@@ -198,22 +190,18 @@ void stream_feed(struct stream_state *ss, struct item_bin *ib) {
 
     wayid = 0;
 
-    /* Associated street enrichment */
     if (ss->assoc_idx) {
         enum item_type t = ib->type;
-        int is_interp = (t >= type_house_number_interpolation_even
-                         && t <= type_house_number_interpolation_alphabetic);
+        int is_interp = (t >= type_house_number_interpolation_even && t <= type_house_number_interpolation_alphabetic);
         if (is_interp) {
             wayid = item_bin_get_wayid(ib);
             street_name = assoc_street_lookup(ss->assoc_idx, wayid);
-            if (street_name && street_name[0]
-                && !item_bin_get_attr(ib, attr_street_name, NULL)) {
+            if (street_name && street_name[0] && !item_bin_get_attr(ib, attr_street_name, NULL)) {
                 item_bin_add_attr_string(ib, attr_street_name, street_name);
             }
         }
     }
 
-    /* House-number interpolation enrichment */
     if (ss->hn_idx) {
         if (!wayid)
             wayid = item_bin_get_wayid(ib);
@@ -226,9 +214,7 @@ void stream_feed(struct stream_state *ss, struct item_bin *ib) {
         }
     }
 
-    /* Route to tile */
-    tile_write_item_minmax(&ss->tile_info, ib, NULL, 0,
-                           item_order_by_type(ib->type));
+    tile_write_item_minmax(&ss->tile_info, ib, NULL, 0, item_order_by_type(ib->type));
 }
 
 void stream_flush(struct stream_state *ss) {
@@ -280,5 +266,6 @@ void stream_flush(struct stream_state *ss) {
 void stream_destroy(struct stream_state *ss) {
     assoc_street_index_destroy(ss->assoc_idx);
     hn_index_destroy(ss->hn_idx);
+    g_list_free(ss->tiles_list);
     g_free(ss);
 }
