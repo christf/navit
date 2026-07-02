@@ -484,13 +484,19 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
                     fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
                     exit(1);
                 }
+                tile_count--;
+            }
+            for (th = tile_head_root; th; th = th->next) {
+                if (!th->process || !th->name[0])
+                    continue;
+                th->zipnum = zip_get_zipnum(zip_info);
                 write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info), th->comp_data, th->comp_size,
                                     th->total_size, th->crc, th->zipmthd);
+                zip_add_member(zip_info);
                 if (th->comp_data != th->zip_data)
                     g_free(th->comp_data);
                 th->comp_data = NULL;
                 zipfiles++;
-                tile_count--;
             }
         } else {
             for (th = tile_head_root; th; th = th->next) {
@@ -502,7 +508,9 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
                         exit(1);
                     }
                     th->total_size_used = th->total_size;
+                    th->zipnum = zip_get_zipnum(zip_info);
                     write_zipmember(zip_info, th->name, zip_get_maxnamelen(zip_info), th->zip_data, th->total_size);
+                    zip_add_member(zip_info);
                     zipfiles++;
                 } else {
                     dbg_assert(fwrite(th->zip_data, th->total_size, 1, zip_get_index(zip_info)) == 1);
@@ -513,10 +521,17 @@ static int process_slice(FILE **in, FILE **reference, int in_count, int with_ran
     return zipfiles;
 }
 
+static void write_world_submap(struct zip_info *zip_info) {
+    struct item_bin *item_bin = init_item(type_submap);
+    item_bin_add_coord_rect(item_bin, &world_bbox);
+    item_bin_add_attr_range(item_bin, attr_order, 0, 255);
+    item_bin_add_attr_int(item_bin, attr_zipfile_ref, zip_get_zipnum(zip_info) - 1);
+    item_bin_write(item_bin, zip_get_index(zip_info));
+}
+
 int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suffix, struct zip_info *zip_info) {
     long long size;
     int slices;
-    int zipnum, written_tiles;
     struct tile_head *th, *th2;
     char *slice_data_reuse = NULL;
     create_tile_hash();
@@ -557,12 +572,12 @@ int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suf
             th->process = 1;
             th = th->next;
         }
-        /* process_slice() modifies zip_info, but need to retain old info */
-        zipnum = zip_get_zipnum(zip_info);
-        written_tiles = process_slice(in, references, in_count, with_range, size, suffix, zip_info, &slice_data_reuse);
-        zip_set_zipnum(zip_info, zipnum + written_tiles);
+        process_slice(in, references, in_count, with_range, size, suffix, zip_info, &slice_data_reuse);
         slices++;
     }
+
+    if (suffix[0])
+        write_world_submap(zip_info);
 
     g_free(slice_data_reuse);
 
