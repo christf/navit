@@ -472,7 +472,7 @@ static void vehicle_draw_do(struct vehicle *this_) {
     }
 }
 
-static void nmea_chksum(char *nmea) {
+void nmea_chksum(char *nmea) {
     int i;
     if (nmea && strlen(nmea) > 3) {
         unsigned char csum = 0;
@@ -482,27 +482,23 @@ static void nmea_chksum(char *nmea) {
     }
 }
 
-static char *vehicle_generate_nmea(struct vehicle *this_) {
+static char *vehicle_synthesize_nmea(struct vehicle *this_) {
     struct attr attr;
-    struct coord_geo *geo;
     char ns = 'N', ew = 'E', *time_str, *time_str_allocated, *gga, *rmc, *result;
     int hr, min, sec, year, mon, day;
     double lat, lng, speed = 0.0, direction = 0.0, height = 0.0;
 
     if (!this_->meth.position_attr_get)
         return NULL;
-    if (this_->meth.position_attr_get(this_->priv, attr_position_nmea, &attr))
-        return g_strdup(attr.u.str);
     if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr))
         return NULL;
-    geo = attr.u.coord_geo;
 
-    lat = geo->lat;
+    lat = attr.u.coord_geo->lat;
     if (lat < 0) {
         lat = -lat;
         ns = 'S';
     }
-    lng = geo->lng;
+    lng = attr.u.coord_geo->lng;
     if (lng < 0) {
         lng = -lng;
         ew = 'W';
@@ -522,14 +518,15 @@ static char *vehicle_generate_nmea(struct vehicle *this_) {
     if (this_->meth.position_attr_get(this_->priv, attr_position_height, &attr))
         height = *attr.u.numd;
 
-    gga = g_strdup_printf(
-        "$GPGGA,%02d%02d%02d,%02.0f%07.4f,%c,%03.0f%07.4f,%c,1,08,2.5,%.1f,M,,,,0000*  \n", hr, min, sec,
-        floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng), (lng - floor(lng)) * 60, ew, height);
+    gga = g_strdup_printf(NMEA_GPGGA_FMT, hr, min, sec,
+                          floor(lat), (lat - floor(lat)) * 60.0, ns,
+                          floor(lng), (lng - floor(lng)) * 60, ew, height);
     nmea_chksum(gga);
 
-    rmc = g_strdup_printf("$GPRMC,%02d%02d%02d,A,%02.0f%07.4f,%c,%03.0f%07.4f,%c,%3.1f,%3.1f,%02d%02d%02d,,*  \n",
-                          hr, min, sec, floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng),
-                          (lng - floor(lng)) * 60, ew, speed / 1.852, direction, day, mon, year % 100);
+    rmc = g_strdup_printf(NMEA_GPRMC_FMT, hr, min, sec,
+                          floor(lat), (lat - floor(lat)) * 60.0, ns,
+                          floor(lng), (lng - floor(lng)) * 60, ew,
+                          speed / 1.852, direction, day, mon, year % 100);
     nmea_chksum(rmc);
 
     result = g_strdup_printf("%s%s", gga, rmc);
@@ -546,7 +543,17 @@ static char *vehicle_generate_nmea(struct vehicle *this_) {
  * @param log The log to write to
  */
 static void vehicle_log_nmea(struct vehicle *this_, struct log *log) {
-    char *nmea = vehicle_generate_nmea(this_);
+    struct attr attr;
+    char *nmea;
+
+    if (!this_->meth.position_attr_get)
+        return;
+    if (this_->meth.position_attr_get(this_->priv, attr_position_nmea, &attr)) {
+        log_write(log, attr.u.str, strlen(attr.u.str), 0);
+        return;
+    }
+
+    nmea = vehicle_synthesize_nmea(this_);
     if (nmea) {
         log_write(log, nmea, strlen(nmea), 0);
         g_free(nmea);
