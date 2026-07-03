@@ -69,21 +69,12 @@ static void vehicle_demo_destroy(struct vehicle_priv *priv) {
     g_free(priv);
 }
 
-static void nmea_chksum(char *nmea) {
-    int i;
-    if (nmea && strlen(nmea) > 3) {
-        unsigned char csum = 0;
-        for (i = 1; i < strlen(nmea) - 4; i++)
-            csum ^= (unsigned char)(nmea[i]);
-        sprintf(nmea + strlen(nmea) - 3, "%02X\n", csum);
-    }
-}
-
 static int vehicle_demo_position_attr_get(struct vehicle_priv *priv, enum attr_type type, struct attr *attr) {
     char ns = 'N', ew = 'E', *timep, *rmc, *gga;
     int hr, min, sec, year, mon, day;
     double lat, lng;
     int *flags;
+    char lat_deg[4], lat_min[16], lng_deg[4], lng_min[16], height_str[16], speed_str[16], dir_str[16];
     switch (type) {
     case attr_position_speed:
         attr->u.numd = &priv->speed;
@@ -126,13 +117,17 @@ static int vehicle_demo_position_attr_get(struct vehicle_priv *priv, enum attr_t
         timep = current_to_iso8601();
         sscanf(timep, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hr, &min, &sec);
         g_free(timep);
-        gga = g_strdup_printf("$GPGGA,%02d%02d%02d,%02.0f%07.4f,%c,%03.0f%07.4f,%c,1,08,2.5,0,M,,,,0000*  \n", hr, min,
-                              sec, floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng), (lng - floor(lng)) * 60, ew);
+        snprintf(lat_deg, sizeof(lat_deg), "%02d", (int)floor(lat));
+        snprintf(lng_deg, sizeof(lng_deg), "%03d", (int)floor(lng));
+        nmea_float_fmt(lat_min, sizeof(lat_min), (lat - floor(lat)) * 60.0, 2, 4);
+        nmea_float_fmt(lng_min, sizeof(lng_min), (lng - floor(lng)) * 60.0, 2, 4);
+        nmea_float_fmt(height_str, sizeof(height_str), 0.0, 0, 1);
+        gga = g_strdup_printf(NMEA_GPGGA_FMT, hr, min, sec, lat_deg, lat_min, ns, lng_deg, lng_min, ew, height_str);
         nmea_chksum(gga);
-        rmc = g_strdup_printf("$GPRMC,%02d%02d%02d,A,%02.0f%07.4f,%c,%03.0f%07.4f,%c,%3.1f,%3.1f,%02d%02d%02d,,*  \n",
-                              hr, min, sec, floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng),
-                              (lng - floor(lng)) * 60, ew, priv->speed / 1.852, (double)priv->direction, day, mon,
-                              year % 100);
+        nmea_float_fmt(speed_str, sizeof(speed_str), priv->speed / 1.852, 0, 1);
+        nmea_float_fmt(dir_str, sizeof(dir_str), (double)priv->direction, 0, 1);
+        rmc = g_strdup_printf(NMEA_GPRMC_FMT, hr, min, sec, lat_deg, lat_min, ns, lng_deg, lng_min, ew, speed_str,
+                              dir_str, day, mon, year % 100);
         nmea_chksum(rmc);
         g_free(priv->nmea);
         priv->nmea = g_strdup_printf("%s%s", gga, rmc);
