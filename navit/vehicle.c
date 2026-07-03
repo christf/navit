@@ -81,6 +81,7 @@ struct vehicle {
     int speed;
     int sequence;
     GHashTable *log_to_cb;
+    char *synthesized_nmea;
 };
 
 struct object_func vehicle_func;
@@ -92,6 +93,7 @@ static void vehicle_log_gpx(struct vehicle *this_, struct log *log);
 static void vehicle_log_textfile(struct vehicle *this_, struct log *log);
 static void vehicle_log_binfile(struct vehicle *this_, struct log *log);
 static int vehicle_add_log(struct vehicle *this_, struct log *log);
+static char *vehicle_synthesize_nmea(struct vehicle *this_);
 
 /**
  * @brief Creates a new vehicle
@@ -174,6 +176,7 @@ void vehicle_destroy(struct vehicle *this_) {
     if (this_->gra)
         graphics_free(this_->gra);
     g_hash_table_destroy(this_->log_to_cb);
+    g_free(this_->synthesized_nmea);
     g_free(this_);
 }
 
@@ -213,6 +216,14 @@ int vehicle_get_attr(struct vehicle *this_, enum attr_type type, struct attr *at
         ret = this_->meth.position_attr_get(this_->priv, type, attr);
         if (ret)
             return ret;
+    }
+    if (type == attr_position_nmea) {
+        g_free(this_->synthesized_nmea);
+        this_->synthesized_nmea = vehicle_synthesize_nmea(this_);
+        if (this_->synthesized_nmea) {
+            attr->u.str = this_->synthesized_nmea;
+            return 1;
+        }
     }
     return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
 }
