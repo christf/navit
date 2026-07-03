@@ -60,6 +60,9 @@ int vehicle_get_cursor_data(struct vehicle *this_, struct point *pnt, int *angle
 void vehicle_log_gpx_add_tag(char *tag, char **logstr);
 struct vehicle *vehicle_ref(struct vehicle *this_);
 void vehicle_unref(struct vehicle *this_);
+void nmea_chksum(char *nmea);
+#define NMEA_GPGGA_FMT "$GPGGA,%02d%02d%02d,%02.0f%07.4f,%c,%03.0f%07.4f,%c,1,08,2.5,%.1f,M,,,,0000*  \n"
+#define NMEA_GPRMC_FMT "$GPRMC,%02d%02d%02d,A,%02.0f%07.4f,%c,%03.0f%07.4f,%c,%3.1f,%3.1f,%02d%02d%02d,,*  \n"
 /* end of prototypes */
 
 #ifdef __cplusplus

@@ -81,6 +81,7 @@ struct vehicle {
     int speed;
     int sequence;
     GHashTable *log_to_cb;
+    char *synthesized_nmea;
 };
 
 struct object_func vehicle_func;
@@ -92,6 +93,7 @@ static void vehicle_log_gpx(struct vehicle *this_, struct log *log);
 static void vehicle_log_textfile(struct vehicle *this_, struct log *log);
 static void vehicle_log_binfile(struct vehicle *this_, struct log *log);
 static int vehicle_add_log(struct vehicle *this_, struct log *log);
+static char *vehicle_synthesize_nmea(struct vehicle *this_);
 
 /**
  * @brief Creates a new vehicle
@@ -174,6 +176,7 @@ void vehicle_destroy(struct vehicle *this_) {
     if (this_->gra)
         graphics_free(this_->gra);
     g_hash_table_destroy(this_->log_to_cb);
+    g_free(this_->synthesized_nmea);
     g_free(this_);
 }
 
@@ -213,6 +216,14 @@ int vehicle_get_attr(struct vehicle *this_, enum attr_type type, struct attr *at
         ret = this_->meth.position_attr_get(this_->priv, type, attr);
         if (ret)
             return ret;
+    }
+    if (type == attr_position_nmea) {
+        g_free(this_->synthesized_nmea);
+        this_->synthesized_nmea = vehicle_synthesize_nmea(this_);
+        if (this_->synthesized_nmea) {
+            attr->u.str = this_->synthesized_nmea;
+            return 1;
+        }
     }
     return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
 }
@@ -472,6 +483,67 @@ static void vehicle_draw_do(struct vehicle *this_) {
     }
 }
 
+void nmea_chksum(char *nmea) {
+    int i;
+    if (nmea && strlen(nmea) > 3) {
+        unsigned char csum = 0;
+        for (i = 1; i < strlen(nmea) - 4; i++)
+            csum ^= (unsigned char)(nmea[i]);
+        sprintf(nmea + strlen(nmea) - 3, "%02X\n", csum);
+    }
+}
+
+static char *vehicle_synthesize_nmea(struct vehicle *this_) {
+    struct attr attr;
+    char ns = 'N', ew = 'E', *time_str, *time_str_allocated, *gga, *rmc, *result;
+    int hr, min, sec, year, mon, day;
+    double lat, lng, speed = 0.0, direction = 0.0, height = 0.0;
+
+    if (!this_->meth.position_attr_get)
+        return NULL;
+    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr))
+        return NULL;
+
+    lat = attr.u.coord_geo->lat;
+    if (lat < 0) {
+        lat = -lat;
+        ns = 'S';
+    }
+    lng = attr.u.coord_geo->lng;
+    if (lng < 0) {
+        lng = -lng;
+        ew = 'W';
+    }
+
+    time_str_allocated = NULL;
+    if (this_->meth.position_attr_get(this_->priv, attr_position_time_iso8601, &attr))
+        time_str = attr.u.str;
+    else
+        time_str = time_str_allocated = current_to_iso8601();
+    sscanf(time_str, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hr, &min, &sec);
+
+    if (this_->meth.position_attr_get(this_->priv, attr_position_speed, &attr))
+        speed = *attr.u.numd;
+    if (this_->meth.position_attr_get(this_->priv, attr_position_direction, &attr))
+        direction = *attr.u.numd;
+    if (this_->meth.position_attr_get(this_->priv, attr_position_height, &attr))
+        height = *attr.u.numd;
+
+    gga = g_strdup_printf(NMEA_GPGGA_FMT, hr, min, sec, floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng),
+                          (lng - floor(lng)) * 60, ew, height);
+    nmea_chksum(gga);
+
+    rmc = g_strdup_printf(NMEA_GPRMC_FMT, hr, min, sec, floor(lat), (lat - floor(lat)) * 60.0, ns, floor(lng),
+                          (lng - floor(lng)) * 60, ew, speed / 1.852, direction, day, mon, year % 100);
+    nmea_chksum(rmc);
+
+    result = g_strdup_printf("%s%s", gga, rmc);
+    g_free(gga);
+    g_free(rmc);
+    g_free(time_str_allocated);
+    return result;
+}
+
 /**
  * @brief Writes to an NMEA log.
  *
@@ -479,12 +551,21 @@ static void vehicle_draw_do(struct vehicle *this_) {
  * @param log The log to write to
  */
 static void vehicle_log_nmea(struct vehicle *this_, struct log *log) {
-    struct attr pos_attr;
+    struct attr attr;
+    char *nmea;
+
     if (!this_->meth.position_attr_get)
         return;
-    if (!this_->meth.position_attr_get(this_->priv, attr_position_nmea, &pos_attr))
+    if (this_->meth.position_attr_get(this_->priv, attr_position_nmea, &attr)) {
+        log_write(log, attr.u.str, strlen(attr.u.str), 0);
         return;
-    log_write(log, pos_attr.u.str, strlen(pos_attr.u.str), 0);
+    }
+
+    nmea = vehicle_synthesize_nmea(this_);
+    if (nmea) {
+        log_write(log, nmea, strlen(nmea), 0);
+        g_free(nmea);
+    }
 }
 
 /**
