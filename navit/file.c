@@ -40,6 +40,9 @@
 #include <wordexp.h>
 #include <zconf.h>
 #include <zlib.h>
+#ifdef HAVE_LZMA
+#    include <lzma.h>
+#endif
 
 #ifdef _MSC_VER
 #    include <windows.h>
@@ -491,6 +494,22 @@ static int uncompress_int(Bytef *dest, uLongf *destLen, const Bytef *source, uLo
     return err;
 }
 
+static int lzma_uncompress_int(Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen) {
+#ifdef HAVE_LZMA
+    size_t in_pos = 0;
+    size_t out_pos = 0;
+    uint64_t memlimit = UINT64_MAX;
+    lzma_ret ret = lzma_stream_buffer_decode(&memlimit, 0, NULL, source, &in_pos, sourceLen, dest, &out_pos, *destLen);
+    if (ret == LZMA_OK) {
+        *destLen = out_pos;
+        return 0;
+    }
+    return -1;
+#else
+    return -1;
+#endif
+}
+
 unsigned char *file_data_read_compressed(struct file *file, long long offset, int size, int size_uncomp) {
     void *ret;
     char *buffer = 0;
@@ -513,6 +532,37 @@ unsigned char *file_data_read_compressed(struct file *file, long long offset, in
     } else {
         if (uncompress_int(ret, &destLen, (Bytef *)buffer, size) != Z_OK) {
             dbg(lvl_error, "uncompress failed");
+            g_free(ret);
+            ret = NULL;
+        }
+    }
+    g_free(buffer);
+
+    return ret;
+}
+
+unsigned char *file_data_read_compressed_lzma(struct file *file, long long offset, int size, int size_uncomp) {
+    void *ret;
+    char *buffer = 0;
+    uLongf destLen = size_uncomp;
+
+    if (file->cache) {
+        struct file_cache_id id = {offset, size, file->name_id, 1};
+        ret = cache_lookup(file_cache, &id);
+        if (ret)
+            return ret;
+        ret = cache_insert_new(file_cache, &id, size_uncomp);
+    } else
+        ret = g_malloc(size_uncomp);
+    lseek(file->fd, offset, SEEK_SET);
+
+    buffer = (char *)g_malloc(size);
+    if (read(file->fd, buffer, size) != size) {
+        g_free(ret);
+        ret = NULL;
+    } else {
+        if (lzma_uncompress_int(ret, &destLen, (Bytef *)buffer, size) != 0) {
+            dbg(lvl_error, "lzma uncompress failed");
             g_free(ret);
             ret = NULL;
         }
