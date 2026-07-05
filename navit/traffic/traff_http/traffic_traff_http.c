@@ -654,7 +654,6 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
     } else {
         dbg(lvl_error, "traffic source unset. Unable to use traff-http plugin");
         g_free(ret);
-        exit(42);
         return NULL;
     }
     ret->queue_lock = thread_lock_new();
