@@ -45,6 +45,7 @@
 #include "util.h"
 #include "vehicleprofile.h"
 #include "xmlconfig.h"
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -131,6 +132,11 @@ struct traffic {
     struct event_timeout *timeout;      /**< The timeout event that triggers the loop function */
     struct callback *idle_cb;           /**< Idle callback to process new messages */
     struct event_idle *idle_ev;         /**< The pointer to the idle event */
+#ifndef WIN32                           // TODO: find win32 implementation to allow parsing of traff data
+                                        // independent from locale
+    locale_t systemlocale;
+    locale_t trafflocale;
+#endif
 };
 
 struct traffic_location_priv {
@@ -306,7 +312,7 @@ static int tm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
 static int tm_type_set(void *priv_data, enum item_type type);
 static struct map_selection *traffic_location_get_rect(struct traffic_location *this_, enum projection projection);
 static struct route_graph *traffic_location_get_route_graph(struct traffic_location *this_, struct mapset *ms);
-static struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state);
+struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state);
 static int traffic_location_match_attributes(struct traffic_location *this_, struct item *item);
 static int traffic_message_add_segments(struct traffic_message *this_, struct mapset *ms, struct seg_data *data,
                                         struct map *map, struct route *route);
@@ -5987,7 +5993,7 @@ static struct traffic_message **traffic_get_messages_from_parsed_xml(struct xml_
  *
  * @return The response, or NULL if the data did not contain a response
  */
-static struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state) {
+struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state) {
     struct traffic_response *ret = NULL;
     struct traffic_message **messages = NULL;
 
