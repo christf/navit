@@ -45,7 +45,6 @@
 #include "util.h"
 #include "vehicleprofile.h"
 #include "xmlconfig.h"
-#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -102,12 +101,16 @@ int item_default_flags_value = AF_ALL;
  * @brief Private data shared between all traffic instances.
  */
 struct traffic_shared_priv {
-    GList *messages;      /**< Currently active messages */
-    GList *message_queue; /**< Queued messages, waiting to be processed */
+    GList *messages;                     /**< Currently active messages */
+    GList *message_queue;                /**< Queued messages, waiting to be processed */
+    GList *deferred_segments;            /**< Messages awaiting segment addition via idle callback */
+    struct callback *deferred_idle_cb;   /**< Idle callback for deferred segment addition */
+    struct event_idle *deferred_idle_ev; /**< Idle event for deferred segment addition */
     // TODO messages by ID?                 In a later phase…
-    struct mapset *ms; /**< The mapset used for routing */
-    struct route *rt;  /**< The route to notify of traffic changes */
-    struct map *map;   /**< The traffic map, in which traffic distortions are stored */
+    struct navit *navit; /**< The navit instance (for triggering redraws) */
+    struct mapset *ms;   /**< The mapset used for routing */
+    struct route *rt;    /**< The route to notify of traffic changes */
+    struct map *map;     /**< The traffic map, in which traffic distortions are stored */
 };
 
 /**
@@ -125,11 +128,6 @@ struct traffic {
     struct event_timeout *timeout;      /**< The timeout event that triggers the loop function */
     struct callback *idle_cb;           /**< Idle callback to process new messages */
     struct event_idle *idle_ev;         /**< The pointer to the idle event */
-#ifndef WIN32                           // TODO: find win32 implementation to allow parsing of traff data
-                                        // independent from locale
-    locale_t systemlocale;
-    locale_t trafflocale;
-#endif
 };
 
 struct traffic_location_priv {
@@ -305,7 +303,7 @@ static int tm_attr_get(void *priv_data, enum attr_type attr_type, struct attr *a
 static int tm_type_set(void *priv_data, enum item_type type);
 static struct map_selection *traffic_location_get_rect(struct traffic_location *this_, enum projection projection);
 static struct route_graph *traffic_location_get_route_graph(struct traffic_location *this_, struct mapset *ms);
-struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state);
+static struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state);
 static int traffic_location_match_attributes(struct traffic_location *this_, struct item *item);
 static int traffic_message_add_segments(struct traffic_message *this_, struct mapset *ms, struct seg_data *data,
                                         struct map *map, struct route *route);
@@ -318,6 +316,7 @@ static void traffic_dump_messages_to_xml(struct traffic_shared_priv *shared);
 static void traffic_loop(struct traffic *this_);
 static struct traffic *traffic_new(struct attr *parent, struct attr **attrs);
 static int traffic_process_messages_int(struct traffic *this_, int flags);
+static void traffic_add_segments_idle(struct traffic_shared_priv *shared);
 static void traffic_message_dump_to_stderr(struct traffic_message *this_);
 static struct seg_data *traffic_message_parse_events(struct traffic_message *this_);
 static struct route_graph_point *traffic_route_flood_graph(struct route_graph *rg, struct seg_data *data,
@@ -965,19 +964,28 @@ static struct map_rect_priv *tm_rect_new(struct map_priv *priv, struct map_selec
     /* Whether new segments have been added */
     int dirty = 0;
 
+    /* Time budgeting for lazy segment computation */
+    struct timeval start, now;
+    double msec = 0;
+
     dbg(lvl_debug, "enter");
+
+    gettimeofday(&start, NULL);
 
     /* lazy location matching */
     if (sel != NULL)
         /* TODO experimental: if no selection is passed, do not resolve any locations */
         for (msgiter = priv->shared->messages; msgiter; msgiter = g_list_next(msgiter)) {
+            gettimeofday(&now, NULL);
+            msec = (now.tv_usec - start.tv_usec) / ((double)1000) + (now.tv_sec - start.tv_sec) * 1000;
+            if (msec >= TIME_SLICE)
+                break;
             message = (struct traffic_message *)msgiter->data;
             if (message->priv->items == NULL) {
                 traffic_location_set_enclosing_rect(message->location, NULL);
                 msg_sel = traffic_location_get_rect(message->location, traffic_map_meth.pro);
                 for (rect_sel = sel; rect_sel; rect_sel = rect_sel->next)
                     if (coord_rect_overlap(&(msg_sel->u.c_rect), &(rect_sel->u.c_rect))) {
-                        /* TODO do this in an idle loop, not here */
                         /* lazy cache restore */
                         if (message->location->priv->txt_data) {
                             dbg(lvl_debug, "location has txt_data, trying to restore");
@@ -4188,6 +4196,7 @@ static void traffic_set_shared(struct traffic *this_) {
     if (!this_->shared) {
         this_->shared = g_new0(struct traffic_shared_priv, 1);
     }
+    this_->shared->navit = this_->navit;
 }
 
 /**
@@ -4324,6 +4333,63 @@ static void traffic_dump_messages_to_xml(struct traffic_shared_priv *shared) {
 }
 
 /**
+ * @brief Ensures the deferred segment addition idle callback is registered.
+ *
+ * If the deferred idle callback is not yet active and there are messages awaiting segment
+ * addition, this function registers the idle callback.
+ *
+ * @param shared The shared traffic data
+ */
+static void traffic_ensure_deferred_idle(struct traffic_shared_priv *shared) {
+    if (!shared->deferred_idle_cb)
+        shared->deferred_idle_cb = callback_new_1(callback_cast(traffic_add_segments_idle), shared);
+    if (!shared->deferred_idle_ev)
+        shared->deferred_idle_ev = event_add_idle(50, shared->deferred_idle_cb);
+}
+
+/**
+ * @brief Idle callback for deferred segment addition.
+ *
+ * Processes one message from the deferred segment queue per invocation. This keeps the GUI
+ * responsive by yielding back to the event loop after each expensive segment addition.
+ *
+ * @param shared The shared traffic data
+ */
+static void traffic_add_segments_idle(struct traffic_shared_priv *shared) {
+    GList *entry;
+    struct traffic_message *message;
+    struct seg_data *data;
+    struct attr attr;
+
+    entry = shared->deferred_segments;
+    if (!entry) {
+        if (shared->deferred_idle_ev)
+            event_remove_idle(shared->deferred_idle_ev);
+        if (shared->deferred_idle_cb)
+            callback_destroy(shared->deferred_idle_cb);
+        shared->deferred_idle_ev = NULL;
+        shared->deferred_idle_cb = NULL;
+        return;
+    }
+
+    message = (struct traffic_message *)entry->data;
+    shared->deferred_segments = g_list_remove(shared->deferred_segments, message);
+
+    if (!message->priv->items && route_get_attr(shared->rt, attr_route_status, &attr, NULL) && route_get_pos(shared->rt)
+        && ((attr.u.num & route_status_destination_set))) {
+        traffic_location_set_enclosing_rect(message->location, NULL);
+        data = traffic_message_parse_events(message);
+        traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
+        g_free(data);
+        if (message->priv->items && navit_get_ready(shared->navit) == 3)
+            navit_draw_async(shared->navit, 1);
+    }
+
+    if (shared->deferred_segments)
+        traffic_ensure_deferred_idle(shared);
+}
+
+/**
  * @brief Processes new traffic messages.
  *
  * This is the internal backend for `traffic_process_messages()`. It is also used internally.
@@ -4394,8 +4460,11 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
         dbg(lvl_debug, "*****enter, %d messages in queue", g_list_length(this_->shared->message_queue));
 
     gettimeofday(&start, NULL);
-    for (; this_->shared->message_queue && (msec < TIME_SLICE);
-         this_->shared->message_queue = g_list_remove(this_->shared->message_queue, message)) {
+    while (this_->shared->message_queue) {
+        gettimeofday(&now, NULL);
+        msec = (now.tv_usec - start.tv_usec) / ((double)1000) + (now.tv_sec - start.tv_sec) * 1000;
+        if (msec >= TIME_SLICE)
+            break;
         message = (struct traffic_message *)this_->shared->message_queue->data;
         i++;
         if (message->expiration_time < time(NULL)) {
@@ -4466,12 +4535,10 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                  * operation is deferred until a rectangle overlapping with the location is queried.
                                  */
                                 if (!message->priv->items) {
-                                    /* TODO do this in an idle loop, not here */
-                                    traffic_message_add_segments(message, this_->shared->ms, data, this_->shared->map,
-                                                                 this_->shared->rt);
+                                    this_->shared->deferred_segments =
+                                        g_list_append(this_->shared->deferred_segments, message);
+                                    traffic_ensure_deferred_idle(this_->shared);
                                     break;
-                                    map_selection_destroy(loc_ms);
-                                    map_selection_destroy(rt_ms);
                                 }
                             }
                     }
@@ -4509,8 +4576,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
 
             dbg(lvl_debug, "*****checkpoint PROCESS-6");
         }
-        gettimeofday(&now, NULL);
-        msec = (now.tv_usec - start.tv_usec) / ((double)1000) + (now.tv_sec - start.tv_sec) * 1000;
+        this_->shared->message_queue = g_list_remove(this_->shared->message_queue, message);
     }
 
     if (i)
@@ -5910,7 +5976,7 @@ static struct traffic_message **traffic_get_messages_from_parsed_xml(struct xml_
  *
  * @return The response, or NULL if the data did not contain a response
  */
-struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state) {
+static struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_state *state) {
     struct traffic_response *ret = NULL;
     struct traffic_message **messages = NULL;
 
@@ -6032,6 +6098,14 @@ void traffic_set_route(struct traffic *this_, struct route *rt) {
 }
 
 void traffic_destroy(struct traffic *this_) {
+    if (this_->shared->deferred_idle_ev)
+        event_remove_idle(this_->shared->deferred_idle_ev);
+    if (this_->shared->deferred_idle_cb)
+        callback_destroy(this_->shared->deferred_idle_cb);
+    this_->shared->deferred_idle_ev = NULL;
+    this_->shared->deferred_idle_cb = NULL;
+    g_list_free(this_->shared->deferred_segments);
+    this_->shared->deferred_segments = NULL;
     if (this_->meth.destroy)
         this_->meth.destroy(this_->priv);
     attr_list_free(this_->attrs);

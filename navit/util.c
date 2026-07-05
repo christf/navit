@@ -25,7 +25,6 @@
 #include <ctype.h>
 #include <glib.h>
 #include <limits.h>
-#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -527,7 +526,7 @@ gchar *g_strconcat_printf(gchar *buffer, gchar *fmt, ...) {
  * @return The number of digits in the input integer.
  */
 
-size_t numdigits(long long l) {
+static size_t numdigits(long long l) {
     size_t ret = 0;
     if (l == 0)
         return 1;
@@ -554,7 +553,7 @@ size_t numdigits(long long l) {
 char *floattostr(char *ret, size_t size, navit_float f, char sep) {
     long long i = (long long)f;
 
-    snprintf(ret, size, "%.*f", size - numdigits(i) - (f < 0 ? 1 : 0) - 1, f);
+    snprintf(ret, size, "%.*f", (int)(size - numdigits(i) - (f < 0 ? 1 : 0) - 1), f);
 
     int separator_pos = numdigits(i) + (f < 0 ? 1 : 0);
     ret[separator_pos] = sep;
