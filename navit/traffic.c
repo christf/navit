@@ -959,18 +959,25 @@ static struct map_rect_priv *tm_rect_new(struct map_priv *priv, struct map_selec
     /* Map selection for current message, current map rect selection */
     struct map_selection *msg_sel, *rect_sel;
 
-    /* Attributes for traffic distortions generated from the current traffic message */
-    struct seg_data *data;
-
     /* Whether new segments have been added */
     int dirty = 0;
 
+    /* Time budgeting for lazy segment computation */
+    struct timeval start, now;
+    double msec = 0;
+
     dbg(lvl_debug, "enter");
+
+    gettimeofday(&start, NULL);
 
     /* lazy location matching */
     if (sel != NULL)
         /* TODO experimental: if no selection is passed, do not resolve any locations */
         for (msgiter = priv->shared->messages; msgiter; msgiter = g_list_next(msgiter)) {
+            gettimeofday(&now, NULL);
+            msec = (now.tv_usec - start.tv_usec) / ((double)1000) + (now.tv_sec - start.tv_sec) * 1000;
+            if (msec >= TIME_SLICE)
+                break;
             message = (struct traffic_message *)msgiter->data;
             if (message->priv->items == NULL) {
                 traffic_location_set_enclosing_rect(message->location, NULL);
@@ -986,12 +993,9 @@ static struct map_rect_priv *tm_rect_new(struct map_priv *priv, struct map_selec
                         } else {
                             dbg(lvl_debug, "location has no txt_data, nothing to restore");
                         }
-                        /* if cache restore yielded no items, expand from scratch */
+                        /* if cache restore yielded no items, defer expansion to idle callback */
                         if (message->priv->items == NULL) {
-                            data = traffic_message_parse_events(message);
-                            traffic_message_add_segments(message, priv->shared->ms, data, priv->shared->map,
-                                                         priv->shared->rt);
-                            g_free(data);
+                            dbg(lvl_debug, "deferring segment expansion for message %s to idle callback", message->id);
                         }
                         dirty = 1;
                         break;
@@ -4469,13 +4473,9 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                  * operation is deferred until a rectangle overlapping with the location is queried.
                                  */
                                 if (!message->priv->items) {
-                                    gettimeofday(&now, NULL);
-                                    msec = (now.tv_usec - start.tv_usec) / ((double)1000)
-                                           + (now.tv_sec - start.tv_sec) * 1000;
-                                    if (msec < TIME_SLICE) {
-                                        traffic_message_add_segments(message, this_->shared->ms, data,
-                                                                     this_->shared->map, this_->shared->rt);
-                                    }
+                                    /* TODO do this in an idle loop, not here */
+                                    traffic_message_add_segments(message, this_->shared->ms, data,
+                                                                 this_->shared->map, this_->shared->rt);
                                     break;
                                     map_selection_destroy(loc_ms);
                                     map_selection_destroy(rt_ms);
