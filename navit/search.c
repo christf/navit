@@ -906,11 +906,15 @@ struct search_list_result *search_list_get_result(struct search_list *this_) {
             if (this_->postal) {
                 struct attr postal;
                 if (item_attr_get(this_->item, attr_postal_mask, &postal)) {
-                    if (!postal_match(this_->postal, postal.u.str))
+                    if (!postal_match(this_->postal, postal.u.str)) {
+                        this_->item = NULL;
                         continue;
+                    }
                 } else if (item_attr_get(this_->item, attr_postal, &postal)) {
-                    if (strcmp(this_->postal, postal.u.str))
+                    if (strcmp(this_->postal, postal.u.str)) {
+                        this_->item = NULL;
                         continue;
+                    }
                 }
             }
             this_->result.country = NULL;
@@ -979,7 +983,7 @@ struct search_list_result *search_list_get_result(struct search_list *this_) {
                     struct search_list_street *street = this_->levels[level - 1].last->data;
                     if (navit_utf8_strcasecmp(street->name, attr2.u.str)) {
                         search_list_house_number_destroy(p);
-                        // this_->item=NULL;
+                        this_->item = NULL;
                         continue;
                     }
                 }
@@ -1003,6 +1007,7 @@ struct search_list_result *search_list_get_result(struct search_list *this_) {
                     return &this_->result;
                 } else {
                     search_list_result_destroy(level, p);
+                    this_->item = NULL;
                 }
             }
         } else {

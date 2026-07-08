@@ -439,34 +439,73 @@ static int gui_internal_cmd_pois_item_selected(struct poi_param *param, struct i
     if (type == type_house_number && !param->filter)
         return 0;
     if (param->filter) {
-        char *long_name, *s;
+        char *long_name, *s, *q;
         GList *f;
-        int i;
+        int i, has_non_ascii;
         if (param->AddressFilterType > 0) {
             s = gui_internal_compose_item_address_string(item, param->AddressFilterType == 2 ? 1 : 0);
         } else if (item_attr_get(item, attr_label, &attr)) {
             s = g_strdup_printf("%s %s", item_to_name(item->type), map_convert_string_tmp(item->map, attr.u.str));
         } else {
-            s = g_strdup(item_to_name(item->type));
+            return 0;
         }
-        long_name = removecase(s);
-        g_free(s);
-
+        has_non_ascii = 0;
+        for (q = s; *q; q++) {
+            if ((unsigned char)*q >= 0x80) {
+                has_non_ascii = 1;
+                break;
+            }
+        }
+        if (!has_non_ascii) {
+            for (q = s; *q; q++) {
+                if (*q >= 'A' && *q <= 'Z')
+                    *q += 32;
+            }
+            long_name = s;
+        } else {
+            long_name = removecase(s);
+            g_free(s);
+        }
         match = 0;
-        for (i = 0; i < 3 && !match; i++) {
-            char *long_name_exp = linguistics_expand_special(long_name, i);
-            for (s = long_name_exp, f = param->filter; f && s; f = g_list_next(f)) {
-                s = strstr(s, f->data);
-                if (!s) {
+        for (q = long_name, f = param->filter; f && q; f = g_list_next(f)) {
+            q = strstr(q, f->data);
+            if (!q) {
+                break;
+            }
+            q = g_utf8_strchr(q, -1, ' ');
+        }
+        if (!f) {
+            match = 1;
+        } else if (has_non_ascii) {
+            int has_specials = 0;
+            for (q = long_name; *q; q++) {
+                if ((unsigned char)*q >= 0x80) {
+                    has_specials = 1;
                     break;
                 }
-                s = g_utf8_strchr(s, -1, ' ');
             }
-            g_free(long_name_exp);
-            if (!f)
-                match = 1;
+            if (has_specials) {
+                for (i = 1; i < 3 && !match; i++) {
+                    char *long_name_exp = linguistics_expand_special(long_name, i);
+                    if (!long_name_exp)
+                        break;
+                    for (q = long_name_exp, f = param->filter; f && q; f = g_list_next(f)) {
+                        q = strstr(q, f->data);
+                        if (!q) {
+                            break;
+                        }
+                        q = g_utf8_strchr(q, -1, ' ');
+                    }
+                    g_free(long_name_exp);
+                    if (!f)
+                        match = 1;
+                }
+            }
         }
-        g_free(long_name);
+        if (has_non_ascii)
+            g_free(long_name);
+        else
+            g_free(s);
     }
     return match;
 }
