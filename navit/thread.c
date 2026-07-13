@@ -24,8 +24,8 @@
 
 #include "thread.h"
 #include <glib.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #ifdef HAVE_API_WIN32_BASE
 #    include <windows.h>
@@ -165,7 +165,7 @@ void thread_sleep(long msec) {
 
 void thread_exit(int result) {
 #ifdef HAVE_POSIX_THREADS
-    pthread_exit((void *)&result);
+    pthread_exit((void *)(intptr_t)result);
 #elif HAVE_API_WIN32
     ExitThread((DWORD)result);
 #else
