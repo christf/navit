@@ -20,14 +20,48 @@
 #include "event.h"
 #include "debug.h"
 #include "plugin.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static struct event_methods event_methods;
 static const char *e_requestor;
 static const char *e_system;
 
 static int has_quit;
+
+static int sig_pipe_fds[2] = {-1, -1};
+
+static void sig_pipe_init(void) __attribute__((constructor));
+static void sig_pipe_init(void) {
+    if (pipe(sig_pipe_fds) < 0) {
+        sig_pipe_fds[0] = sig_pipe_fds[1] = -1;
+    } else {
+        int flags;
+        flags = fcntl(sig_pipe_fds[0], F_GETFL);
+        if (flags != -1)
+            fcntl(sig_pipe_fds[0], F_SETFL, flags | O_NONBLOCK);
+        flags = fcntl(sig_pipe_fds[1], F_GETFL);
+        if (flags != -1)
+            fcntl(sig_pipe_fds[1], F_SETFL, flags | O_NONBLOCK);
+    }
+}
+
+void event_signal_notify(void) {
+    if (sig_pipe_fds[1] != -1) {
+        char c = 1;
+        if (write(sig_pipe_fds[1], &c, 1) < 0) {
+            /* ignore EAGAIN (pipe full) and other harmless errors */
+        }
+    }
+}
+
+int event_get_signal_fd(void) {
+    return sig_pipe_fds[0];
+}
 
 #define require_method_helper(m)                                                                                       \
     if (!event_methods.m) {                                                                                            \
