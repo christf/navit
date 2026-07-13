@@ -587,7 +587,8 @@ int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suf
         }
         {
             int zipnum = zip_get_zipnum(zip_info);
-            int written_tiles = process_slice(in, references, in_count, with_range, size, suffix, zip_info, &slice_data_reuse);
+            int written_tiles =
+                process_slice(in, references, in_count, with_range, size, suffix, zip_info, &slice_data_reuse);
             zip_set_zipnum(zip_info, zipnum + written_tiles);
         }
         slices++;

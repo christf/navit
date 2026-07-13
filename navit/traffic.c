@@ -102,16 +102,16 @@ int item_default_flags_value = AF_ALL;
  * @brief Private data shared between all traffic instances.
  */
 struct traffic_shared_priv {
-    GList *messages;           /**< Currently active messages */
-    GList *message_queue;      /**< Queued messages, waiting to be processed */
-    GList *deferred_segments;  /**< Messages awaiting segment addition via idle callback */
+    GList *messages;                     /**< Currently active messages */
+    GList *message_queue;                /**< Queued messages, waiting to be processed */
+    GList *deferred_segments;            /**< Messages awaiting segment addition via idle callback */
     struct callback *deferred_idle_cb;   /**< Idle callback for deferred segment addition */
     struct event_idle *deferred_idle_ev; /**< Idle event for deferred segment addition */
     // TODO messages by ID?                 In a later phase…
-    struct navit *navit;       /**< The navit instance (for triggering redraws) */
-    struct mapset *ms; /**< The mapset used for routing */
-    struct route *rt;  /**< The route to notify of traffic changes */
-    struct map *map;   /**< The traffic map, in which traffic distortions are stored */
+    struct navit *navit; /**< The navit instance (for triggering redraws) */
+    struct mapset *ms;   /**< The mapset used for routing */
+    struct route *rt;    /**< The route to notify of traffic changes */
+    struct map *map;     /**< The traffic map, in which traffic distortions are stored */
 };
 
 /**
@@ -4381,9 +4381,8 @@ static void traffic_add_segments_idle(struct traffic_shared_priv *shared) {
     message = (struct traffic_message *)entry->data;
     shared->deferred_segments = g_list_remove(shared->deferred_segments, message);
 
-    if (!message->priv->items
-        && route_get_attr(shared->rt, attr_route_status, &attr, NULL)
-        && route_get_pos(shared->rt) && ((attr.u.num & route_status_destination_set))) {
+    if (!message->priv->items && route_get_attr(shared->rt, attr_route_status, &attr, NULL) && route_get_pos(shared->rt)
+        && ((attr.u.num & route_status_destination_set))) {
         traffic_location_set_enclosing_rect(message->location, NULL);
         data = traffic_message_parse_events(message);
         traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
