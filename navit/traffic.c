@@ -4477,8 +4477,6 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                     traffic_message_add_segments(message, this_->shared->ms, data,
                                                                  this_->shared->map, this_->shared->rt);
                                     break;
-                                    map_selection_destroy(loc_ms);
-                                    map_selection_destroy(rt_ms);
                                 }
                             }
                     }
