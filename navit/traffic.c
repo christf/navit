@@ -4474,8 +4474,8 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                  */
                                 if (!message->priv->items) {
                                     /* TODO do this in an idle loop, not here */
-                                    traffic_message_add_segments(message, this_->shared->ms, data,
-                                                                 this_->shared->map, this_->shared->rt);
+                                    traffic_message_add_segments(message, this_->shared->ms, data, this_->shared->map,
+                                                                 this_->shared->rt);
                                     break;
                                 }
                             }
