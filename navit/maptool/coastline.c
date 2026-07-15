@@ -443,7 +443,7 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     fprintf(stderr, "tile_collector_finish foreach done\n");
     g_hash_table_destroy(hash);
     fprintf(stderr, "tile_collector_finish destroy done\n");
-    for (i = 14; i > 0; i--) {
+    for (i = 14; i > 7; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
         foreach_tile(&data, tile_collector_add_siblings);
@@ -463,6 +463,8 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
         foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "*\n");
     }
+
+
     g_hash_table_destroy(data.tile_edges);
     item_bin_sink_func_destroy(tile_collector);
     fprintf(stderr, "tile_collector_finish done\n");
