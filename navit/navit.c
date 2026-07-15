@@ -151,7 +151,6 @@ struct navit {
     int autozoom_paused;
     struct event_timeout *button_timeout, *motion_timeout;
     struct callback *motion_timeout_callback;
-    int pan_prefetch;
     int ignore_button;
     int ignore_graphics_events;
     struct log *textfile_debug_log;
@@ -401,11 +400,10 @@ void navit_draw_async(struct navit *this_, int async) {
         this_->blocked |= 2;
         return;
     }
-    if (this_->pan_prefetch) {
-        transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
-        this_->pan_prefetch = 0;
-    } else {
+    if (async) {
         transform_setup_source_rect(this_->trans);
+    } else {
+        transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
     }
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
@@ -506,8 +504,6 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     if (this_->ready == 3) {
         /* About to resize. Cancel drawing whatever it is */
         graphics_draw_cancel(this_->gra, this_->displaylist);
-        /* Prefetch during start so first pan has off-screen map data */
-        this_->pan_prefetch = 1;
         navit_draw_async(this_, 1);
     }
 }
@@ -656,9 +652,6 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_overlay_disable(this_->gra, 0);
             if (!this_->zoomed)
                 navit_set_timeout(this_);
-            /* Prefetch during start so next pan has off-screen map data
-            pan_prefetch is cleared by navit_draw_async after the draw is scheduled. */
-            this_->pan_prefetch = 1;
             navit_draw(this_);
         } else
             return 1;
@@ -2259,7 +2252,6 @@ int navit_init(struct navit *this_) {
     this_->ready |= 1;
     dbg(lvl_info, "ready=%d", this_->ready);
     if (this_->ready == 3) {
-        this_->pan_prefetch = 1;
         navit_draw_async(this_, 1);
     }
     if (callback)
