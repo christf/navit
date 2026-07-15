@@ -221,6 +221,7 @@ int vehicle_get_attr(struct vehicle *this_, enum attr_type type, struct attr *at
         g_free(this_->synthesized_nmea);
         this_->synthesized_nmea = vehicle_synthesize_nmea(this_);
         if (this_->synthesized_nmea) {
+            attr->type = attr_position_nmea;
             attr->u.str = this_->synthesized_nmea;
             return 1;
         }
@@ -499,10 +500,14 @@ static char *vehicle_synthesize_nmea(struct vehicle *this_) {
     int hr, min, sec, year, mon, day;
     double lat, lng, speed = 0.0, direction = 0.0, height = 0.0;
 
-    if (!this_->meth.position_attr_get)
+    if (!this_->meth.position_attr_get) {
+        dbg(lvl_debug, "no position_attr_get method");
         return NULL;
-    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr))
+    }
+    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr)) {
+        dbg(lvl_debug, "no coord_geo available");
         return NULL;
+    }
 
     lat = attr.u.coord_geo->lat;
     if (lat < 0) {
@@ -557,17 +562,23 @@ static void vehicle_log_nmea(struct vehicle *this_, struct log *log) {
     struct attr attr;
     char *nmea;
 
-    if (!this_->meth.position_attr_get)
+    if (!this_->meth.position_attr_get) {
+        dbg(lvl_error, "no position_attr_get method");
         return;
+    }
     if (this_->meth.position_attr_get(this_->priv, attr_position_nmea, &attr)) {
+        dbg(lvl_debug, "using native NMEA attr");
         log_write(log, attr.u.str, strlen(attr.u.str), 0);
         return;
     }
 
     nmea = vehicle_synthesize_nmea(this_);
     if (nmea) {
+        dbg(lvl_debug, "writing synthesized NMEA: %s", nmea);
         log_write(log, nmea, strlen(nmea), 0);
         g_free(nmea);
+    } else {
+        dbg(lvl_error, "NMEA synthesis returned NULL (no position fix?)");
     }
 }
 
@@ -788,9 +799,12 @@ static void vehicle_log_binfile(struct vehicle *this_, struct log *log) {
 static int vehicle_add_log(struct vehicle *this_, struct log *log) {
     struct callback *cb;
     struct attr type_attr;
-    if (!log_get_attr(log, attr_type, &type_attr, NULL))
+    if (!log_get_attr(log, attr_type, &type_attr, NULL)) {
+        dbg(lvl_error, "log has no type attribute");
         return 1;
+    }
 
+    dbg(lvl_debug, "adding log of type '%s'", type_attr.u.str);
     if (!strcmp(type_attr.u.str, "nmea")) {
         cb = callback_new_attr_2(callback_cast(vehicle_log_nmea), attr_position_coord_geo, this_, log);
     } else if (!strcmp(type_attr.u.str, "gpx")) {
