@@ -655,8 +655,10 @@ static void start_element(xml_context *context, const gchar *element_name, const
     *parent = new;
     if (!find_boolean(new, "enabled", 1, 0))
         return;
-    if (new->parent && !new->parent->element_attr.u.data)
+    if (new->parent && !new->parent->element_attr.u.data) {
+        dbg(lvl_error, "skip '%s' because parent '%s' has no data", element_name, new->parent->element);
         return;
+    }
     if (func->func) {
         if (!func->func(new)) {
             return;
@@ -683,8 +685,10 @@ static void start_element(xml_context *context, const gchar *element_name, const
             dbg(lvl_error, "failed to create object of type '%s'", element_name);
         if (new->element_attr.type == attr_tracking)
             new->element_attr.type = attr_trackingo;
-        if (new->parent &&new->parent->object_func &&new->parent->object_func->add_attr)
+        if (new->parent &&new->parent->object_func &&new->parent->object_func->add_attr) {
+            dbg(lvl_error, "about to call add_attr on parent '%s' for child '%s'", new->parent->element, element_name);
             new->parent->object_func->add_attr(new->parent->element_attr.u.data, &new->element_attr);
+        }
     }
     return;
 }

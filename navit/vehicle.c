@@ -267,6 +267,7 @@ int vehicle_add_attr(struct vehicle *this_, struct attr *attr) {
         callback_list_add(this_->cbl, attr->u.callback);
         break;
     case attr_log:
+        dbg(lvl_error, "ENTER vehicle_add_attr case attr_log log=%p", attr->u.log);
         ret = vehicle_add_log(this_, attr->u.log);
         break;
     // currently supporting oldstyle cursor config.
@@ -799,6 +800,7 @@ static void vehicle_log_binfile(struct vehicle *this_, struct log *log) {
 static int vehicle_add_log(struct vehicle *this_, struct log *log) {
     struct callback *cb;
     struct attr type_attr;
+    dbg(lvl_error, "ENTER vehicle_add_log this_=%p log=%p", this_, log);
     if (!log_get_attr(log, attr_type, &type_attr, NULL)) {
         dbg(lvl_error, "log has no type attribute");
         return 1;
