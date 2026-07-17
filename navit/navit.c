@@ -138,7 +138,7 @@ struct navit {
     GList *windows_items;
     struct navit_vehicle *vehicle;
     struct callback_list *attr_cbl;
-    struct callback *nav_speech_cb, *roadbook_callback, *popup_callback, *route_cb, *progress_cb;
+    struct callback *nav_speech_cb, *roadbook_callback, *popup_callback, *route_cb, *progress_cb, *animation_cb;
     struct datawindow *roadbook_window;
     struct map *former_destination;
     struct point pressed, last, current;
@@ -149,7 +149,7 @@ struct navit {
     int autozoom_max;
     int autozoom_active;
     int autozoom_paused;
-    struct event_timeout *button_timeout, *motion_timeout;
+    struct event_timeout *button_timeout, *motion_timeout, *animation_timer;
     struct callback *motion_timeout_callback;
     int ignore_button;
     int ignore_graphics_events;
@@ -408,6 +408,17 @@ void navit_draw_async(struct navit *this_, int async) {
 void navit_draw(struct navit *this_) {
     if (this_->ready == 3)
         navit_draw_async(this_, 0);
+}
+
+static int navit_animation_tick(void *data) {
+    struct navit *this_ = data;
+    GList *l = this_->vehicles;
+    while (l) {
+        struct navit_vehicle *nv = l->data;
+        vehicle_animation_tick(nv->vehicle);
+        l = g_list_next(l);
+    }
+    return TRUE;
 }
 
 int navit_get_ready(struct navit *this_) {
@@ -2249,6 +2260,10 @@ int navit_init(struct navit *this_) {
     dbg(lvl_info, "ready=%d", this_->ready);
     if (this_->ready == 3) {
         navit_draw_async(this_, 1);
+        if (!this_->animation_timer) {
+            this_->animation_cb = callback_new_1(callback_cast(navit_animation_tick), this_);
+            this_->animation_timer = event_add_timeout(33, 1, this_->animation_cb);
+        }
     }
     if (callback)
         callback_list_call_attr_1(this_->attr_cbl, attr_graphics_ready, this_);
@@ -3364,43 +3379,45 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
 
         transform_point(this_->trans_cursor, pro, &nv->coord, &cursor_pnt);
         if (this_->button_pressed != 1 && this_->follow_cursor && nv->follow_curr <= nv->follow
-            && (nv->follow_curr == 1 || !transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border)))
+            && (nv->follow_curr == 1 || !transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border))) {
+            navit_vehicle_draw(this_, nv, pnt);
             navit_set_center_cursor_draw(this_);
-        else
+        } else {
             navit_vehicle_draw(this_, nv, pnt);
 
-        if (nv->follow_curr > 1)
-            nv->follow_curr--;
-        else
-            nv->follow_curr = nv->follow;
-    }
-    callback_list_call_attr_2(this_->attr_cbl, attr_position_coord_geo, this_, nv->vehicle);
-
-    /* Finally, if we reached our destination, stop navigation. */
-    if (this_->route) {
-        switch (route_destination_reached(this_->route)) {
-        case 1:
-            description = route_get_destination_description(this_->route, 0);
-            route_remove_waypoint(this_->route);
-            count = route_get_destination_count(this_->route);
-            pc = g_alloca(sizeof(*pc) * count);
-            route_get_destinations(this_->route, pc, count);
-            destination_file = bookmarks_get_destination_file(TRUE);
-            bookmarks_append_destinations(this_->former_destination, destination_file, pc, count,
-                                          type_former_itinerary_part, description, this_->recentdest_count);
-            g_free(destination_file);
-            g_free(description);
-            break;
-        case 2:
-            destination_file = bookmarks_get_destination_file(TRUE);
-            bookmarks_append_destinations(this_->former_destination, destination_file, NULL, 0,
-                                          type_former_itinerary_part, NULL, this_->recentdest_count);
-            navit_set_destination(this_, NULL, NULL, 0);
-            g_free(destination_file);
-            break;
+            if (nv->follow_curr > 1)
+                nv->follow_curr--;
+            else
+                nv->follow_curr = nv->follow;
         }
+        callback_list_call_attr_2(this_->attr_cbl, attr_position_coord_geo, this_, nv->vehicle);
+
+        /* Finally, if we reached our destination, stop navigation. */
+        if (this_->route) {
+            switch (route_destination_reached(this_->route)) {
+            case 1:
+                description = route_get_destination_description(this_->route, 0);
+                route_remove_waypoint(this_->route);
+                count = route_get_destination_count(this_->route);
+                pc = g_alloca(sizeof(*pc) * count);
+                route_get_destinations(this_->route, pc, count);
+                destination_file = bookmarks_get_destination_file(TRUE);
+                bookmarks_append_destinations(this_->former_destination, destination_file, pc, count,
+                                              type_former_itinerary_part, description, this_->recentdest_count);
+                g_free(destination_file);
+                g_free(description);
+                break;
+            case 2:
+                destination_file = bookmarks_get_destination_file(TRUE);
+                bookmarks_append_destinations(this_->former_destination, destination_file, NULL, 0,
+                                              type_former_itinerary_part, NULL, this_->recentdest_count);
+                navit_set_destination(this_, NULL, NULL, 0);
+                g_free(destination_file);
+                break;
+            }
+        }
+        profile(0, "return 5\n");
     }
-    profile(0, "return 5\n");
 }
 
 /**
@@ -3993,6 +4010,11 @@ void navit_destroy(struct navit *this_) {
     callback_destroy(this_->popup_callback);
     callback_destroy(this_->motion_timeout_callback);
     callback_destroy(this_->progress_cb);
+    if (this_->animation_timer) {
+        event_remove_timeout(this_->animation_timer);
+        this_->animation_timer = NULL;
+    }
+    callback_destroy(this_->animation_cb);
 
     navit_destroy_graphics_callbacks(this_);
 

@@ -53,6 +53,7 @@
 #include <math.h>  // IWYU pragma: keep for sqrt
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 struct callback_list;
 struct log;
@@ -80,6 +81,11 @@ struct vehicle {
     int angle;
     int speed;
     int sequence;
+    struct point interp_prev;
+    struct point interp_target;
+    struct timeval interp_t0;
+    int interp_duration;
+    int interpolating;
     GHashTable *log_to_cb;
     char *synthesized_nmea;
 };
@@ -87,7 +93,8 @@ struct vehicle {
 struct object_func vehicle_func;
 
 static void vehicle_set_default_name(struct vehicle *this);
-static void vehicle_draw_do(struct vehicle *this_);
+void vehicle_draw_do(struct vehicle *this_);
+void vehicle_interpolate(struct vehicle *this_);
 static void vehicle_log_nmea(struct vehicle *this_, struct log *log);
 static void vehicle_log_gpx(struct vehicle *this_, struct log *log);
 static void vehicle_log_textfile(struct vehicle *this_, struct log *log);
@@ -357,12 +364,28 @@ void vehicle_set_cursor(struct vehicle *this_, struct cursor *cursor, int overwr
  * @param speed The speed of the vehicle.
  */
 void vehicle_draw(struct vehicle *this_, struct graphics *gra, struct point *pnt, int angle, int speed) {
-    struct point sc;
+    struct point sc, old_pnt;
+    int same_target;
     if (angle < 0)
         angle += 360;
     dbg(lvl_debug, "enter this=%p gra=%p pnt=%p dir=%d speed=%d", this_, gra, pnt, angle, speed);
     dbg(lvl_debug, "point %d,%d", pnt->x, pnt->y);
+    old_pnt = this_->cursor_pnt;
     this_->cursor_pnt = *pnt;
+    same_target = this_->interpolating && this_->interp_target.x == pnt->x && this_->interp_target.y == pnt->y;
+    if (!same_target) {
+        if (this_->interpolating) {
+            this_->interp_prev = this_->interp_target;
+        } else if (this_->gra) {
+            this_->interp_prev.x = old_pnt.x + (this_->real_w / 2);
+            this_->interp_prev.y = old_pnt.y + (this_->real_h / 2);
+        } else {
+            this_->interp_prev = *pnt;
+        }
+        this_->interp_target = *pnt;
+        gettimeofday(&this_->interp_t0, NULL);
+        this_->interpolating = 1;
+    }
     this_->angle = angle;
     this_->speed = speed;
     if (!this_->cursor)
@@ -433,7 +456,47 @@ static void vehicle_set_default_name(struct vehicle *this_) {
     }
 }
 
-static void vehicle_draw_do(struct vehicle *this_) {
+void vehicle_interpolate(struct vehicle *this_) {
+    struct timeval now;
+    int elapsed;
+    double t;
+    int raw_x, raw_y;
+
+    if (!this_->interpolating)
+        return;
+
+    gettimeofday(&now, NULL);
+    elapsed = (now.tv_sec - this_->interp_t0.tv_sec) * 1000 + (now.tv_usec - this_->interp_t0.tv_usec) / 1000;
+
+    if (this_->interp_duration <= 0)
+        this_->interp_duration = 1000;
+
+    t = (double)elapsed / this_->interp_duration;
+    if (t > 1.0)
+        t = 1.0;
+
+    raw_x = this_->interp_prev.x + (int)(t * (this_->interp_target.x - this_->interp_prev.x));
+    raw_y = this_->interp_prev.y + (int)(t * (this_->interp_target.y - this_->interp_prev.y));
+
+    this_->cursor_pnt.x = raw_x - (this_->real_w / 2);
+    this_->cursor_pnt.y = raw_y - (this_->real_h / 2);
+
+    if (t >= 1.0)
+        this_->interpolating = 0;
+}
+
+int vehicle_animation_tick(struct vehicle *this_) {
+    if (!this_->interpolating)
+        return 0;
+    vehicle_interpolate(this_);
+    if (!this_->gra)
+        return 0;
+    graphics_draw_drag(this_->gra, &this_->cursor_pnt);
+    graphics_draw_mode(this_->gra, draw_mode_end);
+    return 1;
+}
+
+void vehicle_draw_do(struct vehicle *this_) {
     struct point p;
     struct cursor *cursor = this_->cursor;
     int speed = this_->speed;
@@ -442,6 +505,8 @@ static void vehicle_draw_do(struct vehicle *this_) {
     struct attr **attr;
     char *label = NULL;
     int match = 0;
+
+    vehicle_interpolate(this_);
 
     if (!this_->cursor || !this_->cursor->attrs || !this_->gra)
         return;
@@ -524,10 +589,14 @@ static char *vehicle_synthesize_nmea(struct vehicle *this_) {
     double lat, lng, speed = 0.0, direction = 0.0, height = 0.0;
     char lat_deg[4], lat_min[16], lng_deg[4], lng_min[16], height_str[16], speed_str[16], dir_str[16];
 
-    if (!this_->meth.position_attr_get)
+    if (!this_->meth.position_attr_get) {
+        dbg(lvl_debug, "no position_attr_get method");
         return NULL;
-    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr))
+    }
+    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr)) {
+        dbg(lvl_debug, "no coord_geo available");
         return NULL;
+    }
 
     lat = attr.u.coord_geo->lat;
     if (lat < 0) {
@@ -586,17 +655,23 @@ static void vehicle_log_nmea(struct vehicle *this_, struct log *log) {
     struct attr attr;
     char *nmea;
 
-    if (!this_->meth.position_attr_get)
+    if (!this_->meth.position_attr_get) {
+        dbg(lvl_error, "no position_attr_get method");
         return;
+    }
     if (this_->meth.position_attr_get(this_->priv, attr_position_nmea, &attr)) {
+        dbg(lvl_debug, "using native NMEA attr");
         log_write(log, attr.u.str, strlen(attr.u.str), 0);
         return;
     }
 
     nmea = vehicle_synthesize_nmea(this_);
     if (nmea) {
+        dbg(lvl_debug, "writing synthesized NMEA: %s", nmea);
         log_write(log, nmea, strlen(nmea), 0);
         g_free(nmea);
+    } else {
+        dbg(lvl_error, "NMEA synthesis returned NULL (no position fix?)");
     }
 }
 
@@ -817,9 +892,12 @@ static void vehicle_log_binfile(struct vehicle *this_, struct log *log) {
 static int vehicle_add_log(struct vehicle *this_, struct log *log) {
     struct callback *cb;
     struct attr type_attr;
-    if (!log_get_attr(log, attr_type, &type_attr, NULL))
+    if (!log_get_attr(log, attr_type, &type_attr, NULL)) {
+        dbg(lvl_error, "log has no type attribute");
         return 1;
+    }
 
+    dbg(lvl_debug, "adding log of type '%s'", type_attr.u.str);
     if (!strcmp(type_attr.u.str, "nmea")) {
         cb = callback_new_attr_2(callback_cast(vehicle_log_nmea), attr_position_coord_geo, this_, log);
     } else if (!strcmp(type_attr.u.str, "gpx")) {
