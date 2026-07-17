@@ -2298,6 +2298,37 @@ static int navit_cmd_announcer_toggle(struct navit *this_, char *function, struc
     return 0;
 }
 
+static void navit_prepare_speech_route(struct navit *this_) {
+    struct navigation *nav = this_->navigation;
+    struct map *map = NULL;
+    struct map_rect *mr = NULL;
+    struct item *item;
+    struct attr attr;
+    unsigned long long batch_id = 0;
+
+    if (!nav)
+        return;
+    map = navigation_get_map(nav);
+    if (!map)
+        return;
+
+    if (this_->speech)
+        batch_id = speech_batch_begin(this_->speech);
+
+    mr = map_rect_new(map, NULL);
+    if (!mr)
+        return;
+    while ((item = map_rect_get_item(mr))) {
+        if (item->type == type_nav_position || item->type == type_nav_none)
+            continue;
+        if (item_attr_get(item, attr_navigation_speech, &attr)) {
+            if (attr.u.str && *attr.u.str != '\0')
+                speech_prepare(this_->speech, attr.u.str, batch_id);
+        }
+    }
+    map_rect_destroy(mr);
+}
+
 void navit_speak(struct navit *this_) {
     struct navigation *nav = this_->navigation;
     struct map *map = NULL;
@@ -2325,6 +2356,8 @@ void navit_speak(struct navit *this_) {
             }
             navit_textfile_debug_log(this_, "type=announcement label=\"%s\"", attr.u.str);
         }
+
+        navit_prepare_speech_route(this_);
         map_rect_destroy(mr);
     }
 }

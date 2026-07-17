@@ -72,6 +72,18 @@ int speech_say(struct speech *this_, const char *text) {
     return (this_->meth.say)(this_->priv, text);
 }
 
+int speech_prepare(struct speech *this_, const char *text, unsigned long long batch_id) {
+    if (this_->meth.prepare)
+        return (this_->meth.prepare)(this_->priv, text, batch_id);
+    return 0;
+}
+
+unsigned long long speech_batch_begin(struct speech *this_) {
+    if (this_->meth.batch_begin)
+        return (this_->meth.batch_begin)(this_->priv);
+    return 0;
+}
+
 struct attr active = ATTR_INT(active, 1);
 struct attr *speech_default_attrs[] = {
     &active,
