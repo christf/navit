@@ -1,8 +1,7 @@
-include_directories( "${PROJECT_BINARY_DIR}")
-include_directories( "${PROJECT_SOURCE_DIR}")
-include_directories( "${CMAKE_CURRENT_SOURCE_DIR}")
-include_directories( "${CMAKE_CURRENT_BINARY_DIR}")
-include_directories( "${CMAKE_CURRENT_SOURCE_DIR}/support")
+target_include_directories(navit_config INTERFACE
+	"${CMAKE_CURRENT_SOURCE_DIR}"
+	"${CMAKE_CURRENT_BINARY_DIR}"
+)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nThis File should never appear on binary distributions\r\n" )
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nOnly Devs should ever see this file" )
 
@@ -35,7 +34,7 @@ endif()
 
 foreach ( PLUGIN_PATH ${ALL_PLUGINS})
 	if (${PLUGIN_PATH})
-		include_directories( "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_PATH}")
+		target_include_directories(navit_config INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_PATH}")
 
 		string(REPLACE "/" "_" MODULE_INC ${PLUGIN_PATH})
 		list(APPEND NAVIT_SUPPORT_LIBS ${MODULE_INC})
@@ -44,7 +43,7 @@ endforeach()
 
 foreach ( MODULE_PATH ${ALL_MODULES})
 	if ( ${MODULE_PATH} )
-		include_directories( "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PATH}")
+		target_include_directories(navit_config INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PATH}")
 
 		string(REPLACE "/" "_" MODULE_INC ${MODULE_PATH})
 		list(APPEND MODULES_PROTOTYPE "\nvoid\tmodule_${MODULE_INC}_init(void)")
@@ -82,6 +81,7 @@ if(NOT ANDROID)
 		add_custom_command(OUTPUT resources/Default.png COMMAND convert -scale 79x79 -crop 60x60+8+19 ${CMAKE_CURRENT_SOURCE_DIR}/icons/desktop_icons/128x128/navit.png resources/Default.png)
 	endif()
 	add_executable(navit ${NAVIT_START_SRC})
+	target_link_libraries (navit PRIVATE navit_compile_options)
 	target_link_libraries (navit PUBLIC ${NAVIT_LIBNAME})
 	if(DEFINED NAVIT_BINARY)
 		set_target_properties(navit PROPERTIES OUTPUT_NAME ${NAVIT_BINARY})
@@ -107,21 +107,16 @@ else(SHARED_LIBNAVIT)
 	add_library (${NAVIT_LIBNAME} STATIC ${NAVIT_SRC} )
 endif(SHARED_LIBNAVIT)
 
-if(NOT MSVC AND NOT WINCE)
-	SET(NAVIT_LIBS ${NAVIT_LIBS} m)
-endif(NOT MSVC AND NOT WINCE)
-target_link_libraries(${NAVIT_LIBNAME} ${MODULES_NAME} ${NAVIT_SUPPORT_LIBS} ${NAVIT_LIBS} )
+target_link_libraries(${NAVIT_LIBNAME} PRIVATE ${MODULES_NAME} ${NAVIT_SUPPORT_LIBS} navit_deps)
+target_link_libraries(${NAVIT_LIBNAME} PRIVATE navit_config navit_compile_options)
 # The navit target is C-only, so the NDK does not inject the C++ runtime via
 # CMAKE_CXX_STANDARD_LIBRARIES. The curl prefab (boringssl/nghttp2) is built as
 # C++ and its static archives need operator delete / std::sort etc., so link the
 # C++ static runtime explicitly or the final link of libnavit.so fails.
 if(ANDROID)
-	target_link_libraries(${NAVIT_LIBNAME} c++_static c++abi)
+	target_link_libraries(${NAVIT_LIBNAME} PRIVATE c++_static c++abi)
 endif(ANDROID)
 set_target_properties(${NAVIT_LIBNAME} PROPERTIES COMPILE_DEFINITIONS "MODULE=navit;LIBDIR=\"${CMAKE_INSTALL_PREFIX}/${LIB_DIR}\";PREFIX=\"${CMAKE_INSTALL_PREFIX}\"")
-if (DEFINED NAVIT_COMPILE_FLAGS)
-	set_target_properties(${NAVIT_LIBNAME} PROPERTIES COMPILE_FLAGS "${NAVIT_COMPILE_FLAGS}")
-endif()
 
 add_custom_command(
 	OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/navit.dtd"
