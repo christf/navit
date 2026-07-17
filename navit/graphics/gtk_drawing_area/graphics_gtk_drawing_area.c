@@ -17,7 +17,6 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#define GDK_ENABLE_BROKEN
 #include "callback.h"
 #include "color.h"
 #include "config.h"
@@ -40,14 +39,14 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#if !defined(GDK_KEY_Book) || !defined(GDK_Book) || !defined(GDK_Calendar)
+#if !defined(GDK_KEY_Book) || !defined(GDK_KEY_Calendar)
 #    include <X11/XF86keysym.h>
 #endif
 #ifdef HAVE_IMLIB2
 #    include <Imlib2.h>
 #endif
 #ifndef _WIN32
-#    include <gdk/gdkx.h>
+#    include <gdk/x11/gdkx.h>
 #endif
 #ifndef GDK_KEY_Book
 #    define GDK_KEY_Book XF86XK_Book
@@ -57,7 +56,6 @@
 #endif
 
 struct graphics_priv {
-    GdkEventButton button_event;
     int button_timeout;
     GtkWidget *widget;
     GtkWidget *win;
@@ -85,6 +83,8 @@ struct graphics_priv {
     int timeout;
     int delay;
     char *window_title;
+    guint tick_callback_id;
+    int needs_redraw;
 };
 
 struct graphics_gc_priv {
@@ -128,12 +128,11 @@ static void graphics_destroy(struct graphics_priv *gr) {
     if (gr->cairo)
         cairo_destroy(gr->cairo);
     if (!gr->parent) {
-        dbg(lvl_debug, "widget %p", gr->widget);
-        if (gr->widget)
-            gtk_widget_destroy(gr->widget);
-        dbg(lvl_debug, "enter win %p", gr->win);
+        dbg(lvl_debug, "widget %p win %p", gr->widget, gr->win);
+        if (gr->tick_callback_id)
+            gtk_widget_remove_tick_callback(gr->widget, gr->tick_callback_id);
         if (gr->win)
-            gtk_widget_destroy(gr->win);
+            gtk_window_destroy(GTK_WINDOW(gr->win));
         g_free(gr->window_title);
         while (gr->overlays) {
             struct graphics_priv *overlay = gr->overlays;
@@ -618,59 +617,65 @@ static void background_gc(struct graphics_priv *gr, struct graphics_gc_priv *gc)
 
 static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
     if (mode == draw_mode_end) {
-        // Just invalidate the whole window. We could only the invalidate the area of
-        // graphics_priv, but that is probably not significantly faster.
-        gdk_window_invalidate_rect(gr->widget->window, NULL, TRUE);
+        gr->needs_redraw = 1;
+        gtk_widget_queue_draw(gr->widget);
     }
 }
 
-/* Events */
+/* Drawing — GTK4 draw function replaces expose + configure */
 
-static gint configure(GtkWidget *widget, GdkEventConfigure *event, gpointer user_data) {
-    struct graphics_priv *gra = user_data;
-    if (!gra->visible)
-        return TRUE;
-#ifndef _WIN32
-    dbg(lvl_debug, "window=%lu", GDK_WINDOW_XID(widget->window));
-#endif
-    gra->width = widget->allocation.width;
-    gra->height = widget->allocation.height;
-    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, gra->width, gra->height);
-    if (gra->cairo)
-        cairo_destroy(gra->cairo);
-    gra->cairo = cairo_create(surface);
-    cairo_surface_destroy(surface);
-    cairo_set_antialias(gra->cairo, CAIRO_ANTIALIAS_GOOD);
-    callback_list_call_attr_2(gra->cbl, attr_resize, GINT_TO_POINTER(gra->width), GINT_TO_POINTER(gra->height));
-    return TRUE;
-}
-
-static gint expose(GtkWidget *widget, GdkEventExpose *event, gpointer user_data) {
+static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
     struct graphics_priv *gra = user_data;
     struct graphics_gc_priv *background_gc = gra->background_gc;
     struct graphics_priv *overlay;
 
     gra->visible = 1;
-    if (!gra->cairo)
-        configure(widget, NULL, user_data);
 
-    cairo_t *cairo = gdk_cairo_create(widget->window);
-    if (gra->p.x || gra->p.y) {
-        set_drawing_color(cairo, background_gc->c);
-        cairo_paint(cairo);
+    /* Handle resize inline (replaces configure handler) */
+    if (gra->width != width || gra->height != height) {
+#ifndef _WIN32
+        dbg(lvl_debug, "resize %dx%d", width, height);
+#endif
+        gra->width = width;
+        gra->height = height;
+        cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, gra->width, gra->height);
+        if (gra->cairo)
+            cairo_destroy(gra->cairo);
+        gra->cairo = cairo_create(surface);
+        cairo_surface_destroy(surface);
+        cairo_set_antialias(gra->cairo, CAIRO_ANTIALIAS_GOOD);
+        callback_list_call_attr_2(gra->cbl, attr_resize, GINT_TO_POINTER(gra->width), GINT_TO_POINTER(gra->height));
     }
-    cairo_set_source_surface(cairo, cairo_get_target(gra->cairo), gra->p.x, gra->p.y);
-    cairo_paint(cairo);
+
+    if (!gra->cairo)
+        return;
+
+    if (gra->p.x || gra->p.y) {
+        set_drawing_color(cr, background_gc->c);
+        cairo_paint(cr);
+    }
+    cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x, gra->p.y);
+    cairo_paint(cr);
+
+    GdkRectangle area_rect = {0, 0, width, height};
 
     overlay = gra->overlays;
     while (overlay) {
-        overlay_draw(gra, overlay, &event->area, cairo);
+        overlay_draw(gra, overlay, &area_rect, cr);
         overlay = overlay->next;
     }
-
-    cairo_destroy(cairo);
-    return FALSE;
 }
+
+static gboolean on_frame_tick(GtkWidget *widget, GdkFrameClock *frame_clock, gpointer user_data) {
+    struct graphics_priv *gr = user_data;
+    if (gr->needs_redraw) {
+        gr->needs_redraw = 0;
+        gtk_widget_queue_draw(widget);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/* Events — GTK4 event controllers */
 
 static int tv_delta(struct timeval *old, struct timeval *new) {
     if (new->tv_sec - old->tv_sec >= INT_MAX / 1000)
@@ -678,91 +683,80 @@ static int tv_delta(struct timeval *old, struct timeval *new) {
     return (new->tv_sec - old->tv_sec) * 1000 + (new->tv_usec - old->tv_usec) / 1000;
 }
 
-static gint button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data) {
+static void on_gesture_click_pressed(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     struct graphics_priv *this = user_data;
     struct point p;
     struct timeval tv;
     struct timezone tz;
+    guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 
     gettimeofday(&tv, &tz);
 
-    if (event->button < 8) {
-        if (tv_delta(&this->button_press[event->button], &tv) < this->timeout)
-            return FALSE;
-        this->button_press[event->button] = tv;
-        this->button_release[event->button].tv_sec = 0;
-        this->button_release[event->button].tv_usec = 0;
+    if (button < 8) {
+        if (tv_delta(&this->button_press[button], &tv) < this->timeout)
+            return;
+        this->button_press[button] = tv;
+        this->button_release[button].tv_sec = 0;
+        this->button_release[button].tv_usec = 0;
     }
-    p.x = event->x;
-    p.y = event->y;
-    callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(event->button), (void *)&p);
-    return FALSE;
+    p.x = (int)x;
+    p.y = (int)y;
+    callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(button), (void *)&p);
 }
 
-static gint button_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data) {
+static void on_gesture_click_released(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     struct graphics_priv *this = user_data;
     struct point p;
     struct timeval tv;
     struct timezone tz;
+    guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 
     gettimeofday(&tv, &tz);
 
-    if (event->button < 8) {
-        if (tv_delta(&this->button_release[event->button], &tv) < this->timeout)
-            return FALSE;
-        this->button_release[event->button] = tv;
-        this->button_press[event->button].tv_sec = 0;
-        this->button_press[event->button].tv_usec = 0;
+    if (button < 8) {
+        if (tv_delta(&this->button_release[button], &tv) < this->timeout)
+            return;
+        this->button_release[button] = tv;
+        this->button_press[button].tv_sec = 0;
+        this->button_press[button].tv_usec = 0;
     }
-    p.x = event->x;
-    p.y = event->y;
-    callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(event->button), (void *)&p);
-    return FALSE;
+    p.x = (int)x;
+    p.y = (int)y;
+    callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(button), (void *)&p);
 }
 
-static gint scroll(GtkWidget *widget, GdkEventScroll *event, gpointer user_data) {
+static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data) {
     struct graphics_priv *this = user_data;
     struct point p;
     int button;
+    double x, y;
+    GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller));
+    gdk_event_get_position(event, &x, &y);
 
-    p.x = event->x;
-    p.y = event->y;
-    switch (event->direction) {
-    case GDK_SCROLL_UP:
+    p.x = (int)x;
+    p.y = (int)y;
+    if (dy < 0)
         button = 4;
-        break;
-    case GDK_SCROLL_DOWN:
+    else if (dy > 0)
         button = 5;
-        break;
-    default:
+    else
         button = -1;
-        break;
-    }
     if (button != -1) {
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(button), (void *)&p);
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(button), (void *)&p);
     }
-    return FALSE;
 }
 
-static gint motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data) {
+static void on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
     struct graphics_priv *this = user_data;
     struct point p;
 
-    p.x = event->x;
-    p.y = event->y;
+    p.x = (int)x;
+    p.y = (int)y;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
-    return FALSE;
 }
 
-/* *
- * * Exit navit (X pressed)
- * * @param widget active widget
- * * @param event the event (delete_event)
- * * @param user_data Pointer to private data structure
- * * @returns TRUE
- * */
-static gint delete(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
+static gboolean close_request(GtkWindow *win, gpointer user_data) {
     struct graphics_priv *this = user_data;
     dbg(lvl_debug, "enter this->win=%p", this->win);
     if (this->delay & 2) {
@@ -774,15 +768,16 @@ static gint delete(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
     return TRUE;
 }
 
-static gint keypress(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
+static gboolean key_pressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state,
+                            gpointer user_data) {
     struct graphics_priv *this = user_data;
     int len, ucode;
     char key[8];
-    ucode = gdk_keyval_to_unicode(event->keyval);
+    ucode = gdk_keyval_to_unicode(keyval);
     len = g_unichar_to_utf8(ucode, key);
     key[len] = '\0';
 
-    switch (event->keyval) {
+    switch (keyval) {
     case GDK_KEY_Up:
         key[0] = NAVIT_KEY_UP;
         key[1] = '\0';
@@ -846,8 +841,7 @@ static gint keypress(GtkWidget *widget, GdkEventKey *event, gpointer user_data) 
     if (key[0])
         callback_list_call_attr_1(this->cbl, attr_keypress, (void *)key);
     else
-        dbg(lvl_debug, "keyval 0x%x", event->keyval);
-
+        dbg(lvl_debug, "keyval 0x%x", keyval);
     return FALSE;
 }
 
@@ -859,7 +853,7 @@ static void overlay_disable(struct graphics_priv *gr, int disabled) {
         if (gr->parent) {
             GdkRectangle r;
             overlay_rect(gr->parent, gr, &r);
-            gdk_window_invalidate_rect(gr->parent->widget->window, &r, TRUE);
+            gtk_widget_queue_draw(gr->parent->widget);
         }
     }
 }
@@ -915,25 +909,30 @@ static void overlay_resize(struct graphics_priv *this, struct point *p, int w, i
 }
 
 static void get_data_window(struct graphics_priv *this, unsigned int xid) {
-    if (!xid)
-        this->win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    else
-        this->win = gtk_plug_new(xid);
-    gtk_window_set_default_size(GTK_WINDOW(this->win), this->win_w, this->win_h);
-    dbg(lvl_debug, "h= %i, w= %i", this->win_h, this->win_w);
-    gtk_window_set_title(GTK_WINDOW(this->win), this->window_title);
-    gtk_window_set_wmclass(GTK_WINDOW(this->win), "navit", this->window_title);
-    gtk_widget_realize(this->win);
-    if (gtk_widget_get_parent(this->widget))
-        gtk_widget_reparent(this->widget, this->win);
-    else
-        gtk_container_add(GTK_CONTAINER(this->win), this->widget);
-    gtk_widget_show_all(this->win);
-    GTK_WIDGET_SET_FLAGS(this->widget, GTK_CAN_FOCUS);
+    GtkEventController *key_controller;
+
+    if (!this->win) {
+        this->win = gtk_window_new();
+        gtk_window_set_default_size(GTK_WINDOW(this->win), this->win_w, this->win_h);
+        dbg(lvl_debug, "h= %i, w= %i", this->win_h, this->win_w);
+        gtk_window_set_title(GTK_WINDOW(this->win), this->window_title);
+
+        /* Close request */
+        g_signal_connect(this->win, "close-request", G_CALLBACK(close_request), this);
+
+        /* Key controller — created once with the window */
+        key_controller = gtk_event_controller_key_new();
+        g_signal_connect(key_controller, "key-pressed", G_CALLBACK(key_pressed), this);
+        gtk_widget_add_controller(this->widget, key_controller);
+    }
+
+    gtk_window_set_child(GTK_WINDOW(this->win), this->widget);
+
+    gtk_widget_set_visible(this->win, TRUE);
+
+    gtk_widget_set_focusable(this->widget, TRUE);
     gtk_widget_set_sensitive(this->widget, TRUE);
     gtk_widget_grab_focus(this->widget);
-    g_signal_connect(G_OBJECT(this->widget), "key-press-event", G_CALLBACK(keypress), this);
-    g_signal_connect(G_OBJECT(this->win), "delete_event", G_CALLBACK(delete), this);
 }
 
 static int set_attr(struct graphics_priv *gr, struct attr *attr) {
@@ -987,9 +986,6 @@ static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphi
     return this;
 }
 
-static int gtk_argc;
-static char **gtk_argv = {NULL};
-
 static int graphics_gtk_drawing_area_fullscreen(struct window *w, int on) {
     struct graphics_priv *gr = w->priv;
     if (on)
@@ -1015,8 +1011,17 @@ static void *get_data(struct graphics_priv *this, char const *type) {
     if (!strcmp(type, "gtk_widget"))
         return this->widget;
 #ifndef _WIN32
-    if (!strcmp(type, "xwindow_id"))
-        return (void *)GDK_WINDOW_XID(this->win ? this->win->window : this->widget->window);
+    if (!strcmp(type, "xwindow_id")) {
+        GdkSurface *surface;
+        if (this->win)
+            surface = gtk_native_get_surface(GTK_NATIVE(this->win));
+        else
+            surface = gtk_native_get_surface(GTK_NATIVE(this->widget));
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+        return (void *)gdk_x11_surface_get_xid(surface);
+#    pragma GCC diagnostic pop
+    }
 #endif
     if (!strcmp(type, "window")) {
         char *cp = getenv("NAVIT_XID");
@@ -1052,9 +1057,18 @@ static void *get_data(struct graphics_priv *this, char const *type) {
  */
 static navit_float get_dpi(struct graphics_priv *gr) {
     gdouble dpi = 96;
-    GdkScreen *screen = gtk_widget_get_screen(gr->widget);
-    if (screen != NULL) {
-        dpi = gdk_screen_get_resolution(screen);
+    GdkDisplay *display = gtk_widget_get_display(gr->widget);
+    if (display != NULL) {
+        GtkNative *native = gtk_widget_get_native(gr->widget);
+        if (native != NULL) {
+            GdkSurface *surface = gtk_native_get_surface(native);
+            if (surface != NULL) {
+                GdkMonitor *monitor = gdk_display_get_monitor_at_surface(display, surface);
+                if (monitor != NULL) {
+                    dpi = 96 * gdk_monitor_get_scale_factor(monitor);
+                }
+            }
+        }
     }
     return (navit_float)dpi;
 }
@@ -1112,6 +1126,9 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     int i;
     GtkWidget *draw;
     struct attr *attr;
+    GtkGesture *click;
+    GtkEventController *motion_controller;
+    GtkEventController *scroll_controller;
 
     if (!event_request_system("glib", "graphics_gtk_drawing_area_new"))
         return NULL;
@@ -1137,15 +1154,29 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     else
         this->window_title = g_strdup("Navit");
     this->cbl = cbl;
-    gtk_widget_set_events(draw, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK
-                                    | GDK_KEY_PRESS_MASK);
-    g_signal_connect(G_OBJECT(draw), "expose_event", G_CALLBACK(expose), this);
-    g_signal_connect(G_OBJECT(draw), "configure_event", G_CALLBACK(configure), this);
-    g_signal_connect(G_OBJECT(draw), "button_press_event", G_CALLBACK(button_press), this);
-    g_signal_connect(G_OBJECT(draw), "button_release_event", G_CALLBACK(button_release), this);
-    g_signal_connect(G_OBJECT(draw), "scroll_event", G_CALLBACK(scroll), this);
-    g_signal_connect(G_OBJECT(draw), "motion_notify_event", G_CALLBACK(motion_notify), this);
-    g_signal_connect(G_OBJECT(draw), "delete_event", G_CALLBACK(delete), nav);
+
+    /* Draw function (replaces expose_event + configure_event) */
+    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(draw), draw_func, this, NULL);
+
+    /* Frame clock tick callback for smooth animation */
+    this->tick_callback_id = gtk_widget_add_tick_callback(draw, on_frame_tick, this, NULL);
+
+    /* Click gesture (replaces button_press_event / button_release_event) */
+    click = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click), 0); /* 0 = all buttons */
+    g_signal_connect(click, "pressed", G_CALLBACK(on_gesture_click_pressed), this);
+    g_signal_connect(click, "released", G_CALLBACK(on_gesture_click_released), this);
+    gtk_widget_add_controller(draw, GTK_EVENT_CONTROLLER(click));
+
+    /* Motion controller (replaces motion_notify_event) */
+    motion_controller = gtk_event_controller_motion_new();
+    g_signal_connect(motion_controller, "motion", G_CALLBACK(on_motion), this);
+    gtk_widget_add_controller(draw, motion_controller);
+
+    /* Scroll controller (replaces scroll_event) */
+    scroll_controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+    g_signal_connect(scroll_controller, "scroll", G_CALLBACK(on_scroll), this);
+    gtk_widget_add_controller(draw, scroll_controller);
 
     for (i = 0; i < 8; i++) {
         this->button_press[i].tv_sec = 0;
@@ -1158,8 +1189,7 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
 }
 
 void plugin_init(void) {
-    gtk_init(&gtk_argc, &gtk_argv);
-    gtk_set_locale();
+    gtk_init();
 #ifdef HAVE_API_WIN32
     setlocale(LC_NUMERIC, "C"); /* WIN32 gtk resets LC_NUMERIC */
 #endif
