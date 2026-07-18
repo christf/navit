@@ -323,6 +323,8 @@ static void tile_collector_add_siblings(char *tile, struct coastline_tile *ct, s
     struct item_bin_sink *out = data->sink->priv_data[1];
     int edges = ct->edges;
     int debug = 0;
+    if (data->level < 14 && edges != 15)
+        return;
     if (debug)
         fprintf(stderr, "%s (%c) has %d edges active\n", tile, t, edges);
     if (t == 'a' && (edges & 1))
@@ -475,7 +477,13 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     for (i = 14; i > 0; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
-        foreach_tile(&data, tile_collector_add_siblings2);
+        foreach_tile(&data, tile_collector_add_siblings);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings);
         fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "*");
@@ -483,15 +491,7 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
         fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "*");
-        if (i == 14) {
-            foreach_tile(&data, tile_collector_add_siblings);
-            fprintf(stderr, "*");
-            foreach_tile(&data, tile_collector_add_siblings);
-            fprintf(stderr, "*");
-            foreach_tile(&data, tile_collector_add_siblings);
-            fprintf(stderr, "*");
-            foreach_tile(&data, tile_collector_add_siblings);
-        }
+        foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "\n");
     }
     g_hash_table_destroy(data.tile_edges);
