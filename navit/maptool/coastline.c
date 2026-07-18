@@ -40,6 +40,28 @@ static int distance_from_ll(struct coord *c, struct rect *bbox) {
     return -1;
 }
 
+static struct coord nearest_boundary_point(struct coord *c, struct rect *bbox) {
+    struct coord result;
+    int dx_left = abs(c->x - bbox->l.x);
+    int dx_right = abs(c->x - bbox->h.x);
+    int dy_bottom = abs(c->y - bbox->l.y);
+    int dy_top = abs(c->y - bbox->h.y);
+    if (dx_left <= dx_right && dx_left <= dy_bottom && dx_left <= dy_top) {
+        result.x = bbox->l.x;
+        result.y = c->y;
+    } else if (dx_right <= dy_bottom && dx_right <= dy_top) {
+        result.x = bbox->h.x;
+        result.y = c->y;
+    } else if (dy_bottom <= dy_top) {
+        result.x = c->x;
+        result.y = bbox->l.y;
+    } else {
+        result.x = c->x;
+        result.y = bbox->h.y;
+    }
+    return result;
+}
+
 static struct geom_poly_segment *find_next(struct rect *bbox, GList *segments, struct coord *c, int exclude,
                                            struct coord *ci) {
     int min = INT_MAX, search = distance_from_ll(c, bbox) + (exclude ? 1 : 0);
@@ -245,6 +267,13 @@ static void tile_collector_process_tile(char *tile, int *tile_data, struct coast
             end = cn[1];
             if (distance_from_ll(&end, &bbox) == -1) {
                 dbg(lvl_debug, "incomplete");
+                item_bin_add_coord(ib, &end, 1);
+                struct coord boundary_pt = nearest_boundary_point(&end, &bbox);
+                item_bin_add_coord(ib, &boundary_pt, 1);
+                close_polygon(ib, &boundary_pt, &poly_start, 1, &bbox, &edges);
+                item_bin_add_attr_longlong(ib, attr_osm_wayid, ct->wayid);
+                item_bin_write_to_sink(ib, out, NULL);
+                end = poly_start;
                 break;
             }
             first = find_next(&bbox, sorted_segments, &end, 1, cn);
