@@ -445,6 +445,11 @@ int vehicle_get_cursor_data(struct vehicle *this, struct point *pnt, int *angle,
     return 1;
 }
 
+void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
+    center->x = this_->cursor_pnt.x + this_->real_w / 2;
+    center->y = this_->cursor_pnt.y + this_->real_h / 2;
+}
+
 static void vehicle_set_default_name(struct vehicle *this_) {
     struct attr default_name;
     if (!attr_search(this_->attrs, attr_name)) {

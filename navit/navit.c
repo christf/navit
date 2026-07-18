@@ -400,6 +400,7 @@ void navit_draw_async(struct navit *this_, int async) {
         this_->blocked |= 2;
         return;
     }
+    graphics_draw_drag(this_->gra, NULL);
     transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
@@ -413,11 +414,31 @@ void navit_draw(struct navit *this_) {
 static int navit_animation_tick(void *data) {
     struct navit *this_ = data;
     GList *l = this_->vehicles;
+    int primary_animating = 0;
+
     while (l) {
         struct navit_vehicle *nv = l->data;
-        vehicle_animation_tick(nv->vehicle);
+        if (nv == this_->vehicle)
+            primary_animating = vehicle_animation_tick(nv->vehicle);
+        else
+            vehicle_animation_tick(nv->vehicle);
         l = g_list_next(l);
     }
+
+    if (primary_animating && this_->vehicle && this_->gra) {
+        struct point cursor_center, render_pos;
+        enum projection pro;
+
+        vehicle_get_cursor_center(this_->vehicle->vehicle, &cursor_center);
+        pro = transform_get_projection(this_->trans_cursor);
+        if (pro && transform_point(this_->trans_cursor, pro, &this_->vehicle->coord, &render_pos)) {
+            struct point delta;
+            delta.x = cursor_center.x - render_pos.x;
+            delta.y = cursor_center.y - render_pos.y;
+            graphics_draw_drag(this_->gra, &delta);
+        }
+    }
+
     return TRUE;
 }
 

@@ -61,6 +61,7 @@ void vehicle_interpolate(struct vehicle *this_);
 void vehicle_draw_do(struct vehicle *this_);
 int vehicle_animation_tick(struct vehicle *this_);
 int vehicle_get_cursor_data(struct vehicle *this_, struct point *pnt, int *angle, int *speed);
+void vehicle_get_cursor_center(struct vehicle *this_, struct point *center);
 void vehicle_log_gpx_add_tag(char *tag, char **logstr);
 struct vehicle *vehicle_ref(struct vehicle *this_);
 void vehicle_unref(struct vehicle *this_);
