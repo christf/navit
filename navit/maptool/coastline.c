@@ -352,7 +352,7 @@ static int tile_sibling_edges(GHashTable *hash, char *tile, char c) {
     ct = g_hash_table_lookup(hash, tile2);
     if (ct)
         return ct->edges;
-    return 15;
+    return 0;
 }
 
 #if 0
