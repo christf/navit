@@ -512,6 +512,10 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
         /* About to resize. Cancel drawing whatever it is */
         graphics_draw_cancel(this_->gra, this_->displaylist);
         navit_draw_async(this_, 1);
+        if (!this_->animation_timer) {
+            this_->animation_cb = callback_new_1(callback_cast(navit_animation_tick), this_);
+            this_->animation_timer = event_add_timeout(33, 1, this_->animation_cb);
+        }
     }
 }
 

@@ -618,6 +618,8 @@ static void background_gc(struct graphics_priv *gr, struct graphics_gc_priv *gc)
 static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
     if (mode == draw_mode_end) {
         gr->needs_redraw = 1;
+        if (gr->parent)
+            gr->parent->needs_redraw = 1;
         gtk_widget_queue_draw(gr->widget);
     }
 }
