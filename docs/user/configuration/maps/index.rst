@@ -21,7 +21,6 @@ Map + Route                    EU       > 4y
    :maxdepth: 1
    :caption: Map Plugins
 
-   binfile
    Csv
    Custom_POIs
    Garmin_maps

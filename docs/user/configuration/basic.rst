@@ -135,6 +135,17 @@ See :doc:`advanced`
    basic/vehicle
    basic/maps
    basic/layout
+   basic/coordinate_formats
+   basic/icons
+   basic/internal_gui
+   basic/menu_configurations
+   basic/layout_examples
+   basic/menu_overview
+   basic/osd
+   basic/osd_layouts
+   basic/speech
+   basic/vehicle_profile_flags
+   basic/vehicle_profiles
 
 :doc:`basic/general`
 

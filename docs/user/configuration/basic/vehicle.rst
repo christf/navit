@@ -2,7 +2,7 @@
 
 Vehicle Options
 ===============
-It's important to understand the separate but linked Navit concepts of a **vehicle** and [[Vehicleprofile| **vehicleprofile**]] element. A vehicle defines the source of positional data (suchas a USB GPS device), and how to present that data to the user on the map, where the vehicleprofile defines all aspects of routing.
+It's important to understand the separate but linked Navit concepts of a **vehicle** and **vehicleprofile** element. A vehicle defines the source of positional data (suchas a USB GPS device), and how to present that data to the user on the map, where the vehicleprofile defines all aspects of routing.
 
 A simple vehicle definition looks like this:
 
@@ -95,7 +95,7 @@ To record your trip , you can add a sub-instance "log" to the vehicle. It is pos
 This will give a log file named YearMonthDaySequencenumber.gpx/.nmea which will be kept in memory and flushed to disk when it is 1048576 bytes large or the oldest data is older than 900 seconds.
 .. how to define, where the file get's stored?
 
-To display your track for more than one hour, you must use [[binfile]] to create a cache file that get's display
+To display your track for more than one hour, you must use binfile to create a cache file that get's display
 .. do I need to add it as a map source?
 
 .. code-block:: xml
@@ -103,11 +103,11 @@ To display your track for more than one hour, you must use [[binfile]] to create
  <log type="binfile" data="track.bin" flush_size="0"/>
 
 
-For customizing what is stored, see [[GPX]]
+For customizing what is stored, see GPX
 
 Vehicleprofile
 --------------
-[[Vehicleprofile | Profiles to add in the navit.xml]]
+Profiles to add in the navit.xml
 <br/>
 ..  this is tricky, here we need a step by step introduction
 
@@ -125,11 +125,10 @@ Defines the behaviour of the routing and are usually linked to a vehicle section
     <roadprofile item_types="ferry" speed="40" />
   </vehicleprofile>
 
-For details on the flags, see [[Vehicle profile flags]].
+For details on the flags, see :doc:`vehicle_profile_flags`.
 The speeds are in km/h.
 
 Only the vehicle profile names "car", "bike" and "pedestrian" are translated in the GUI.
 
 
-[[Category:Customizing]]
-[[Category:Configuration]]
+

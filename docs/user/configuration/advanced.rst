@@ -13,6 +13,10 @@ The rest of this webpage is meant for advanced/power users who'd like to fiddle 
    advanced/navit_commands
    integrations
    advanced/options
+   advanced/third_party_tools
+   advanced/full_options_reference
+   advanced/qml_gui
+   advanced/qml2_gui
    maps/index
    Layout
    Vehicleprofile

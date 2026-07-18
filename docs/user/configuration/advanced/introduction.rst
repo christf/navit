@@ -33,7 +33,7 @@ espeak
 
     <speech type="cmdline" data="espeak -s 150 -v english_rp %s"/>
 
-Will use espeak instead, for those who want Navit to speak to them in English, at 150 words per minute. The ''%s'' is filled in by Navit when sent to the speech synthesis software (with something like "Turn left" or whatever is appropriate at the time). If you need more features, you should use an external wrapper script which can contain anything supported by your shell (see [[Translations]]).
+Will use espeak instead, for those who want Navit to speak to them in English, at 150 words per minute. The ''%s'' is filled in by Navit when sent to the speech synthesis software (with something like "Turn left" or whatever is appropriate at the time). If you need more features, you should use an external wrapper script which can contain anything supported by your shell (see Translations).
 
 festival
 ~~~~~~~~
@@ -122,7 +122,7 @@ To have Navit start up in silent mode, insert ``active="0"`` somewhere in your `
     <speech type="android" cps="15" active="0"/>
 
 
-In this case, you should place a ``toggle_announcer`` item in your [[OSD]] configuration, or add a menu item so you can enable speech output when you need it.
+In this case, you should place a ``toggle_announcer`` item in your OSD configuration, or add a menu item so you can enable speech output when you need it.
 
 
 Splitting navit.xml

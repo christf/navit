@@ -59,7 +59,7 @@ There are some options available for the ``gui`` tag which are used by all the G
 * **pitch** - The pitch value to pitch the map to when selecting 3D mode from the menus.
 * **dimensions** - w="1024" h="600"
 
-The following example uses the `internal` GUI, and starts Navit up in fullscreen mode, and will pitch the map to 35 degrees when 3D mode is selected from the menu. Note that to start Navit in 3D mode by default, [[#Initial 3D pitch|change the `pitch` value in the `navit` tag]]:
+The following example uses the `internal` GUI, and starts Navit up in fullscreen mode, and will pitch the map to 35 degrees when 3D mode is selected from the menu. Note that to start Navit in 3D mode by default, :ref:`change the pitch value in the navit tag <configuration_general>`:
 
 .. code-block:: xml
 
@@ -67,7 +67,7 @@ The following example uses the `internal` GUI, and starts Navit up in fullscreen
 
 Internal GUI
 ~~~~~~~~~~~~
-The first GUI is embedded in Navit core and is primarily aimed at [[touchscreen]] devices, or those devices with small screens (such as netbooks). However, this GUI also works very well on desktops and laptops.
+The first GUI is embedded in Navit core and is primarily aimed at touchscreen devices, or those devices with small screens (such as netbooks). However, this GUI also works very well on desktops and laptops.
 
 .. code-block:: xml
 
@@ -81,7 +81,7 @@ A number of options specific to the ``internal`` GUI are available. These includ
 * **icon_xs** - The size that extra-small style icons should be scaled to (e.g. country flag on town search).
 * **icon_s** - The size that small style icons should be scaled to (e.g. icons of ``internal`` GUI toolbar).
 * **icon_l** - The size that large style icons should be scaled to (e.g. icons of internal GUI menu).
-* **menu_on_map_click** - Toggles the ability to bring up the menu screen when clicking on the map. See the [[Internal_Gui#Menu_Configuration|``internal`` GUI page]] for more information.
+* **menu_on_map_click** - Toggles the ability to bring up the menu screen when clicking on the map. See the :doc:`internal_gui` page for more information.
 
 An example ``gui`` tag using the previous options is shown below:
 
@@ -89,7 +89,7 @@ An example ``gui`` tag using the previous options is shown below:
 
 	<gui type="internal" enabled="yes" font_size="250" icon_xs="48" icon_s="48" icon_l="64">
 
-More options are discussed on the [[Internal Gui]] and the [[Configuration/Full_list_of_options|full list of options]].
+More options are discussed on the :doc:`internal_gui` and the :doc:`../advanced/full_options_reference`.
 
 GTK GUI
 ~~~~~~~

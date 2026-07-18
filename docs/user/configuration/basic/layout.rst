@@ -5,7 +5,7 @@ Layout Options
 Layouts
 -------
 A layout defines how to **render a map**.  Layouts are fully customisable, from the road colours and widths to size and type of icons to display for specific POIs. The layout is also where the **cursor** (i.e. the shape which shows where you are) is defined.<br>
-A number of user-generated layouts and cursor definitions are available at [[Layout]].
+A number of user-generated layouts and cursor definitions are available at :doc:`layout_examples`.
 
 Defining layers
 ---------------
@@ -32,7 +32,7 @@ Here the available options:
 * angle_range: Range for pitch angle.
 * sequence_range: Useful for animated cursors.
 
-For infos about map icons, see [[Icons]]
+For infos about map icons, see :doc:`icons`
 
 Overriding default (shipped) layouts
 ------------------------------------
@@ -43,7 +43,7 @@ Copying the default **navit.xml** file to the user-specific location will still 
 
 Note on the default layout used by navit
 ----------------------------------------
-When no layout has been specifically selected by the user (for example at first startup), navit will use the default layout specified (see [[Configuration/General_Options#Default_layout|the related section to know how to configure this]]).
+When no layout has been specifically selected by the user (for example at first startup), navit will use the default layout specified (see :doc:`general` for more details).
 
 Using a layer in multiple layouts
 ---------------------------------
@@ -72,5 +72,4 @@ To use a layer in multiple layouts, it can be referenced using the **ref** attri
 
 Note that the layer you want to reuse must be placed ''outside'' the layout. Layers defined inside a layout cannot be reused in this way.
 
-[[Category:Customizing]]
-[[Category:Configuration]]
+
