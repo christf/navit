@@ -377,8 +377,8 @@ void vehicle_draw(struct vehicle *this_, struct graphics *gra, struct point *pnt
         if (this_->interpolating) {
             this_->interp_prev = this_->interp_target;
         } else if (this_->gra) {
-            this_->interp_prev.x = old_pnt.x + (this_->real_w / 2);
-            this_->interp_prev.y = old_pnt.y + (this_->real_h / 2);
+            this_->interp_prev.x = this_->cursor_pnt.x + (this_->real_w / 2);
+            this_->interp_prev.y = this_->cursor_pnt.y + (this_->real_h / 2);
         } else {
             this_->interp_prev = *pnt;
         }
