@@ -653,8 +653,10 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
         return;
 
     if (gra->p.x || gra->p.y) {
-        set_drawing_color(cr, background_gc->c);
-        cairo_paint(cr);
+        if (background_gc) {
+            set_drawing_color(cr, background_gc->c);
+            cairo_paint(cr);
+        }
     }
     cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x, gra->p.y);
     cairo_paint(cr);
