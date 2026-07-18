@@ -744,7 +744,8 @@ static void navit_predraw(struct navit *this_) {
     l = this_->vehicles;
     while (l) {
         nv = l->data;
-        navit_vehicle_draw(this_, nv, NULL);
+        if (nv != this_->vehicle)
+            navit_vehicle_draw(this_, nv, NULL);
         l = g_list_next(l);
     }
 }
