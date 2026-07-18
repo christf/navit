@@ -475,22 +475,24 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     for (i = 14; i > 0; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
-        foreach_tile(&data, tile_collector_add_siblings);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings);
+        foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*\n");
+        fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*\n");
+        fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*\n");
-        foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*\n");
+        fprintf(stderr, "*");
+        if (i == 14) {
+            foreach_tile(&data, tile_collector_add_siblings);
+            fprintf(stderr, "*");
+            foreach_tile(&data, tile_collector_add_siblings);
+            fprintf(stderr, "*");
+            foreach_tile(&data, tile_collector_add_siblings);
+            fprintf(stderr, "*");
+            foreach_tile(&data, tile_collector_add_siblings);
+        }
+        fprintf(stderr, "\n");
     }
     g_hash_table_destroy(data.tile_edges);
     item_bin_sink_func_destroy(tile_collector);
