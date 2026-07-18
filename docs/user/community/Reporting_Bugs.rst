@@ -27,6 +27,27 @@ Reporting a bug
 #. Help to reproduce the bug or give more details on your problem
 
 
+Reporting a segfault
+~~~~~~~~~~~~~~~~~~~~
+
+If Navit crashes with a segmentation fault, a backtrace is the most
+valuable information you can provide.
+
+1. Install ``gdb`` (the GNU Debugger) if not already present.
+2. Run Navit under gdb::
+
+       gdb --args navit [navit-options]
+
+   At the ``(gdb)`` prompt, type ``run`` and press Enter. When Navit
+   crashes, switch back to the terminal and type ``bt`` to obtain a
+   full backtrace.
+
+3. Copy the complete gdb output and include it in your bug report.
+
+If you are using the SDL GUI, also attach the ``CEGUI.log`` file from
+Navit's working directory.
+
+
 Information you should provide
 ==============================
 
