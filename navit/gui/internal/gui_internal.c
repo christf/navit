@@ -2054,6 +2054,7 @@ void gui_internal_enter(struct gui_priv *this, int ignore) {
 
     navit_block(this->nav, 1);
     graphics_overlay_disable(gra, 1);
+    graphics_draw_drag(gra, NULL);
     this->root.p.x = 0;
     this->root.p.y = 0;
     this->root.background = this->background;

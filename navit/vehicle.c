@@ -53,6 +53,7 @@
 #include <math.h>  // IWYU pragma: keep for sqrt
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #define NMEA_GPGGA_FMT "$GPGGA,%02d%02d%02d,%s%s,%c,%s%s,%c,1,08,2.5,%s,M,,,,0000*  \n"
 #define NMEA_GPRMC_FMT "$GPRMC,%02d%02d%02d,A,%s%s,%c,%s%s,%c,%s,%s,%02d%02d%02d,,*  \n"
@@ -83,6 +84,15 @@ struct vehicle {
     int angle;
     int speed;
     int sequence;
+    struct point interp_prev;
+    struct point interp_target;
+    int interp_prev_yaw;
+    int interp_target_yaw;
+    int interp_yaw;
+    struct timeval interp_t0;
+    int interp_duration;
+    int interpolating;
+    struct point drag_pnt;
     GHashTable *log_to_cb;
     char *synthesized_nmea;
 };
@@ -90,7 +100,8 @@ struct vehicle {
 struct object_func vehicle_func;
 
 static void vehicle_set_default_name(struct vehicle *this);
-static void vehicle_draw_do(struct vehicle *this_);
+void vehicle_draw_do(struct vehicle *this_);
+void vehicle_interpolate(struct vehicle *this_);
 static void vehicle_log_nmea(struct vehicle *this_, struct log *log);
 static void vehicle_log_gpx(struct vehicle *this_, struct log *log);
 static void vehicle_log_textfile(struct vehicle *this_, struct log *log);
@@ -425,6 +436,74 @@ int vehicle_get_cursor_data(struct vehicle *this, struct point *pnt, int *angle,
     return 1;
 }
 
+void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
+    center->x = this_->cursor_pnt.x + this_->real_w / 2;
+    center->y = this_->cursor_pnt.y + this_->real_h / 2;
+}
+
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int from_yaw, int to_yaw,
+                              int duration_ms) {
+    this_->interp_prev = *from;
+    this_->interp_target = *to;
+    this_->interp_prev_yaw = from_yaw;
+    this_->interp_target_yaw = to_yaw;
+    this_->interp_yaw = from_yaw;
+    this_->drag_pnt = *from;
+    gettimeofday(&this_->interp_t0, NULL);
+    this_->interp_duration = duration_ms;
+    this_->interpolating = 1;
+}
+
+void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
+    int dx, dy, dist, duration;
+    if (!this_->interpolating)
+        return;
+    dx = target->x - this_->drag_pnt.x;
+    dy = target->y - this_->drag_pnt.y;
+    if (dx < 0)
+        dx = -dx;
+    if (dy < 0)
+        dy = -dy;
+    dist = dx + dy;
+    duration = 150 + dist * 2;
+    if (duration > 500)
+        duration = 500;
+    this_->interp_prev = this_->drag_pnt;
+    this_->interp_target = *target;
+    gettimeofday(&this_->interp_t0, NULL);
+    this_->interp_duration = duration;
+}
+
+void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
+    *offset = this_->drag_pnt;
+}
+
+int vehicle_get_interp_yaw(struct vehicle *this_) {
+    return this_->interp_yaw;
+}
+
+void vehicle_reset_map_scroll(struct vehicle *this_) {
+    this_->drag_pnt.x = 0;
+    this_->drag_pnt.y = 0;
+    this_->interpolating = 0;
+}
+
+void vehicle_request_resize(struct vehicle *this_) {
+    this_->need_resize = 1;
+}
+
+void vehicle_reposition(struct vehicle *this_, struct point *pnt, int angle, int speed) {
+    struct point sc;
+    this_->cursor_pnt = *pnt;
+    this_->angle = angle;
+    this_->speed = speed;
+    if (!this_->gra)
+        return;
+    sc.x = this_->cursor_pnt.x - (this_->real_w / 2);
+    sc.y = this_->cursor_pnt.y - (this_->real_h / 2);
+    graphics_overlay_resize(this_->gra, &sc, this_->real_w, this_->real_h, 0);
+}
+
 static void vehicle_set_default_name(struct vehicle *this_) {
     struct attr default_name;
     if (!attr_search(this_->attrs, attr_name)) {
@@ -436,7 +515,52 @@ static void vehicle_set_default_name(struct vehicle *this_) {
     }
 }
 
-static void vehicle_draw_do(struct vehicle *this_) {
+void vehicle_interpolate(struct vehicle *this_) {
+    struct timeval now;
+    int elapsed;
+    double t;
+    int raw_x, raw_y;
+
+    if (!this_->interpolating)
+        return;
+
+    gettimeofday(&now, NULL);
+    elapsed = (now.tv_sec - this_->interp_t0.tv_sec) * 1000 + (now.tv_usec - this_->interp_t0.tv_usec) / 1000;
+
+    if (this_->interp_duration <= 0)
+        return;
+
+    t = (double)elapsed / this_->interp_duration;
+    if (t > 1.0)
+        t = 1.0;
+
+    raw_x = this_->interp_prev.x + (int)(t * (this_->interp_target.x - this_->interp_prev.x));
+    raw_y = this_->interp_prev.y + (int)(t * (this_->interp_target.y - this_->interp_prev.y));
+
+    this_->drag_pnt.x = raw_x;
+    this_->drag_pnt.y = raw_y;
+
+    {
+        int delta = ((this_->interp_target_yaw - this_->interp_prev_yaw + 180) % 360 + 360) % 360 - 180;
+        int yaw = this_->interp_prev_yaw + (int)(t * delta);
+        yaw = yaw % 360;
+        if (yaw < 0)
+            yaw += 360;
+        this_->interp_yaw = yaw;
+    }
+
+    if (t >= 1.0)
+        this_->interpolating = 0;
+}
+
+int vehicle_animation_tick(struct vehicle *this_) {
+    if (!this_->interpolating)
+        return 0;
+    vehicle_interpolate(this_);
+    return this_->interpolating;
+}
+
+void vehicle_draw_do(struct vehicle *this_) {
     struct point p;
     struct cursor *cursor = this_->cursor;
     int speed = this_->speed;
@@ -445,6 +569,8 @@ static void vehicle_draw_do(struct vehicle *this_) {
     struct attr **attr;
     char *label = NULL;
     int match = 0;
+
+    vehicle_interpolate(this_);
 
     if (!this_->cursor || !this_->cursor->attrs || !this_->gra)
         return;
@@ -529,10 +655,14 @@ static char *vehicle_synthesize_nmea(struct vehicle *this_) {
     double lat, lng, speed = 0.0, direction = 0.0, height = 0.0;
     char lat_deg[4], lat_min[16], lng_deg[4], lng_min[16], height_str[16], speed_str[16], dir_str[16];
 
-    if (!this_->meth.position_attr_get)
+    if (!this_->meth.position_attr_get) {
+        dbg(lvl_debug, "no position_attr_get method");
         return NULL;
-    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr))
+    }
+    if (!this_->meth.position_attr_get(this_->priv, attr_position_coord_geo, &attr)) {
+        dbg(lvl_debug, "no coord_geo available");
         return NULL;
+    }
 
     lat = attr.u.coord_geo->lat;
     if (lat < 0) {
@@ -815,9 +945,12 @@ static void vehicle_log_binfile(struct vehicle *this_, struct log *log) {
 static int vehicle_add_log(struct vehicle *this_, struct log *log) {
     struct callback *cb;
     struct attr type_attr;
-    if (!log_get_attr(log, attr_type, &type_attr, NULL))
+    if (!log_get_attr(log, attr_type, &type_attr, NULL)) {
+        dbg(lvl_error, "log has no type attribute");
         return 1;
+    }
 
+    dbg(lvl_debug, "adding log of type '%s'", type_attr.u.str);
     if (!strcmp(type_attr.u.str, "nmea")) {
         cb = callback_new_attr_2(callback_cast(vehicle_log_nmea), attr_position_coord_geo, this_, log);
     } else if (!strcmp(type_attr.u.str, "gpx")) {
