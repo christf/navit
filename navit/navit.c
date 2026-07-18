@@ -2572,8 +2572,30 @@ void navit_drag_map(struct navit *this_, struct point *origin, struct point *des
  */
 void navit_set_center_cursor_draw(struct navit *this_) {
     navit_set_center_cursor(this_, 1, 0);
-    if (this_->ready == 3)
+    if (this_->ready == 3) {
         navit_draw_async(this_, 1);
+        /* The recenter updated this_->trans but this_->trans_cursor is only copied
+         * from it inside the asynchronous draw callback. Sync it now so the next
+         * animation tick computes the drag offset against the new map center. */
+        transform_copy(this_->trans, this_->trans_cursor);
+        if (this_->vehicle && this_->vehicle->vehicle && this_->gra) {
+            struct point cursor_center, render_pos;
+            enum projection pro;
+            vehicle_get_cursor_center(this_->vehicle->vehicle, &cursor_center);
+            pro = transform_get_projection(this_->trans_cursor);
+            if (pro && transform_point(this_->trans_cursor, pro, &this_->vehicle->coord, &render_pos)) {
+                struct point delta;
+                /* Point the cursor animation at the new on-screen position so it
+                 * eases to the correct spot instead of jumping from the stale
+                 * pre-recenter target. */
+                vehicle_set_interp_target(this_->vehicle->vehicle, &render_pos);
+                delta.x = cursor_center.x - render_pos.x;
+                delta.y = cursor_center.y - render_pos.y;
+                graphics_draw_drag(this_->gra, &delta);
+                graphics_draw_mode(this_->gra, draw_mode_end);
+            }
+        }
+    }
 }
 
 /**

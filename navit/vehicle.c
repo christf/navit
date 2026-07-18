@@ -375,7 +375,8 @@ void vehicle_draw(struct vehicle *this_, struct graphics *gra, struct point *pnt
     same_target = this_->interpolating && this_->interp_target.x == pnt->x && this_->interp_target.y == pnt->y;
     if (!same_target) {
         if (this_->interpolating) {
-            this_->interp_prev = this_->interp_target;
+            this_->interp_prev.x = old_pnt.x + (this_->real_w / 2);
+            this_->interp_prev.y = old_pnt.y + (this_->real_h / 2);
         } else if (this_->gra) {
             this_->interp_prev.x = this_->cursor_pnt.x + (this_->real_w / 2);
             this_->interp_prev.y = this_->cursor_pnt.y + (this_->real_h / 2);
@@ -448,6 +449,14 @@ int vehicle_get_cursor_data(struct vehicle *this, struct point *pnt, int *angle,
 void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
     center->x = this_->cursor_pnt.x + this_->real_w / 2;
     center->y = this_->cursor_pnt.y + this_->real_h / 2;
+}
+
+void vehicle_set_interp_target(struct vehicle *this_, struct point *target) {
+    this_->interp_prev.x = this_->cursor_pnt.x + (this_->real_w / 2);
+    this_->interp_prev.y = this_->cursor_pnt.y + (this_->real_h / 2);
+    this_->interp_target = *target;
+    gettimeofday(&this_->interp_t0, NULL);
+    this_->interpolating = 1;
 }
 
 static void vehicle_set_default_name(struct vehicle *this_) {
