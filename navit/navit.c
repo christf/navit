@@ -170,6 +170,7 @@ struct navit {
     GList *vehicleprofiles;
     int pitch;
     int follow_cursor;
+    int map_animating;
     int prevTs;
     int graphics_flags;
     int zoom_min, zoom_max;
@@ -400,6 +401,8 @@ void navit_draw_async(struct navit *this_, int async) {
         this_->blocked |= 2;
         return;
     }
+    if (this_->map_animating)
+        return;
     graphics_draw_drag(this_->gra, NULL);
     transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
@@ -415,6 +418,7 @@ static int navit_animation_tick(void *data) {
     struct navit *this_ = data;
     GList *l = this_->vehicles;
     int primary_animating = 0;
+    int was_animating = this_->map_animating;
 
     while (l) {
         struct navit_vehicle *nv = l->data;
@@ -426,17 +430,26 @@ static int navit_animation_tick(void *data) {
     }
 
     if (primary_animating && this_->vehicle && this_->gra) {
-        struct point cursor_center, render_pos;
-        enum projection pro;
-
-        vehicle_get_cursor_center(this_->vehicle->vehicle, &cursor_center);
-        pro = transform_get_projection(this_->trans_cursor);
-        if (pro && transform_point(this_->trans_cursor, pro, &this_->vehicle->coord, &render_pos)) {
-            struct point delta;
-            delta.x = cursor_center.x - render_pos.x;
-            delta.y = cursor_center.y - render_pos.y;
-            graphics_draw_drag(this_->gra, &delta);
-        }
+        struct point offset;
+        int w, h;
+        vehicle_get_mapdrag_offset(this_->vehicle->vehicle, &offset);
+        transform_get_size(this_->trans, &w, &h);
+        if (offset.x < -2 * w)
+            offset.x = -2 * w;
+        else if (offset.x > 0)
+            offset.x = 0;
+        if (offset.y < -2 * h)
+            offset.y = -2 * h;
+        else if (offset.y > 0)
+            offset.y = 0;
+        graphics_draw_drag(this_->gra, &offset);
+        graphics_draw_mode(this_->gra, draw_mode_end);
+    } else if (was_animating && !primary_animating) {
+        /* The map-scroll ease finished: refresh to the new centered map.
+         * This is seamless because the eased offset made the old surface
+         * coincide with the new view. */
+        this_->map_animating = 0;
+        navit_draw_async(this_, 1);
     }
 
     return TRUE;
@@ -2576,25 +2589,8 @@ void navit_set_center_cursor_draw(struct navit *this_) {
         navit_draw_async(this_, 1);
         /* The recenter updated this_->trans but this_->trans_cursor is only copied
          * from it inside the asynchronous draw callback. Sync it now so the next
-         * animation tick computes the drag offset against the new map center. */
+         * fix computes the map-scroll offset against the new map center. */
         transform_copy(this_->trans, this_->trans_cursor);
-        if (this_->vehicle && this_->vehicle->vehicle && this_->gra) {
-            struct point cursor_center, render_pos;
-            enum projection pro;
-            vehicle_get_cursor_center(this_->vehicle->vehicle, &cursor_center);
-            pro = transform_get_projection(this_->trans_cursor);
-            if (pro && transform_point(this_->trans_cursor, pro, &this_->vehicle->coord, &render_pos)) {
-                struct point delta;
-                /* Point the cursor animation at the new on-screen position so it
-                 * eases to the correct spot instead of jumping from the stale
-                 * pre-recenter target. */
-                vehicle_set_interp_target(this_->vehicle->vehicle, &render_pos);
-                delta.x = cursor_center.x - render_pos.x;
-                delta.y = cursor_center.y - render_pos.y;
-                graphics_draw_drag(this_->gra, &delta);
-                graphics_draw_mode(this_->gra, draw_mode_end);
-            }
-        }
     }
 }
 
@@ -3369,7 +3365,7 @@ static void navit_vehicle_draw(struct navit *this_, struct navit_vehicle *nv, st
 static void navit_vehicle_update_position(struct navit *this_, struct navit_vehicle *nv) {
     struct attr attr_valid, attr_dir, attr_speed, attr_pos;
     struct pcoord cursor_pc;
-    struct point cursor_pnt, *pnt = &cursor_pnt;
+    struct point cursor_pnt;
     struct tracking *tracking = NULL;
     struct pcoord *pc;
     enum projection pro = transform_get_projection(this_->trans_cursor);
@@ -3428,10 +3424,36 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
         transform_point(this_->trans_cursor, pro, &nv->coord, &cursor_pnt);
         if (this_->button_pressed != 1 && this_->follow_cursor && nv->follow_curr <= nv->follow
             && (nv->follow_curr == 1 || !transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border))) {
-            navit_vehicle_draw(this_, nv, pnt);
-            navit_set_center_cursor_draw(this_);
+            struct coord old_center;
+            enum projection pro_old = transform_get_projection(this_->trans);
+            struct coord *tc = transform_center(this_->trans);
+            struct point cursor_screen, p_old = {0, 0};
+            int have_p_old = 0;
+            navit_get_cursor_pnt(this_, &cursor_screen, 0, NULL);
+            if (tc) {
+                old_center = *tc;
+                if (pro_old)
+                    have_p_old = transform_point(this_->trans, pro_old, &old_center, &p_old);
+            }
+            navit_vehicle_draw(this_, nv, &cursor_screen);
+            navit_set_center_cursor(this_, 1, 0);
+            if (this_->follow_cursor && have_p_old) {
+                struct point p_new;
+                enum projection pro_new = transform_get_projection(this_->trans);
+                if (pro_new && transform_point(this_->trans, pro_new, &old_center, &p_new)) {
+                    struct point drag_start = {p_old.x - p_new.x, p_old.y - p_new.y};
+                    vehicle_start_map_scroll(this_->vehicle->vehicle, &drag_start);
+                    this_->map_animating = 1;
+                    if (this_->gra) {
+                        graphics_draw_drag(this_->gra, &drag_start);
+                        graphics_draw_mode(this_->gra, draw_mode_end);
+                    }
+                }
+            }
         } else {
-            navit_vehicle_draw(this_, nv, pnt);
+            struct point cursor_screen;
+            navit_get_cursor_pnt(this_, &cursor_screen, 0, NULL);
+            navit_vehicle_draw(this_, nv, &cursor_screen);
 
             if (nv->follow_curr > 1)
                 nv->follow_curr--;

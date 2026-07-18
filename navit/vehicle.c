@@ -86,6 +86,7 @@ struct vehicle {
     struct timeval interp_t0;
     int interp_duration;
     int interpolating;
+    struct point drag_pnt;
     GHashTable *log_to_cb;
     char *synthesized_nmea;
 };
@@ -364,29 +365,12 @@ void vehicle_set_cursor(struct vehicle *this_, struct cursor *cursor, int overwr
  * @param speed The speed of the vehicle.
  */
 void vehicle_draw(struct vehicle *this_, struct graphics *gra, struct point *pnt, int angle, int speed) {
-    struct point sc, old_pnt;
-    int same_target;
+    struct point sc;
     if (angle < 0)
         angle += 360;
     dbg(lvl_debug, "enter this=%p gra=%p pnt=%p dir=%d speed=%d", this_, gra, pnt, angle, speed);
     dbg(lvl_debug, "point %d,%d", pnt->x, pnt->y);
-    old_pnt = this_->cursor_pnt;
     this_->cursor_pnt = *pnt;
-    same_target = this_->interpolating && this_->interp_target.x == pnt->x && this_->interp_target.y == pnt->y;
-    if (!same_target) {
-        if (this_->interpolating) {
-            this_->interp_prev.x = old_pnt.x + (this_->real_w / 2);
-            this_->interp_prev.y = old_pnt.y + (this_->real_h / 2);
-        } else if (this_->gra) {
-            this_->interp_prev.x = this_->cursor_pnt.x + (this_->real_w / 2);
-            this_->interp_prev.y = this_->cursor_pnt.y + (this_->real_h / 2);
-        } else {
-            this_->interp_prev = *pnt;
-        }
-        this_->interp_target = *pnt;
-        gettimeofday(&this_->interp_t0, NULL);
-        this_->interpolating = 1;
-    }
     this_->angle = angle;
     this_->speed = speed;
     if (!this_->cursor)
@@ -451,12 +435,16 @@ void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
     center->y = this_->cursor_pnt.y + this_->real_h / 2;
 }
 
-void vehicle_set_interp_target(struct vehicle *this_, struct point *target) {
-    this_->interp_prev.x = this_->cursor_pnt.x + (this_->real_w / 2);
-    this_->interp_prev.y = this_->cursor_pnt.y + (this_->real_h / 2);
-    this_->interp_target = *target;
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *drag_start) {
+    this_->interp_prev = *drag_start;
+    this_->interp_target.x = 0;
+    this_->interp_target.y = 0;
     gettimeofday(&this_->interp_t0, NULL);
     this_->interpolating = 1;
+}
+
+void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
+    *offset = this_->drag_pnt;
 }
 
 static void vehicle_set_default_name(struct vehicle *this_) {
@@ -492,8 +480,8 @@ void vehicle_interpolate(struct vehicle *this_) {
     raw_x = this_->interp_prev.x + (int)(t * (this_->interp_target.x - this_->interp_prev.x));
     raw_y = this_->interp_prev.y + (int)(t * (this_->interp_target.y - this_->interp_prev.y));
 
-    this_->cursor_pnt.x = raw_x - (this_->real_w / 2);
-    this_->cursor_pnt.y = raw_y - (this_->real_h / 2);
+    this_->drag_pnt.x = raw_x;
+    this_->drag_pnt.y = raw_y;
 
     if (t >= 1.0)
         this_->interpolating = 0;
@@ -503,10 +491,6 @@ int vehicle_animation_tick(struct vehicle *this_) {
     if (!this_->interpolating)
         return 0;
     vehicle_interpolate(this_);
-    if (!this_->gra)
-        return 0;
-    graphics_draw_drag(this_->gra, &this_->cursor_pnt);
-    graphics_draw_mode(this_->gra, draw_mode_end);
     return 1;
 }
 
