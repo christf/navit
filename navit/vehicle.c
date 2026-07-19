@@ -435,10 +435,9 @@ void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
     center->y = this_->cursor_pnt.y + this_->real_h / 2;
 }
 
-void vehicle_start_map_scroll(struct vehicle *this_, struct point *drag_start) {
-    this_->interp_prev = *drag_start;
-    this_->interp_target.x = 0;
-    this_->interp_target.y = 0;
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *target) {
+    this_->interp_prev = this_->drag_pnt;
+    this_->interp_target = *target;
     gettimeofday(&this_->interp_t0, NULL);
     this_->interpolating = 1;
 }
