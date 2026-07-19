@@ -18,6 +18,8 @@
  */
 #include "debug.h"
 #include "maptool.h"
+#include "projection.h"
+#include "transform.h"
 
 struct coastline_tile {
     osmid wayid;
@@ -314,7 +316,7 @@ static void ocean_tile(GHashTable *hash, char *tile, char c, osmid wayid, struct
     g_hash_table_insert(hash, g_strdup(tile2), ct);
 }
 
-static int tile_sibling_all_ocean(GHashTable *hash, char *tile, char c) {
+static int tile_sibling_no_coastline(GHashTable *hash, char *tile, char c) {
     int len = strlen(tile);
     char *tile2 = g_alloca(sizeof(char) * (len + 2));
     struct coastline_tile *ct;
@@ -325,7 +327,7 @@ static int tile_sibling_all_ocean(GHashTable *hash, char *tile, char c) {
         tile2[len] = 'a' + i;
         tile2[len + 1] = '\0';
         ct = g_hash_table_lookup(hash, tile2);
-        if (!ct || ct->edges != 15)
+        if (ct && ct->edges != 15)
             return 0;
     }
     return 1;
@@ -339,21 +341,21 @@ static void tile_collector_add_siblings(char *tile, struct coastline_tile *ct, s
     int debug = 0;
     if (debug)
         fprintf(stderr, "%s (%c) has %d edges active\n", tile, t, edges);
-    if (t == 'a' && (edges & 1) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'b')))
+    if (t == 'a' && (edges & 1) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'b')))
         ocean_tile(data->tile_edges, tile, 'b', ct->wayid, out);
-    if (t == 'a' && (edges & 8) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'c')))
+    if (t == 'a' && (edges & 8) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'c')))
         ocean_tile(data->tile_edges, tile, 'c', ct->wayid, out);
-    if (t == 'b' && (edges & 4) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'a')))
+    if (t == 'b' && (edges & 4) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'a')))
         ocean_tile(data->tile_edges, tile, 'a', ct->wayid, out);
-    if (t == 'b' && (edges & 8) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'd')))
+    if (t == 'b' && (edges & 8) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'd')))
         ocean_tile(data->tile_edges, tile, 'd', ct->wayid, out);
-    if (t == 'c' && (edges & 1) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'd')))
+    if (t == 'c' && (edges & 1) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'd')))
         ocean_tile(data->tile_edges, tile, 'd', ct->wayid, out);
-    if (t == 'c' && (edges & 2) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'a')))
+    if (t == 'c' && (edges & 2) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'a')))
         ocean_tile(data->tile_edges, tile, 'a', ct->wayid, out);
-    if (t == 'd' && (edges & 4) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'c')))
+    if (t == 'd' && (edges & 4) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'c')))
         ocean_tile(data->tile_edges, tile, 'c', ct->wayid, out);
-    if (t == 'd' && (edges & 2) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'b')))
+    if (t == 'd' && (edges & 2) && (data->level >= 14 || tile_sibling_no_coastline(data->tile_edges, tile, 'b')))
         ocean_tile(data->tile_edges, tile, 'b', ct->wayid, out);
 }
 
@@ -417,21 +419,13 @@ static void tile_collector_add_siblings2(char *tile, struct coastline_tile *ct, 
 
     if (debug)
         fprintf(stderr, "checking siblings of '%s' with %d edges active\n", tile, edges);
-    if (t == 'b' && (edges & 1) && (tile_sibling_edges(data->tile_edges, tile, 'd') & 1))
+    if ((t == 'b' || t == 'd') && (edges & 1))
         pedges |= 1;
-    if (t == 'd' && (edges & 2) && (tile_sibling_edges(data->tile_edges, tile, 'b') & 1))
-        pedges |= 1;
-    if (t == 'a' && (edges & 2) && (tile_sibling_edges(data->tile_edges, tile, 'b') & 2))
+    if ((t == 'a' || t == 'b') && (edges & 2))
         pedges |= 2;
-    if (t == 'b' && (edges & 2) && (tile_sibling_edges(data->tile_edges, tile, 'a') & 2))
-        pedges |= 2;
-    if (t == 'a' && (edges & 4) && (tile_sibling_edges(data->tile_edges, tile, 'c') & 4))
+    if ((t == 'a' || t == 'c') && (edges & 4))
         pedges |= 4;
-    if (t == 'c' && (edges & 4) && (tile_sibling_edges(data->tile_edges, tile, 'a') & 4))
-        pedges |= 4;
-    if (t == 'd' && (edges & 8) && (tile_sibling_edges(data->tile_edges, tile, 'c') & 8))
-        pedges |= 8;
-    if (t == 'c' && (edges & 8) && (tile_sibling_edges(data->tile_edges, tile, 'd') & 8))
+    if ((t == 'c' || t == 'd') && (edges & 8))
         pedges |= 8;
     co = g_hash_table_lookup(data->tile_edges, tile2);
     if (debug)
@@ -472,6 +466,48 @@ static void foreach_tile(struct coastline_tile_data *data,
     g_list_free(data->v);
 }
 
+struct water_test_data {
+    struct coord schillig;
+    struct coord sachsen;
+    struct coord leipzig;
+    struct coord magdeburg;
+    int schillig_water;
+    int sachsen_water;
+    int leipzig_water;
+    int magdeburg_water;
+};
+
+static void water_test_cb(gpointer key, gpointer value, gpointer user_data) {
+    char *tile = key;
+    struct coastline_tile *ct = value;
+    struct water_test_data *d = user_data;
+    struct rect bbox;
+
+    tile_bbox(tile, &bbox, 0);
+
+    if (d->schillig.x >= bbox.l.x && d->schillig.x <= bbox.h.x && d->schillig.y >= bbox.l.y
+        && d->schillig.y <= bbox.h.y) {
+        if (ct->edges == 15)
+            d->schillig_water = 1;
+    }
+
+    if (d->sachsen.x >= bbox.l.x && d->sachsen.x <= bbox.h.x && d->sachsen.y >= bbox.l.y && d->sachsen.y <= bbox.h.y) {
+        if (ct->edges == 15)
+            d->sachsen_water = 1;
+    }
+
+    if (d->leipzig.x >= bbox.l.x && d->leipzig.x <= bbox.h.x && d->leipzig.y >= bbox.l.y && d->leipzig.y <= bbox.h.y) {
+        if (ct->edges == 15)
+            d->leipzig_water = 1;
+    }
+
+    if (d->magdeburg.x >= bbox.l.x && d->magdeburg.x <= bbox.h.x && d->magdeburg.y >= bbox.l.y
+        && d->magdeburg.y <= bbox.h.y) {
+        if (ct->edges == 15)
+            d->magdeburg_water = 1;
+    }
+}
+
 static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     struct coastline_tile_data data;
     int i;
@@ -486,7 +522,7 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     fprintf(stderr, "tile_collector_finish foreach done\n");
     g_hash_table_destroy(hash);
     fprintf(stderr, "tile_collector_finish destroy done\n");
-    for (i = 14; i > 0; i--) {
+    for (i = 14; i > 6; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
         foreach_tile(&data, tile_collector_add_siblings);
@@ -505,6 +541,42 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
         fprintf(stderr, "*");
         foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "\n");
+    }
+    {
+        struct water_test_data d;
+        struct coord_geo g;
+
+        g.lng = 8.055833;
+        g.lat = 53.691667;
+        transform_from_geo(projection_mg, &g, &d.schillig);
+
+        g.lng = 10.206111;
+        g.lat = 52.326389;
+        transform_from_geo(projection_mg, &g, &d.sachsen);
+
+        g.lng = 12.4825;
+        g.lat = 51.318611;
+        transform_from_geo(projection_mg, &g, &d.leipzig);
+
+        g.lng = 11.612778;
+        g.lat = 52.145278;
+        transform_from_geo(projection_mg, &g, &d.magdeburg);
+
+        d.schillig_water = 0;
+        d.sachsen_water = 0;
+        d.leipzig_water = 0;
+        d.magdeburg_water = 0;
+
+        g_hash_table_foreach(data.tile_edges, water_test_cb, &d);
+
+        fprintf(stderr, "WATER_TEST: Schillig (53.691667N 8.055833E) -> %s\n",
+                d.schillig_water ? "WATER (PASS)" : "DRY (FAIL)");
+        fprintf(stderr, "WATER_TEST: Sachsen-Anhalt (52.326389N 10.206111E) -> %s\n",
+                d.sachsen_water ? "WATER (FAIL)" : "DRY (PASS)");
+        fprintf(stderr, "WATER_TEST: Leipzig (51.318611N 12.4825E) -> %s\n",
+                d.leipzig_water ? "WATER (FAIL)" : "DRY (PASS)");
+        fprintf(stderr, "WATER_TEST: Magdeburg (52.145278N 11.612778E) -> %s\n",
+                d.magdeburg_water ? "WATER (FAIL)" : "DRY (PASS)");
     }
     g_hash_table_destroy(data.tile_edges);
     item_bin_sink_func_destroy(tile_collector);
