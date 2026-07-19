@@ -450,6 +450,7 @@ static int navit_animation_tick(void *data) {
          * coincide with the new view. */
         this_->map_animating = 0;
         navit_draw_async(this_, 1);
+        vehicle_reset_map_scroll(this_->vehicle->vehicle);
     }
 
     return TRUE;

@@ -446,6 +446,12 @@ void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
     *offset = this_->drag_pnt;
 }
 
+void vehicle_reset_map_scroll(struct vehicle *this_) {
+    this_->drag_pnt.x = 0;
+    this_->drag_pnt.y = 0;
+    this_->interpolating = 0;
+}
+
 static void vehicle_set_default_name(struct vehicle *this_) {
     struct attr default_name;
     if (!attr_search(this_->attrs, attr_name)) {

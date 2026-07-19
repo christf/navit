@@ -64,6 +64,7 @@ int vehicle_get_cursor_data(struct vehicle *this_, struct point *pnt, int *angle
 void vehicle_get_cursor_center(struct vehicle *this_, struct point *center);
 void vehicle_start_map_scroll(struct vehicle *this_, struct point *target);
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset);
+void vehicle_reset_map_scroll(struct vehicle *this_);
 void vehicle_log_gpx_add_tag(char *tag, char **logstr);
 struct vehicle *vehicle_ref(struct vehicle *this_);
 void vehicle_unref(struct vehicle *this_);
