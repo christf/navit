@@ -314,8 +314,22 @@ static void ocean_tile(GHashTable *hash, char *tile, char c, osmid wayid, struct
     g_hash_table_insert(hash, g_strdup(tile2), ct);
 }
 
-/* ba */
-/* dc */
+static int tile_sibling_all_ocean(GHashTable *hash, char *tile, char c) {
+    int len = strlen(tile);
+    char *tile2 = g_alloca(sizeof(char) * (len + 2));
+    struct coastline_tile *ct;
+    int i;
+    strcpy(tile2, tile);
+    tile2[len - 1] = c;
+    for (i = 0; i < 4; i++) {
+        tile2[len] = 'a' + i;
+        tile2[len + 1] = '\0';
+        ct = g_hash_table_lookup(hash, tile2);
+        if (!ct || ct->edges != 15)
+            return 0;
+    }
+    return 1;
+}
 
 static void tile_collector_add_siblings(char *tile, struct coastline_tile *ct, struct coastline_tile_data *data) {
     int len = strlen(tile);
@@ -323,25 +337,23 @@ static void tile_collector_add_siblings(char *tile, struct coastline_tile *ct, s
     struct item_bin_sink *out = data->sink->priv_data[1];
     int edges = ct->edges;
     int debug = 0;
-    if (data->level < 14 && edges != 15)
-        return;
     if (debug)
         fprintf(stderr, "%s (%c) has %d edges active\n", tile, t, edges);
-    if (t == 'a' && (edges & 1))
+    if (t == 'a' && (edges & 1) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'b')))
         ocean_tile(data->tile_edges, tile, 'b', ct->wayid, out);
-    if (t == 'a' && (edges & 8))
+    if (t == 'a' && (edges & 8) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'c')))
         ocean_tile(data->tile_edges, tile, 'c', ct->wayid, out);
-    if (t == 'b' && (edges & 4))
+    if (t == 'b' && (edges & 4) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'a')))
         ocean_tile(data->tile_edges, tile, 'a', ct->wayid, out);
-    if (t == 'b' && (edges & 8))
+    if (t == 'b' && (edges & 8) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'd')))
         ocean_tile(data->tile_edges, tile, 'd', ct->wayid, out);
-    if (t == 'c' && (edges & 1))
+    if (t == 'c' && (edges & 1) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'd')))
         ocean_tile(data->tile_edges, tile, 'd', ct->wayid, out);
-    if (t == 'c' && (edges & 2))
+    if (t == 'c' && (edges & 2) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'a')))
         ocean_tile(data->tile_edges, tile, 'a', ct->wayid, out);
-    if (t == 'd' && (edges & 4))
+    if (t == 'd' && (edges & 4) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'c')))
         ocean_tile(data->tile_edges, tile, 'c', ct->wayid, out);
-    if (t == 'd' && (edges & 2))
+    if (t == 'd' && (edges & 2) && (data->level >= 14 || tile_sibling_all_ocean(data->tile_edges, tile, 'b')))
         ocean_tile(data->tile_edges, tile, 'b', ct->wayid, out);
 }
 
