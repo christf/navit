@@ -3422,8 +3422,11 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
             navit_disable_suspend();
 
         transform_point(this_->trans_cursor, pro, &nv->coord, &cursor_pnt);
-        if (this_->button_pressed != 1 && this_->follow_cursor && nv->follow_curr <= nv->follow
-            && (nv->follow_curr == 1 || !transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border))) {
+        if (this_->button_pressed != 1 && this_->follow_cursor
+            && (nv->follow == 0
+                || (nv->follow_curr <= nv->follow
+                    && (nv->follow_curr == 1
+                        || !transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border))))) {
             struct coord old_center;
             enum projection pro_old = transform_get_projection(this_->trans);
             struct coord *tc = transform_center(this_->trans);
@@ -3436,7 +3439,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                     have_p_old = transform_point(this_->trans, pro_old, &old_center, &p_old);
             }
             navit_vehicle_draw(this_, nv, &cursor_screen);
-            navit_set_center_cursor(this_, 1, 0);
+            navit_set_center_cursor(this_, 0, 0);
             transform_copy(this_->trans, this_->trans_cursor);
             if (this_->follow_cursor && have_p_old) {
                 struct point p_new;
@@ -3449,7 +3452,6 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                         graphics_draw_mode(this_->gra, draw_mode_end);
                 }
             }
-            nv->follow_curr = nv->follow > 0 ? nv->follow : 1;
         } else {
             navit_vehicle_draw(this_, nv, NULL);
 
