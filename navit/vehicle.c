@@ -470,7 +470,7 @@ void vehicle_interpolate(struct vehicle *this_) {
     elapsed = (now.tv_sec - this_->interp_t0.tv_sec) * 1000 + (now.tv_usec - this_->interp_t0.tv_usec) / 1000;
 
     if (this_->interp_duration <= 0)
-        this_->interp_duration = 1000;
+        this_->interp_duration = 500;
 
     t = (double)elapsed / this_->interp_duration;
     if (t > 1.0)

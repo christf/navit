@@ -3449,10 +3449,9 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                         graphics_draw_mode(this_->gra, draw_mode_end);
                 }
             }
+            nv->follow_curr = nv->follow > 0 ? nv->follow : 1;
         } else {
-            struct point cursor_screen;
-            navit_get_cursor_pnt(this_, &cursor_screen, 0, NULL);
-            navit_vehicle_draw(this_, nv, &cursor_screen);
+            navit_vehicle_draw(this_, nv, NULL);
 
             if (nv->follow_curr > 1)
                 nv->follow_curr--;
