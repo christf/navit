@@ -3181,7 +3181,7 @@ static struct route_graph *route_graph_build(struct mapset *ms, struct coord *c,
     if (route_graph_build_next_map(ret)) {
         if (async) {
             ret->idle_cb = callback_new_2(callback_cast(route_graph_build_idle), ret, profile);
-            ret->idle_ev = event_add_idle(50, ret->idle_cb);
+            ret->idle_ev = event_add_idle(55, ret->idle_cb);
         }
     } else
         route_graph_build_done(ret, 0);

@@ -3823,7 +3823,7 @@ static void navigation_update(struct navigation *this_, struct route *route, str
     this_->status_int = status_busy;
     if (route_get_flags(this_->route) & route_path_flag_async) {
         this_->idle_cb = callback_new_1(callback_cast(navigation_update_idle), this_);
-        this_->idle_ev = event_add_idle(50, this_->idle_cb);
+        this_->idle_ev = event_add_idle(60, this_->idle_cb);
     } else {
         this_->idle_ev = NULL;
         this_->idle_cb = NULL;
