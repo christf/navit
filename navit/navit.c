@@ -162,6 +162,7 @@ struct navit {
                                       2: draw operations are pending, requiring a redraw once draw operations are
                     unblocked */
     int w, h;
+    int render_margin;
     int drag_bitmap;
     int use_mousewheel;
     struct messagelist *messages;
@@ -540,6 +541,12 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     sel.u.p_rect.rl.y = h;
     transform_set_screen_selection(this_->trans, &sel);
     graphics_init(this_->gra);
+    if (this_->render_margin) {
+        sel.u.p_rect.lu.x = -this_->render_margin;
+        sel.u.p_rect.lu.y = -this_->render_margin;
+        sel.u.p_rect.rl.x = w + this_->render_margin;
+        sel.u.p_rect.rl.y = h + this_->render_margin;
+    }
     graphics_set_rect(this_->gra, &sel.u.p_rect);
     if (callback)
         callback_list_call_attr_1(this_->attr_cbl, attr_graphics_ready, this_);
@@ -566,6 +573,10 @@ int navit_get_width(struct navit *this_) {
 
 int navit_get_height(struct navit *this_) {
     return this_->h;
+}
+
+void navit_set_render_margin(struct navit *this_, int margin) {
+    this_->render_margin = margin;
 }
 
 static void navit_popup(void *data) {
