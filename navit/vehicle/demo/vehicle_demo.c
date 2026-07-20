@@ -32,7 +32,6 @@
 #include "util.h"
 #include "vehicle.h"
 #include <glib.h>
-#include <math.h>
 #include <string.h>
 
 /**
@@ -56,7 +55,6 @@ struct vehicle_priv {
     struct callback *timer_callback;
     struct event_timeout *timer;
     char *timep;
-    char *nmea;
     enum attr_position_valid valid; /**< Whether the vehicle has valid position data **/
     double height;
 };
@@ -70,11 +68,7 @@ static void vehicle_demo_destroy(struct vehicle_priv *priv) {
 }
 
 static int vehicle_demo_position_attr_get(struct vehicle_priv *priv, enum attr_type type, struct attr *attr) {
-    char ns = 'N', ew = 'E', *timep, *rmc, *gga;
-    int hr, min, sec, year, mon, day;
-    double lat, lng;
     int *flags;
-    char lat_deg[4], lat_min[16], lng_deg[4], lng_min[16], height_str[16], speed_str[16], dir_str[16];
     switch (type) {
     case attr_position_speed:
         attr->u.numd = &priv->speed;
@@ -102,38 +96,6 @@ static int vehicle_demo_position_attr_get(struct vehicle_priv *priv, enum attr_t
         break;
     case attr_position_height:
         attr->u.numd = &priv->height;
-        break;
-    case attr_position_nmea:
-        lat = priv->geo.lat;
-        if (lat < 0) {
-            lat = -lat;
-            ns = 'S';
-        }
-        lng = priv->geo.lng;
-        if (lng < 0) {
-            lng = -lng;
-            ew = 'W';
-        }
-        timep = current_to_iso8601();
-        sscanf(timep, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hr, &min, &sec);
-        g_free(timep);
-        snprintf(lat_deg, sizeof(lat_deg), "%02d", (int)floor(lat));
-        snprintf(lng_deg, sizeof(lng_deg), "%03d", (int)floor(lng));
-        nmea_float_fmt(lat_min, sizeof(lat_min), (lat - floor(lat)) * 60.0, 2, 4);
-        nmea_float_fmt(lng_min, sizeof(lng_min), (lng - floor(lng)) * 60.0, 2, 4);
-        nmea_float_fmt(height_str, sizeof(height_str), 0.0, 0, 1);
-        gga = g_strdup_printf(NMEA_GPGGA_FMT, hr, min, sec, lat_deg, lat_min, ns, lng_deg, lng_min, ew, height_str);
-        nmea_chksum(gga);
-        nmea_float_fmt(speed_str, sizeof(speed_str), priv->speed / 1.852, 0, 1);
-        nmea_float_fmt(dir_str, sizeof(dir_str), (double)priv->direction, 0, 1);
-        rmc = g_strdup_printf(NMEA_GPRMC_FMT, hr, min, sec, lat_deg, lat_min, ns, lng_deg, lng_min, ew, speed_str,
-                              dir_str, day, mon, year % 100);
-        nmea_chksum(rmc);
-        g_free(priv->nmea);
-        priv->nmea = g_strdup_printf("%s%s", gga, rmc);
-        g_free(gga);
-        g_free(rmc);
-        attr->u.str = priv->nmea;
         break;
     case attr_position_valid:
         attr->u.num = priv->valid;
