@@ -4375,6 +4375,13 @@ static void traffic_add_segments_idle(struct traffic_shared_priv *shared) {
     message = (struct traffic_message *)entry->data;
     shared->deferred_segments = g_list_remove(shared->deferred_segments, message);
 
+    if (!message || !message->priv) {
+        dbg(lvl_warning, "traffic_add_segments_idle: skipping invalid message %p", message);
+        if (shared->deferred_segments)
+            traffic_ensure_deferred_idle(shared);
+        return;
+    }
+
     if (!message->priv->items && route_get_attr(shared->rt, attr_route_status, &attr, NULL) && route_get_pos(shared->rt)
         && ((attr.u.num & route_status_destination_set))) {
         traffic_location_set_enclosing_rect(message->location, NULL);
@@ -4534,7 +4541,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                  * map selection, as the message might have an effect on the route. Otherwise this
                                  * operation is deferred until a rectangle overlapping with the location is queried.
                                  */
-                                if (!message->priv->items) {
+                                if (!message->priv->items && !message->is_cancellation) {
                                     this_->shared->deferred_segments =
                                         g_list_append(this_->shared->deferred_segments, message);
                                     traffic_ensure_deferred_idle(this_->shared);
@@ -4560,6 +4567,8 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                     if (stored_msg->priv->items)
                         ret |= MESSAGE_UPDATE_SEGMENTS;
                     this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
+                    this_->shared->deferred_segments =
+                        g_list_remove_all(this_->shared->deferred_segments, stored_msg);
                     traffic_message_remove_item_data(stored_msg, message, this_->shared->rt);
                     traffic_message_destroy(stored_msg);
                 }
@@ -4571,8 +4580,11 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
 
             traffic_message_dump_to_stderr(message);
 
-            if (message->is_cancellation)
+            if (message->is_cancellation) {
+                this_->shared->deferred_segments =
+                    g_list_remove_all(this_->shared->deferred_segments, message);
                 traffic_message_destroy(message);
+            }
 
             dbg(lvl_debug, "*****checkpoint PROCESS-6");
         }
@@ -4611,6 +4623,8 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                 if (stored_msg->priv->items)
                     ret |= MESSAGE_UPDATE_SEGMENTS;
                 this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
+                this_->shared->deferred_segments =
+                    g_list_remove_all(this_->shared->deferred_segments, stored_msg);
                 traffic_message_remove_item_data(stored_msg, NULL, this_->shared->rt);
                 traffic_message_destroy(stored_msg);
             }
