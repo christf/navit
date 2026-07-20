@@ -4344,7 +4344,7 @@ static void traffic_ensure_deferred_idle(struct traffic_shared_priv *shared) {
     if (!shared->deferred_idle_cb)
         shared->deferred_idle_cb = callback_new_1(callback_cast(traffic_add_segments_idle), shared);
     if (!shared->deferred_idle_ev)
-        shared->deferred_idle_ev = event_add_idle(50, shared->deferred_idle_cb);
+        shared->deferred_idle_ev = event_add_idle(300, shared->deferred_idle_cb);
 }
 
 /**
@@ -4664,7 +4664,7 @@ static void traffic_loop(struct traffic *this_) {
             callback_destroy(this_->idle_cb);
         this_->idle_cb =
             callback_new_2(callback_cast(traffic_process_messages_int), this_, PROCESS_MESSAGES_PURGE_EXPIRED);
-        this_->idle_ev = event_add_idle(50, this_->idle_cb);
+        this_->idle_ev = event_add_idle(300, this_->idle_cb);
     } else
         traffic_process_messages_int(this_, PROCESS_MESSAGES_PURGE_EXPIRED);
 }
@@ -5936,7 +5936,7 @@ struct map *traffic_get_map(struct traffic *this_) {
                     this_->idle_cb = callback_new_2(callback_cast(traffic_process_messages_int), this_,
                                                     PROCESS_MESSAGES_NO_DUMP_STORE);
                 if (!this_->idle_ev)
-                    this_->idle_ev = event_add_idle(50, this_->idle_cb);
+                    this_->idle_ev = event_add_idle(300, this_->idle_cb);
             }
         }
     }
@@ -6085,7 +6085,7 @@ void traffic_process_messages(struct traffic *this_, struct traffic_message **me
         if (this_->idle_cb)
             callback_destroy(this_->idle_cb);
         this_->idle_cb = callback_new_2(callback_cast(traffic_process_messages_int), this_, 0);
-        this_->idle_ev = event_add_idle(50, this_->idle_cb);
+        this_->idle_ev = event_add_idle(300, this_->idle_cb);
     }
 }
 
