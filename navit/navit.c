@@ -63,6 +63,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 struct log;
 struct vehicle;
@@ -172,6 +173,7 @@ struct navit {
     int pitch;
     int follow_cursor;
     int map_animating;
+    struct timeval scroll_last_fix;
     int prevTs;
     int graphics_flags;
     int zoom_min, zoom_max;
@@ -446,11 +448,14 @@ static int navit_animation_tick(void *data) {
         graphics_draw_drag(this_->gra, &offset);
         graphics_draw_mode(this_->gra, draw_mode_end);
     } else if (was_animating && !primary_animating) {
-        /* The map-scroll ease finished: refresh to the new centered map.
-         * This is seamless because the eased offset made the old surface
-         * coincide with the new view. */
         this_->map_animating = 0;
-        navit_draw_async(this_, 1);
+        if (!this_->blocked && this_->gra) {
+            transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
+            graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, 0,
+                          NULL, this_->graphics_flags | 1);
+            graphics_draw_drag(this_->gra, NULL);
+            graphics_draw_mode(this_->gra, draw_mode_end);
+        }
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
     }
 
@@ -806,6 +811,11 @@ static void navit_scale(struct navit *this_, long scale, struct point *p, int dr
         scale = this_->zoom_min;
     if (scale > this_->zoom_max)
         scale = this_->zoom_max;
+    if (this_->map_animating) {
+        this_->map_animating = 0;
+        if (this_->vehicle)
+            vehicle_reset_map_scroll(this_->vehicle->vehicle);
+    }
     if (p)
         transform_reverse(this_->trans, p, &c1);
     transform_set_scale(this_->trans, scale);
@@ -2578,6 +2588,11 @@ void navit_set_center_cursor(struct navit *this_, int autozoom, int keep_orienta
  */
 
 void navit_drag_map(struct navit *this_, struct point *origin, struct point *destination) {
+    if (this_->map_animating) {
+        this_->map_animating = 0;
+        if (this_->vehicle)
+            vehicle_reset_map_scroll(this_->vehicle->vehicle);
+    }
     update_transformation(this_->trans, origin, destination);
     graphics_draw_drag(this_->gra, NULL);
     transform_copy(this_->trans, this_->trans_cursor);
@@ -3458,10 +3473,30 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                 enum projection pro_new = transform_get_projection(this_->trans);
                 if (pro_new && transform_point(this_->trans, pro_new, &old_center, &p_new)) {
                     struct point scroll_target = {p_new.x - p_old.x, p_new.y - p_old.y};
-                    vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_target);
+                    struct point scroll_from = {0, 0};
+                    struct timeval now;
+                    int interval_ms = 1000;
+                    gettimeofday(&now, NULL);
+                    if (this_->scroll_last_fix.tv_sec != 0) {
+                        interval_ms = (now.tv_sec - this_->scroll_last_fix.tv_sec) * 1000
+                                      + (now.tv_usec - this_->scroll_last_fix.tv_usec) / 1000;
+                        if (interval_ms < 100)
+                            interval_ms = 100;
+                        else if (interval_ms > 5000)
+                            interval_ms = 5000;
+                    }
+                    this_->scroll_last_fix = now;
+                    if (this_->map_animating) {
+                        vehicle_get_mapdrag_offset(this_->vehicle->vehicle, &scroll_from);
+                    } else {
+                        vehicle_reset_map_scroll(this_->vehicle->vehicle);
+                    }
+                    vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_from, &scroll_target, interval_ms);
                     this_->map_animating = 1;
-                    if (this_->gra)
+                    if (this_->gra) {
+                        graphics_draw_drag(this_->gra, &scroll_from);
                         graphics_draw_mode(this_->gra, draw_mode_end);
+                    }
                 }
             }
         } else {

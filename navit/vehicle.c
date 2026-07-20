@@ -435,10 +435,12 @@ void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
     center->y = this_->cursor_pnt.y + this_->real_h / 2;
 }
 
-void vehicle_start_map_scroll(struct vehicle *this_, struct point *target) {
-    this_->interp_prev = this_->drag_pnt;
-    this_->interp_target = *target;
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int duration_ms) {
+    this_->interp_prev = *from;
+    this_->interp_target = *to;
+    this_->drag_pnt = *from;
     gettimeofday(&this_->interp_t0, NULL);
+    this_->interp_duration = duration_ms;
     this_->interpolating = 1;
 }
 
@@ -476,7 +478,7 @@ void vehicle_interpolate(struct vehicle *this_) {
     elapsed = (now.tv_sec - this_->interp_t0.tv_sec) * 1000 + (now.tv_usec - this_->interp_t0.tv_usec) / 1000;
 
     if (this_->interp_duration <= 0)
-        this_->interp_duration = 500;
+        return;
 
     t = (double)elapsed / this_->interp_duration;
     if (t > 1.0)
@@ -496,7 +498,7 @@ int vehicle_animation_tick(struct vehicle *this_) {
     if (!this_->interpolating)
         return 0;
     vehicle_interpolate(this_);
-    return 1;
+    return this_->interpolating;
 }
 
 void vehicle_draw_do(struct vehicle *this_) {
