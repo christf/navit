@@ -85,8 +85,6 @@ struct graphics_priv {
     char *window_title;
     guint tick_callback_id;
     int needs_redraw;
-    int margin_x;
-    int margin_y;
 };
 
 struct graphics_gc_priv {
@@ -637,22 +635,16 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
 
     /* Handle resize inline (replaces configure handler) */
     if (gra->width != width || gra->height != height) {
-        int sw, sh;
 #ifndef _WIN32
         dbg(lvl_debug, "resize %dx%d", width, height);
 #endif
         gra->width = width;
         gra->height = height;
-        gra->margin_x = 2 * gra->width;
-        gra->margin_y = 2 * gra->height;
-        sw = gra->width + 2 * gra->margin_x;
-        sh = gra->height + 2 * gra->margin_y;
-        cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, sw, sh);
+        cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, gra->width, gra->height);
         if (gra->cairo)
             cairo_destroy(gra->cairo);
         gra->cairo = cairo_create(surface);
         cairo_surface_destroy(surface);
-        cairo_translate(gra->cairo, gra->margin_x, gra->margin_y);
         cairo_set_antialias(gra->cairo, CAIRO_ANTIALIAS_GOOD);
         callback_list_call_attr_2(gra->cbl, attr_resize, GINT_TO_POINTER(gra->width), GINT_TO_POINTER(gra->height));
     }
@@ -666,7 +658,7 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
             cairo_paint(cr);
         }
     }
-    cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x - gra->margin_x, gra->p.y - gra->margin_y);
+    cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x, gra->p.y);
     cairo_paint(cr);
 
     GdkRectangle area_rect = {0, 0, width, height};
