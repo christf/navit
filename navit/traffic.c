@@ -4567,8 +4567,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                     if (stored_msg->priv->items)
                         ret |= MESSAGE_UPDATE_SEGMENTS;
                     this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
-                    this_->shared->deferred_segments =
-                        g_list_remove_all(this_->shared->deferred_segments, stored_msg);
+                    this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, stored_msg);
                     traffic_message_remove_item_data(stored_msg, message, this_->shared->rt);
                     traffic_message_destroy(stored_msg);
                 }
@@ -4581,8 +4580,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
             traffic_message_dump_to_stderr(message);
 
             if (message->is_cancellation) {
-                this_->shared->deferred_segments =
-                    g_list_remove_all(this_->shared->deferred_segments, message);
+                this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, message);
                 traffic_message_destroy(message);
             }
 
@@ -4623,8 +4621,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                 if (stored_msg->priv->items)
                     ret |= MESSAGE_UPDATE_SEGMENTS;
                 this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
-                this_->shared->deferred_segments =
-                    g_list_remove_all(this_->shared->deferred_segments, stored_msg);
+                this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, stored_msg);
                 traffic_message_remove_item_data(stored_msg, NULL, this_->shared->rt);
                 traffic_message_destroy(stored_msg);
             }
