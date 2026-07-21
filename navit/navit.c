@@ -965,6 +965,7 @@ static void navit_predraw(struct navit *this_) {
 
 static void navit_scale(struct navit *this_, long scale, struct point *p, int draw) {
     struct coord c1, c2, *center;
+    long old_scale = transform_get_scale(this_->trans);
     if (scale < this_->zoom_min)
         scale = this_->zoom_min;
     if (scale > this_->zoom_max)
@@ -974,6 +975,7 @@ static void navit_scale(struct navit *this_, long scale, struct point *p, int dr
         if (this_->vehicle)
             vehicle_reset_map_scroll(this_->vehicle->vehicle);
     }
+    dbg(lvl_error, "navit_scale: %ld -> %ld", old_scale, scale);
     if (p)
         transform_reverse(this_->trans, p, &c1);
     transform_set_scale(this_->trans, scale);
@@ -2570,6 +2572,7 @@ void navit_set_center(struct navit *this_, struct pcoord *center, int set_timeou
     struct coord *c = transform_center(this_->trans);
     struct coord c1, c2;
     enum projection pro = transform_get_projection(this_->trans);
+    dbg(lvl_error, "navit_set_center: (%d,%d) pro=%d anim=%d", center->x, center->y, center->pro, this_->map_animating);
     if (pro != center->pro) {
         c1.x = center->x;
         c1.y = center->y;
