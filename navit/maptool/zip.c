@@ -54,9 +54,29 @@ static int zip_write(struct zip_info *info, void *data, int len) {
 }
 
 #ifdef HAVE_LZMA
-static int compress_lzma_int(uint8_t *dest, size_t *destLen, const uint8_t *source, size_t sourceLen, int level) {
+void *arena_alloc(void *opaque, size_t nmemb, size_t size) {
+    struct lzma_arena *a = (struct lzma_arena *)opaque;
+    if (nmemb && size > SIZE_MAX / nmemb)
+        return NULL;
+    size_t total = nmemb * size;
+    size_t aligned = (total + 15) & ~(size_t)15;
+    if (a->pos + aligned > a->size)
+        return NULL;
+    char *ptr = a->buf + a->pos;
+    a->pos += aligned;
+    return ptr;
+}
+
+void arena_free(void *opaque, void *ptr) {
+    (void)opaque;
+    (void)ptr;
+}
+
+static int compress_lzma_int(uint8_t *dest, size_t *destLen, const uint8_t *source, size_t sourceLen, int level,
+                             const lzma_allocator *allocator) {
     size_t out_pos = 0;
-    lzma_ret ret = lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, NULL, source, sourceLen, dest, &out_pos, *destLen);
+    lzma_ret ret =
+        lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, allocator, source, sourceLen, dest, &out_pos, *destLen);
     if (ret == LZMA_OK) {
         *destLen = out_pos;
         return 0;
@@ -96,6 +116,70 @@ static int compress2_int(Byte *dest, uLongf *destLen, const Bytef *source, uLong
     return err;
 }
 #endif
+
+char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
+                       char **reuse_buf, size_t *reuse_size, void *lzma_alloc) {
+    size_t compbuflen = input_size + input_size / 3 + 200;
+
+    if (*reuse_size < compbuflen) {
+        *reuse_buf = g_realloc(*reuse_buf, compbuflen);
+        *reuse_size = compbuflen;
+    }
+
+    *out_method = 0;
+    if (level) {
+        int tried_lzma = 0;
+#if defined(HAVE_LZMA)
+        if (method == 14) {
+            tried_lzma = 1;
+            size_t out_len = compbuflen;
+            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level,
+                                  (const lzma_allocator *)lzma_alloc)
+                == 0) {
+                if (out_len < (size_t)input_size) {
+                    char *result = g_malloc(out_len);
+                    memcpy(result, *reuse_buf, out_len);
+                    *out_size = out_len;
+                    *out_method = 14;
+                    return result;
+                }
+            }
+        }
+#endif
+#if defined(HAVE_ZLIB)
+        if (!*out_method) {
+            uLongf destlen = compbuflen;
+            if (compress2_int((Byte *)*reuse_buf, &destlen, (Bytef *)input, input_size, level) == Z_OK) {
+                if (destlen < (uLongf)input_size) {
+                    char *result = g_malloc(destlen);
+                    memcpy(result, *reuse_buf, destlen);
+                    *out_size = destlen;
+                    *out_method = 8;
+                    return result;
+                }
+            }
+        }
+#endif
+#if defined(HAVE_LZMA)
+        if (!*out_method && !tried_lzma) {
+            size_t out_len = compbuflen;
+            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level,
+                                  (const lzma_allocator *)lzma_alloc)
+                == 0) {
+                if (out_len < (size_t)input_size) {
+                    char *result = g_malloc(out_len);
+                    memcpy(result, *reuse_buf, out_len);
+                    *out_size = out_len;
+                    *out_method = 14;
+                    return result;
+                }
+            }
+        }
+#endif
+    }
+    *out_size = input_size;
+    return NULL;
+}
 
 void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *data, int data_size) {
     struct zip_lfh lfh = {
@@ -202,6 +286,75 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
     }
 
     g_free(compbuffer);
+}
+
+void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, char *compressed_data, int compressed_size,
+                         int uncompressed_size, unsigned long crc, int zipmthd) {
+    struct zip_lfh lfh = {
+        zip_lfh_sig,
+        0x0a,
+        0x0,
+        zipmthd,
+        zip_info->time,
+        zip_info->date,
+        (int)crc,
+        compressed_size,
+        (unsigned int)uncompressed_size,
+        filelen,
+        0x0,
+    };
+    struct zip_cd cd = {
+        zip_cd_sig,
+        0x17,
+        0x00,
+        0x0a,
+        0x00,
+        0x0000,
+        zipmthd,
+        zip_info->time,
+        zip_info->date,
+        (int)crc,
+        compressed_size,
+        (unsigned int)uncompressed_size,
+        filelen,
+        0x0000,
+        0x0000,
+        0x0000,
+        0x0000,
+        0x0,
+        zip_info->offset,
+    };
+    struct zip_cd_ext cd_ext = {
+        0x1,
+        0x8,
+        zip_info->offset,
+    };
+    char *filename;
+    int len;
+
+    if (zip_info->zip64) {
+        cd.zipofst = 0xffffffff;
+        cd.zipcxtl += sizeof(cd_ext);
+    }
+    filename = g_alloca(filelen + 1);
+    strcpy(filename, name);
+    len = strlen(filename);
+    while (len < filelen) {
+        filename[len++] = '_';
+    }
+    filename[filelen] = '\0';
+    zip_write(zip_info, &lfh, sizeof(lfh));
+    zip_write(zip_info, filename, filelen);
+    zip_info->offset += sizeof(lfh) + filelen;
+    zip_write(zip_info, compressed_data, compressed_size);
+    zip_info->offset += compressed_size;
+    dbg_assert(fwrite(&cd, sizeof(cd), 1, zip_info->dir) == 1);
+    dbg_assert(fwrite(filename, filelen, 1, zip_info->dir) == 1);
+    zip_info->dir_size += sizeof(cd) + filelen;
+    if (zip_info->zip64) {
+        dbg_assert(fwrite(&cd_ext, sizeof(cd_ext), 1, zip_info->dir) == 1);
+        zip_info->dir_size += sizeof(cd_ext);
+    }
 }
 
 int zip_write_index(struct zip_info *info) {
@@ -346,6 +499,10 @@ FILE *zip_get_index(struct zip_info *info) {
 
 int zip_get_zipnum(struct zip_info *info) {
     return info->zipnum;
+}
+
+int zip_get_compression_level(struct zip_info *info) {
+    return info->compression_level;
 }
 
 void zip_set_zipnum(struct zip_info *info, int num) {
