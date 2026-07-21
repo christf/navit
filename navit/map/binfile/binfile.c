@@ -357,6 +357,10 @@ static unsigned char *binfile_read_content(struct map_priv *m, struct file *fi, 
         offset += lfh->zipxtraln;
         ret = file_data_read_compressed(fi, offset, lfh->zipsize, lfh->zipuncmp);
         break;
+    case 14:
+        offset += lfh->zipxtraln;
+        ret = file_data_read_compressed_lzma(fi, offset, lfh->zipsize, lfh->zipuncmp);
+        break;
     default:
         dbg(lvl_error, "map file %s: unknown compression method %d", fi->name, lfh->zipmthd);
     }
