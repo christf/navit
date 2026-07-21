@@ -181,7 +181,7 @@ int thread_join(thread *this_) {
         dbg(lvl_error, "error %d %s, thread=%p", err, thread_format_error(err), this_);
         return -1;
     }
-    return (int)*ret;
+    return ret ? (int)*ret : 0;
 #elif HAVE_API_WIN32
     DWORD res;
     DWORD err;
