@@ -417,6 +417,13 @@ void navit_draw(struct navit *this_) {
         navit_draw_async(this_, 0);
 }
 
+static int navit_gui_menu_active(struct navit *this_) {
+    struct attr attr;
+    if (this_->gui && gui_get_attr(this_->gui, attr_active, &attr, NULL))
+        return attr.u.num;
+    return 0;
+}
+
 static int navit_animation_tick(void *data) {
     struct navit *this_ = data;
     GList *l = this_->vehicles;
@@ -432,7 +439,7 @@ static int navit_animation_tick(void *data) {
         l = g_list_next(l);
     }
 
-    if (primary_animating && this_->vehicle && this_->gra) {
+    if (primary_animating && this_->vehicle && this_->gra && !navit_gui_menu_active(this_)) {
         struct point offset;
         int w, h;
         vehicle_get_mapdrag_offset(this_->vehicle->vehicle, &offset);
@@ -2593,7 +2600,8 @@ void navit_set_center_cursor(struct navit *this_, int autozoom, int keep_orienta
  */
 
 void navit_drag_map(struct navit *this_, struct point *origin, struct point *destination) {
-    dbg(lvl_error, "navit_drag_map: (%d,%d)->(%d,%d) anim=%d", origin->x, origin->y, destination->x, destination->y, this_->map_animating);
+    dbg(lvl_error, "navit_drag_map: (%d,%d)->(%d,%d) anim=%d", origin->x, origin->y, destination->x, destination->y,
+        this_->map_animating);
     if (this_->map_animating) {
         this_->map_animating = 0;
         if (this_->vehicle)
@@ -3479,7 +3487,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                 enum projection pro_new = transform_get_projection(this_->trans);
                 if (pro_new && transform_point(this_->trans, pro_new, &old_center, &p_new)) {
                     struct point scroll_target = {p_new.x - p_old.x, p_new.y - p_old.y};
-                    struct point scroll_from = {0, 0};
+                    struct point scroll_zero = {0, 0};
                     struct timeval now;
                     int interval_ms = 1000;
                     gettimeofday(&now, NULL);
@@ -3492,15 +3500,10 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                             interval_ms = 5000;
                     }
                     this_->scroll_last_fix = now;
-                    if (this_->map_animating) {
-                        vehicle_get_mapdrag_offset(this_->vehicle->vehicle, &scroll_from);
-                    } else {
-                        vehicle_reset_map_scroll(this_->vehicle->vehicle);
-                    }
-                    vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_from, &scroll_target, interval_ms);
+                    vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, interval_ms);
                     this_->map_animating = 1;
-                    if (this_->gra) {
-                        graphics_draw_drag(this_->gra, &scroll_from);
+                    if (this_->gra && !navit_gui_menu_active(this_)) {
+                        graphics_draw_drag(this_->gra, &scroll_zero);
                         graphics_draw_mode(this_->gra, draw_mode_end);
                     }
                 }

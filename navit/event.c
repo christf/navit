@@ -20,12 +20,12 @@
 #include "event.h"
 #include "debug.h"
 #include "plugin.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#ifndef _WIN32
+#    include <fcntl.h>
+#    include <unistd.h>
+#endif
 
 static struct event_methods event_methods;
 static const char *e_requestor;
@@ -33,6 +33,14 @@ static const char *e_system;
 
 static int has_quit;
 
+#ifdef _WIN32
+void event_signal_notify(void) {
+    event_main_loop_quit();
+}
+int event_get_signal_fd(void) {
+    return -1;
+}
+#else
 static int sig_pipe_fds[2] = {-1, -1};
 
 static void sig_pipe_init(void) __attribute__((constructor));
@@ -62,6 +70,7 @@ void event_signal_notify(void) {
 int event_get_signal_fd(void) {
     return sig_pipe_fds[0];
 }
+#endif
 
 #define require_method_helper(m)                                                                                       \
     if (!event_methods.m) {                                                                                            \
