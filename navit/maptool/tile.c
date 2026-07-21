@@ -529,7 +529,8 @@ void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out
                 }
                 if (th->name[strlen(info->suffix)])
                     index_submap_add(info, th);
-                zip_add_member(zip_info);
+                if (!info->write)
+                    zip_add_member(zip_info);
                 processed_tiles++;
             }
             next = g_list_next(next);
@@ -537,13 +538,6 @@ void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out
         len--;
     }
     g_list_free(tiles_list);
-    if (info->suffix[0] && info->write) {
-        struct item_bin *item_bin = init_item(type_submap);
-        item_bin_add_coord_rect(item_bin, &world_bbox);
-        item_bin_add_attr_range(item_bin, attr_order, 0, 255);
-        item_bin_add_attr_int(item_bin, attr_zipfile_ref, zip_get_zipnum(zip_info) - 1);
-        item_bin_write(item_bin, zip_get_index(zip_info));
-    }
 }
 
 void merge_tiles(struct tile_info *info) {
