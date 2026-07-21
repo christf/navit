@@ -86,6 +86,9 @@ struct vehicle {
     int sequence;
     struct point interp_prev;
     struct point interp_target;
+    int interp_prev_yaw;
+    int interp_target_yaw;
+    int interp_yaw;
     struct timeval interp_t0;
     int interp_duration;
     int interpolating;
@@ -438,9 +441,13 @@ void vehicle_get_cursor_center(struct vehicle *this_, struct point *center) {
     center->y = this_->cursor_pnt.y + this_->real_h / 2;
 }
 
-void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int duration_ms) {
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int from_yaw, int to_yaw,
+                              int duration_ms) {
     this_->interp_prev = *from;
     this_->interp_target = *to;
+    this_->interp_prev_yaw = from_yaw;
+    this_->interp_target_yaw = to_yaw;
+    this_->interp_yaw = from_yaw;
     this_->drag_pnt = *from;
     gettimeofday(&this_->interp_t0, NULL);
     this_->interp_duration = duration_ms;
@@ -449,6 +456,10 @@ void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct 
 
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
     *offset = this_->drag_pnt;
+}
+
+int vehicle_get_interp_yaw(struct vehicle *this_) {
+    return this_->interp_yaw;
 }
 
 void vehicle_reset_map_scroll(struct vehicle *this_) {
@@ -492,6 +503,15 @@ void vehicle_interpolate(struct vehicle *this_) {
 
     this_->drag_pnt.x = raw_x;
     this_->drag_pnt.y = raw_y;
+
+    {
+        int delta = (this_->interp_target_yaw - this_->interp_prev_yaw + 180) % 360 - 180;
+        int yaw = this_->interp_prev_yaw + (int)(t * delta);
+        yaw = yaw % 360;
+        if (yaw < 0)
+            yaw += 360;
+        this_->interp_yaw = yaw;
+    }
 
     if (t >= 1.0)
         this_->interpolating = 0;

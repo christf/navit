@@ -61,8 +61,10 @@ void vehicle_draw_do(struct vehicle *this_);
 int vehicle_animation_tick(struct vehicle *this_);
 int vehicle_get_cursor_data(struct vehicle *this_, struct point *pnt, int *angle, int *speed);
 void vehicle_get_cursor_center(struct vehicle *this_, struct point *center);
-void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int duration_ms);
+void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int from_yaw, int to_yaw,
+                              int duration_ms);
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset);
+int vehicle_get_interp_yaw(struct vehicle *this_);
 void vehicle_reset_map_scroll(struct vehicle *this_);
 void vehicle_log_gpx_add_tag(char *tag, char **logstr);
 struct vehicle *vehicle_ref(struct vehicle *this_);
