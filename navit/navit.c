@@ -402,10 +402,13 @@ void navit_draw_async(struct navit *this_, int async) {
 
     if (this_->blocked) {
         this_->blocked |= 2;
+        dbg(lvl_error, "draw_async: blocked=%d, deferred", this_->blocked);
         return;
     }
-    if (this_->map_animating)
+    if (this_->map_animating) {
+        dbg(lvl_error, "draw_async: skipped, map_animating=1");
         return;
+    }
     graphics_draw_drag(this_->gra, NULL);
     transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
@@ -3463,7 +3466,13 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
             navit_disable_suspend();
 
         transform_point(this_->trans_cursor, pro, &nv->coord, &cursor_pnt);
-        if (this_->button_pressed != 1 && this_->follow_cursor
+        {
+            int within = transform_within_border(this_->trans_cursor, &cursor_pnt, this_->border);
+            dbg(lvl_error,
+                "pos_update: cursor_pnt=(%d,%d) follow=%d follow_curr=%d within_border=%d border=%d animating=%d",
+                cursor_pnt.x, cursor_pnt.y, nv->follow, nv->follow_curr, within, this_->border, this_->map_animating);
+        }
+        if (!this_->map_animating && this_->button_pressed != 1 && this_->follow_cursor
             && (nv->follow == 0
                 || (nv->follow_curr <= nv->follow
                     && (nv->follow_curr == 1
@@ -3473,6 +3482,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
             struct coord *tc = transform_center(this_->trans);
             struct point cursor_screen, p_old = {0, 0};
             int have_p_old = 0;
+            dbg(lvl_error, "pos_update: re-centering");
             navit_get_cursor_pnt(this_, &cursor_screen, 0, NULL);
             if (tc) {
                 old_center = *tc;
@@ -3500,6 +3510,8 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                             interval_ms = 5000;
                     }
                     this_->scroll_last_fix = now;
+                    dbg(lvl_error, "pos_update: scroll_target=(%d,%d) interval_ms=%d", scroll_target.x, scroll_target.y,
+                        interval_ms);
                     vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, interval_ms);
                     this_->map_animating = 1;
                     if (this_->gra && !navit_gui_menu_active(this_)) {
@@ -3508,7 +3520,10 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                     }
                 }
             }
+        } else if (this_->map_animating) {
+            dbg(lvl_error, "pos_update: skip cursor redraw (animation active)");
         } else {
+            dbg(lvl_error, "pos_update: within border, just drawing cursor (no re-center)");
             navit_vehicle_draw(this_, nv, NULL);
 
             if (nv->follow_curr > 1)
