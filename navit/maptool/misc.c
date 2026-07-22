@@ -31,6 +31,7 @@
 #include "map.h"
 #include "maptool.h"
 #include "types.h"
+#include "zipfile.h"
 #include <fcntl.h>
 #include <glib.h>
 #include <stdio.h>
@@ -334,7 +335,8 @@ static gpointer process_tile_worker(gpointer data) {
         th->crc = crc32(th->crc, (unsigned char *)th->zip_data, data_size);
 
 #ifdef HAVE_LZMA
-        me->arena.pos = 0;
+        if (me->compression_method == ZIP_COMPRESSION_LZMA)
+            me->arena.pos = 0;
         th->comp_data = compress_for_zip(th->zip_data, data_size, th->compression_level, me->compression_method,
                                          &th->comp_size, &th->zipmthd, &me->scratch_buf, &me->scratch_size,
                                          &me->allocator);
@@ -366,7 +368,7 @@ static void tile_worker_pool_init(int n_threads, int compression_level, int comp
         worker_threads[i].queue = tile_queue;
         worker_threads[i].compression_method = compression_method;
 #ifdef HAVE_LZMA
-        if (compression_level > 0) {
+        if (compression_level > 0 && compression_method == ZIP_COMPRESSION_LZMA) {
             uint64_t mem = lzma_easy_encoder_memusage(compression_level);
             if (mem == UINT64_MAX) {
                 fprintf(stderr, "Invalid LZMA compression level %d\n", compression_level);
