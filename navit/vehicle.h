@@ -67,6 +67,7 @@ void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset);
 int vehicle_get_interp_yaw(struct vehicle *this_);
 void vehicle_reset_map_scroll(struct vehicle *this_);
 void vehicle_request_resize(struct vehicle *this_);
+void vehicle_reposition(struct vehicle *this_, struct point *pnt, int angle, int speed);
 void vehicle_log_gpx_add_tag(char *tag, char **logstr);
 struct vehicle *vehicle_ref(struct vehicle *this_);
 void vehicle_unref(struct vehicle *this_);

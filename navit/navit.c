@@ -520,8 +520,7 @@ static int navit_animation_tick(void *data) {
             navit_log_road_gap(this_, &offset, have_cursor ? &cursor_screen : NULL);
             graphics_draw_drag(this_->gra, &offset);
             if (have_cursor) {
-                vehicle_request_resize(nv->vehicle);
-                vehicle_draw(nv->vehicle, this_->gra, &cursor_screen, nv->dir - yaw, nv->speed);
+                vehicle_reposition(nv->vehicle, &cursor_screen, nv->dir - yaw, nv->speed);
             }
         }
         graphics_draw_mode(this_->gra, draw_mode_end);
@@ -544,7 +543,7 @@ static int navit_animation_tick(void *data) {
             struct point zero = {0, 0};
             navit_log_road_gap(this_, &zero, NULL);
         }
-        navit_draw_async(this_, 1);
+        navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
     }

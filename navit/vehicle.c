@@ -472,6 +472,18 @@ void vehicle_request_resize(struct vehicle *this_) {
     this_->need_resize = 1;
 }
 
+void vehicle_reposition(struct vehicle *this_, struct point *pnt, int angle, int speed) {
+    struct point sc;
+    this_->cursor_pnt = *pnt;
+    this_->angle = angle;
+    this_->speed = speed;
+    if (!this_->gra)
+        return;
+    sc.x = this_->cursor_pnt.x - (this_->real_w / 2);
+    sc.y = this_->cursor_pnt.y - (this_->real_h / 2);
+    graphics_overlay_resize(this_->gra, &sc, this_->real_w, this_->real_h, 0);
+}
+
 static void vehicle_set_default_name(struct vehicle *this_) {
     struct attr default_name;
     if (!attr_search(this_->attrs, attr_name)) {
