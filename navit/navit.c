@@ -173,6 +173,7 @@ struct navit {
     int pitch;
     int follow_cursor;
     int map_animating;
+    int anim_last_redraw_yaw;
     struct timeval scroll_last_fix;
     struct timeval scroll_finished_ts;
     int prevTs;
@@ -489,42 +490,45 @@ static int navit_animation_tick(void *data) {
         l = g_list_next(l);
     }
 
+    dbg(lvl_debug, "anim_tick: primary=%d was_anim=%d", primary_animating, was_animating);
+
     if (primary_animating && this_->vehicle && this_->gra && !navit_gui_menu_active(this_)) {
         struct navit_vehicle *nv = this_->vehicle;
-        struct point offset = {0, 0};
-        int w, h, yaw;
+        struct point offset;
+        struct point cursor_fixed;
+        int w, h, yaw, yaw_delta;
         yaw = vehicle_get_interp_yaw(nv->vehicle);
         transform_set_yaw(this_->trans, yaw);
         transform_set_yaw(this_->trans_cursor, yaw);
         transform_get_size(this_->trans, &w, &h);
-        {
-            enum projection pro = transform_get_projection(this_->trans_cursor);
-            struct point cursor_fixed = {0, 0};
-            int have_cursor = 0;
-            if (pro && !coord_not_set(nv->coord)) {
-                struct point vehicle_screen = {0, 0};
-                navit_get_cursor_pnt(this_, &cursor_fixed, 0, NULL);
-                transform_point(this_->trans_cursor, pro, &nv->coord, &vehicle_screen);
-                offset.x = cursor_fixed.x - vehicle_screen.x;
-                offset.y = cursor_fixed.y - vehicle_screen.y;
-                have_cursor = 1;
-            }
-            if (offset.x < -2 * w)
-                offset.x = -2 * w;
-            else if (offset.x > 2 * w)
-                offset.x = 2 * w;
-            if (offset.y < -2 * h)
-                offset.y = -2 * h;
-            else if (offset.y > 2 * h)
-                offset.y = 2 * h;
-            dbg(lvl_error, "scroll_tick: drag=(%d,%d) yaw=%d screen=%dx%d", offset.x, offset.y, yaw, w, h);
-            navit_log_road_gap(this_, &offset, have_cursor ? &cursor_fixed : NULL);
-            graphics_draw_drag(this_->gra, &offset);
-            if (have_cursor) {
-                vehicle_reposition(nv->vehicle, &cursor_fixed, nv->dir - yaw, nv->speed);
-            }
+        vehicle_get_mapdrag_offset(nv->vehicle, &offset);
+        navit_get_cursor_pnt(this_, &cursor_fixed, 0, NULL);
+        if (offset.x < -2 * w)
+            offset.x = -2 * w;
+        else if (offset.x > 2 * w)
+            offset.x = 2 * w;
+        if (offset.y < -2 * h)
+            offset.y = -2 * h;
+        else if (offset.y > 2 * h)
+            offset.y = 2 * h;
+        dbg(lvl_error, "scroll_tick: drag=(%d,%d) yaw=%d screen=%dx%d", offset.x, offset.y, yaw, w, h);
+        navit_log_road_gap(this_, &offset, &cursor_fixed);
+        graphics_draw_drag(this_->gra, &offset);
+        vehicle_reposition(nv->vehicle, &cursor_fixed, nv->dir - yaw, nv->speed);
+        yaw_delta = yaw - this_->anim_last_redraw_yaw;
+        if (yaw_delta < -180)
+            yaw_delta += 360;
+        if (yaw_delta > 180)
+            yaw_delta -= 360;
+        if (yaw_delta < 0)
+            yaw_delta = -yaw_delta;
+        dbg(lvl_error, "scroll_tick: yaw_delta=%d redraw=%s", yaw_delta, yaw_delta > 2 ? "FULL" : "drag_only");
+        if (yaw_delta > 2) {
+            navit_draw_displaylist(this_);
+            this_->anim_last_redraw_yaw = yaw;
+        } else {
+            graphics_draw_mode(this_->gra, draw_mode_end);
         }
-        graphics_draw_mode(this_->gra, draw_mode_end);
     } else if (was_animating && !primary_animating) {
         int final_yaw = vehicle_get_interp_yaw(this_->vehicle->vehicle);
         struct point final_drag;
@@ -3634,6 +3638,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                         vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, old_yaw,
                                                  new_yaw, interval_ms);
                         this_->map_animating = 1;
+                        this_->anim_last_redraw_yaw = new_yaw;
                         if (this_->gra && !navit_gui_menu_active(this_)) {
                             graphics_draw_drag(this_->gra, &scroll_zero);
                             graphics_draw_mode(this_->gra, draw_mode_end);
