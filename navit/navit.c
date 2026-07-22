@@ -440,21 +440,13 @@ static void navit_log_road_gap(struct navit *this_, struct point *drag) {
             struct point effective = {cursor_pnt.x - drag->x, cursor_pnt.y - drag->y};
             struct coord cursor_map;
             if (transform_reverse(this_->trans, &effective, &cursor_map)) {
-                struct street_data *sd = tracking_get_street_data(this_->tracking);
+                struct coord *tracked = tracking_get_pos(this_->tracking);
                 struct coord closest = {0, 0};
                 double road_dist = -1;
-                if (sd && sd->count >= 2) {
-                    int pos;
-                    transform_distance_polyline_sq(sd->c, sd->count, &cursor_map, &closest, &pos);
-                    road_dist = transform_distance(pro, &cursor_map, &closest);
-                } else {
-                    struct coord *tracked = tracking_get_pos(this_->tracking);
-                    if (tracked) {
-                        closest = *tracked;
-                        road_dist = transform_distance(pro, &cursor_map, tracked);
-                    }
+                if (tracked) {
+                    closest = *tracked;
+                    road_dist = transform_distance(pro, &cursor_map, tracked);
                 }
-                street_data_free(sd);
                 {
                     struct attr raw_attr;
                     double snap_dist = -1;
