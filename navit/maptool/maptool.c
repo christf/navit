@@ -26,6 +26,7 @@
 #include "map.h"
 #include "plugin.h"
 #include "util.h"
+#include "zipfile.h"
 #include <assert.h>
 #include <errno.h>
 #include <glib.h>
@@ -539,11 +540,11 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
     case 'C':
         if (!strcmp(optarg, "lzma")) {
             if (LZMA_AVAILABLE)
-                p->compression_method = 14;
+                p->compression_method = ZIP_COMPRESSION_LZMA;
             else
                 fprintf(stderr, "LZMA not available, using zlib.\n");
         } else {
-            p->compression_method = 8;
+            p->compression_method = ZIP_COMPRESSION_DEFLATE;
         }
         break;
     case 'z':
@@ -947,8 +948,8 @@ int main(int argc, char **argv) {
     linguistics_init();
 
     memset(&p, 0, sizeof(p));
-    p.zip64 = 1;              /* default to 64 bit zip */
-    p.compression_method = 8; /* default to zlib */
+    p.zip64 = 1;                                    /* default to 64 bit zip */
+    p.compression_method = ZIP_COMPRESSION_DEFLATE; /* default to zlib */
     p.compression_level = 9;
     p.start = 1;
     p.end = 99;

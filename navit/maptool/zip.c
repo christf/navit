@@ -130,7 +130,7 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
     if (level) {
         int tried_lzma = 0;
 #if defined(HAVE_LZMA)
-        if (method == 14) {
+        if (method == ZIP_COMPRESSION_LZMA) {
             tried_lzma = 1;
             size_t out_len = compbuflen;
             if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level,
@@ -140,7 +140,7 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
                     char *result = g_malloc(out_len);
                     memcpy(result, *reuse_buf, out_len);
                     *out_size = out_len;
-                    *out_method = 14;
+                    *out_method = ZIP_COMPRESSION_LZMA;
                     return result;
                 }
             }
@@ -154,7 +154,7 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
                     char *result = g_malloc(destlen);
                     memcpy(result, *reuse_buf, destlen);
                     *out_size = destlen;
-                    *out_method = 8;
+                    *out_method = ZIP_COMPRESSION_DEFLATE;
                     return result;
                 }
             }
@@ -170,7 +170,7 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
                     char *result = g_malloc(out_len);
                     memcpy(result, *reuse_buf, out_len);
                     *out_size = out_len;
-                    *out_method = 14;
+                    *out_method = ZIP_COMPRESSION_LZMA;
                     return result;
                 }
             }
@@ -207,7 +207,7 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
     if (zip_info->compression_level) {
         int tried_lzma = 0;
 #if defined(HAVE_LZMA)
-        if (zip_info->compression_method == 14) {
+        if (zip_info->compression_method == ZIP_COMPRESSION_LZMA) {
             tried_lzma = 1;
             size_t out_len = compbuflen;
             if (compress_lzma_int((uint8_t *)compbuffer, &out_len, (uint8_t *)data, data_size,
@@ -216,7 +216,7 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
                 if (out_len < (size_t)data_size) {
                     data = compbuffer;
                     comp_size = out_len;
-                    lfh.zipmthd = 14;
+                    lfh.zipmthd = ZIP_COMPRESSION_LZMA;
                 }
             }
         }
@@ -231,7 +231,7 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
                     data = compbuffer;
                     comp_size = destlen;
                 }
-                lfh.zipmthd = 8;
+                lfh.zipmthd = ZIP_COMPRESSION_DEFLATE;
             } else {
                 fprintf(stderr, "compress2 returned %d\n", error);
             }
@@ -246,7 +246,7 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
                 if (out_len < (size_t)data_size) {
                     data = compbuffer;
                     comp_size = out_len;
-                    lfh.zipmthd = 14;
+                    lfh.zipmthd = ZIP_COMPRESSION_LZMA;
                 }
             }
         }
@@ -431,7 +431,7 @@ int zip_write_directory(struct zip_info *info) {
 
 struct zip_info *zip_new(void) {
     struct zip_info *info = g_new0(struct zip_info, 1);
-    info->compression_method = 8;
+    info->compression_method = ZIP_COMPRESSION_DEFLATE;
     return info;
 }
 
