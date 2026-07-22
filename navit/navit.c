@@ -206,6 +206,7 @@ struct attr_iter {
 
 static void navit_vehicle_update_position(struct navit *this_, struct navit_vehicle *nv);
 static void navit_vehicle_draw(struct navit *this_, struct navit_vehicle *nv, struct point *pnt);
+static int coord_not_set(struct coord c);
 static int navit_add_vehicle(struct navit *this_, struct vehicle *v);
 static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init);
 static int navit_get_cursor_pnt(struct navit *this_, struct point *p, int keep_orientation, int *dir);
@@ -429,13 +430,16 @@ static int navit_gui_menu_active(struct navit *this_) {
     return 0;
 }
 
-static void navit_log_road_gap(struct navit *this_, struct point *drag) {
+static void navit_log_road_gap(struct navit *this_, struct point *drag, struct point *cursor_screen) {
     if (!this_->tracking)
         return;
     {
         struct point cursor_pnt;
         enum projection pro = transform_get_projection(this_->trans);
-        navit_get_cursor_pnt(this_, &cursor_pnt, 0, NULL);
+        if (cursor_screen)
+            cursor_pnt = *cursor_screen;
+        else
+            navit_get_cursor_pnt(this_, &cursor_pnt, 0, NULL);
         if (pro) {
             struct point effective = {cursor_pnt.x - drag->x, cursor_pnt.y - drag->y};
             struct coord cursor_map;
@@ -461,8 +465,7 @@ static void navit_log_road_gap(struct navit *this_, struct point *drag) {
                             cursor_map.x, cursor_map.y, closest.x, closest.y, raw.x, raw.y, road_dist, snap_dist,
                             drag->x, drag->y);
                     } else {
-                        dbg(lvl_error,
-                            "road_gap: cursor_map=(%d,%d) closest=(%d,%d) road_dist=%.1fm drag=(%d,%d)",
+                        dbg(lvl_error, "road_gap: cursor_map=(%d,%d) closest=(%d,%d) road_dist=%.1fm drag=(%d,%d)",
                             cursor_map.x, cursor_map.y, closest.x, closest.y, road_dist, drag->x, drag->y);
                     }
                 }
@@ -487,10 +490,11 @@ static int navit_animation_tick(void *data) {
     }
 
     if (primary_animating && this_->vehicle && this_->gra && !navit_gui_menu_active(this_)) {
+        struct navit_vehicle *nv = this_->vehicle;
         struct point offset;
         int w, h, yaw;
-        vehicle_get_mapdrag_offset(this_->vehicle->vehicle, &offset);
-        yaw = vehicle_get_interp_yaw(this_->vehicle->vehicle);
+        vehicle_get_mapdrag_offset(nv->vehicle, &offset);
+        yaw = vehicle_get_interp_yaw(nv->vehicle);
         transform_set_yaw(this_->trans, yaw);
         transform_set_yaw(this_->trans_cursor, yaw);
         transform_get_size(this_->trans, &w, &h);
@@ -503,8 +507,23 @@ static int navit_animation_tick(void *data) {
         else if (offset.y > 2 * h)
             offset.y = 2 * h;
         dbg(lvl_error, "scroll_tick: drag=(%d,%d) yaw=%d screen=%dx%d", offset.x, offset.y, yaw, w, h);
-        navit_log_road_gap(this_, &offset);
-        graphics_draw_drag(this_->gra, &offset);
+        {
+            enum projection pro = transform_get_projection(this_->trans_cursor);
+            struct point cursor_screen = {0, 0};
+            int have_cursor = 0;
+            if (pro && !coord_not_set(nv->coord)) {
+                transform_point(this_->trans_cursor, pro, &nv->coord, &cursor_screen);
+                cursor_screen.x += offset.x;
+                cursor_screen.y += offset.y;
+                have_cursor = 1;
+            }
+            navit_log_road_gap(this_, &offset, have_cursor ? &cursor_screen : NULL);
+            graphics_draw_drag(this_->gra, &offset);
+            if (have_cursor) {
+                vehicle_request_resize(nv->vehicle);
+                vehicle_draw(nv->vehicle, this_->gra, &cursor_screen, nv->dir - yaw, nv->speed);
+            }
+        }
         graphics_draw_mode(this_->gra, draw_mode_end);
     } else if (was_animating && !primary_animating) {
         int final_yaw = vehicle_get_interp_yaw(this_->vehicle->vehicle);
@@ -519,8 +538,12 @@ static int navit_animation_tick(void *data) {
         this_->map_animating = 0;
         navit_set_center_cursor(this_, 0, 0);
         transform_copy(this_->trans, this_->trans_cursor);
+        vehicle_request_resize(this_->vehicle->vehicle);
         navit_vehicle_draw(this_, this_->vehicle, NULL);
-        navit_log_road_gap(this_, &final_drag);
+        {
+            struct point zero = {0, 0};
+            navit_log_road_gap(this_, &zero, NULL);
+        }
         navit_draw_async(this_, 1);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
@@ -3609,7 +3632,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                             }
                         }
                         navit_vehicle_draw(this_, nv, &cursor_screen);
-                        navit_log_road_gap(this_, &scroll_zero);
+                        navit_log_road_gap(this_, &scroll_zero, &cursor_screen);
                         vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, old_yaw,
                                                  new_yaw, interval_ms);
                         this_->map_animating = 1;
@@ -3624,14 +3647,14 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                     navit_set_center_cursor(this_, 0, 0);
                     transform_copy(this_->trans, this_->trans_cursor);
                     navit_vehicle_draw(this_, nv, &cursor_screen);
-                    navit_log_road_gap(this_, &zero);
+                    navit_log_road_gap(this_, &zero, &cursor_screen);
                 }
             } else {
                 struct point zero = {0, 0};
                 navit_set_center_cursor(this_, 0, 0);
                 transform_copy(this_->trans, this_->trans_cursor);
                 navit_vehicle_draw(this_, nv, &cursor_screen);
-                navit_log_road_gap(this_, &zero);
+                navit_log_road_gap(this_, &zero, &cursor_screen);
             }
         } else if (this_->map_animating) {
             dbg(lvl_error, "pos_update: skip cursor redraw (animation active)");

@@ -468,6 +468,10 @@ void vehicle_reset_map_scroll(struct vehicle *this_) {
     this_->interpolating = 0;
 }
 
+void vehicle_request_resize(struct vehicle *this_) {
+    this_->need_resize = 1;
+}
+
 static void vehicle_set_default_name(struct vehicle *this_) {
     struct attr default_name;
     if (!attr_search(this_->attrs, attr_name)) {
@@ -505,7 +509,7 @@ void vehicle_interpolate(struct vehicle *this_) {
     this_->drag_pnt.y = raw_y;
 
     {
-        int delta = (this_->interp_target_yaw - this_->interp_prev_yaw + 180) % 360 - 180;
+        int delta = ((this_->interp_target_yaw - this_->interp_prev_yaw + 180) % 360 + 360) % 360 - 180;
         int yaw = this_->interp_prev_yaw + (int)(t * delta);
         yaw = yaw % 360;
         if (yaw < 0)
