@@ -182,110 +182,25 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
 }
 
 void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *data, int data_size) {
-    struct zip_lfh lfh = {
-        0x04034b50, 0x0a, 0x0, 0x0, zip_info->time, zip_info->date, 0x0, 0x0, 0x0, filelen, 0x0,
-    };
-    struct zip_cd cd = {
-        0x02014b50, 0x17,    0x00,   0x0a,   0x00,   0x0000, 0x0, zip_info->time,   zip_info->date, 0x0, 0x0,
-        0x0,        filelen, 0x0000, 0x0000, 0x0000, 0x0000, 0x0, zip_info->offset,
-    };
-    struct zip_cd_ext cd_ext = {
-        0x1,
-        0x8,
-        zip_info->offset,
-    };
-    char *filename;
-    int crc = 0, len;
-    size_t comp_size = data_size;
-    size_t compbuflen = data_size + data_size / 3 + 200;
-    char *compbuffer;
+    unsigned long crc;
+    int comp_size, comp_method;
+    char *reuse_buf = NULL;
+    size_t reuse_size = 0;
+    char *comp_data;
 
-    compbuffer = g_malloc(compbuflen);
     crc = crc32(0, NULL, 0);
     crc = crc32(crc, (unsigned char *)data, data_size);
-    lfh.zipmthd = 0;
-    if (zip_info->compression_level) {
-        int tried_lzma = 0;
-#if defined(HAVE_LZMA)
-        if (zip_info->compression_method == ZIP_COMPRESSION_LZMA) {
-            tried_lzma = 1;
-            size_t out_len = compbuflen;
-            if (compress_lzma_int((uint8_t *)compbuffer, &out_len, (uint8_t *)data, data_size,
-                                  zip_info->compression_level, NULL)
-                == 0) {
-                if (out_len < (size_t)data_size) {
-                    data = compbuffer;
-                    comp_size = out_len;
-                    lfh.zipmthd = ZIP_COMPRESSION_LZMA;
-                }
-            }
-        }
-#endif
-#if defined(HAVE_ZLIB)
-        if (!lfh.zipmthd) {
-            uLongf destlen = compbuflen;
-            int error =
-                compress2_int((Byte *)compbuffer, &destlen, (Bytef *)data, data_size, zip_info->compression_level);
-            if (error == Z_OK) {
-                if (destlen < data_size) {
-                    data = compbuffer;
-                    comp_size = destlen;
-                }
-                lfh.zipmthd = ZIP_COMPRESSION_DEFLATE;
-            } else {
-                fprintf(stderr, "compress2 returned %d\n", error);
-            }
-        }
-#endif
-#if defined(HAVE_LZMA)
-        if (!lfh.zipmthd && !tried_lzma) {
-            size_t out_len = compbuflen;
-            if (compress_lzma_int((uint8_t *)compbuffer, &out_len, (uint8_t *)data, data_size,
-                                  zip_info->compression_level, NULL)
-                == 0) {
-                if (out_len < (size_t)data_size) {
-                    data = compbuffer;
-                    comp_size = out_len;
-                    lfh.zipmthd = ZIP_COMPRESSION_LZMA;
-                }
-            }
-        }
-#endif
-        if (!lfh.zipmthd)
-            lfh.zipmthd = 0;
+    comp_data = compress_for_zip(data, data_size, zip_info->compression_level, zip_info->compression_method, &comp_size,
+                                 &comp_method, &reuse_buf, &reuse_size, NULL);
+    g_free(reuse_buf);
+    if (!comp_data) {
+        comp_data = data;
+        comp_size = data_size;
+        comp_method = ZIP_COMPRESSION_STORED;
     }
-    lfh.zipcrc = crc;
-    lfh.zipsize = comp_size;
-    lfh.zipuncmp = data_size;
-    cd.zipccrc = crc;
-    cd.zipcsiz = lfh.zipsize;
-    cd.zipcunc = data_size;
-    cd.zipcmthd = lfh.zipmthd;
-    if (zip_info->zip64) {
-        cd.zipofst = 0xffffffff;
-        cd.zipcxtl += sizeof(cd_ext);
-    }
-    filename = g_alloca(filelen + 1);
-    strcpy(filename, name);
-    len = strlen(filename);
-    while (len < filelen) {
-        filename[len++] = '_';
-    }
-    filename[filelen] = '\0';
-    zip_write(zip_info, &lfh, sizeof(lfh));
-    zip_write(zip_info, filename, filelen);
-    zip_info->offset += sizeof(lfh) + filelen;
-    zip_write(zip_info, data, comp_size);
-    zip_info->offset += comp_size;
-    dbg_assert(fwrite(&cd, sizeof(cd), 1, zip_info->dir) == 1);
-    dbg_assert(fwrite(filename, filelen, 1, zip_info->dir) == 1);
-    zip_info->dir_size += sizeof(cd) + filelen;
-    if (zip_info->zip64) {
-        dbg_assert(fwrite(&cd_ext, sizeof(cd_ext), 1, zip_info->dir) == 1);
-        zip_info->dir_size += sizeof(cd_ext);
-    }
-
-    g_free(compbuffer);
+    write_zipmember_raw(zip_info, name, filelen, comp_data, comp_size, data_size, crc, comp_method);
+    if (comp_data != data)
+        g_free(comp_data);
 }
 
 void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, char *compressed_data, int compressed_size,
