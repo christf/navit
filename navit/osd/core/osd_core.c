@@ -1690,6 +1690,23 @@ int osd_button_set_attr(struct osd_priv_common *opc, struct attr *attr) {
     return 0;
 }
 
+static void osd_button_destroy(struct osd_priv *priv) {
+    struct osd_priv_common *opc = (struct osd_priv_common *)priv;
+    struct osd_button *this = (struct osd_button *)opc->data;
+    struct navit *nav = opc->osd_item.navit;
+    osd_destroy_std_graphic(&opc->osd_item, nav);
+    if (this->navit_init_cb) {
+        navit_remove_callback(nav, this->navit_init_cb);
+        callback_destroy(this->navit_init_cb);
+    }
+    if (this->draw_cb)
+        callback_destroy(this->draw_cb);
+    g_free(this->src);
+    g_free(this->src_dir);
+    g_free(this);
+    g_free(opc);
+}
+
 static struct osd_priv *osd_button_new(struct navit *nav, struct osd_methods *meth, struct attr **attrs) {
     struct osd_button *this = g_new0(struct osd_button, 1);
     struct osd_priv_common *opc = g_new0(struct osd_priv_common, 1);
@@ -1704,6 +1721,7 @@ static struct osd_priv *osd_button_new(struct navit *nav, struct osd_methods *me
     opc->osd_item.rel_h = ATTR_REL_RELSHIFT;
 
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_button_destroy;
     opc->spec_set_attr_func = osd_button_set_attr;
 
     attr = attr_search(attrs, attr_use_overlay);
@@ -1789,6 +1807,7 @@ static struct osd_priv *osd_image_new(struct navit *nav, struct osd_methods *met
     opc->osd_item.rel_w = ATTR_REL_RELSHIFT;
     opc->osd_item.rel_h = ATTR_REL_RELSHIFT;
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_button_destroy;
     opc->spec_set_attr_func = osd_button_set_attr;
 
     attr = attr_search(attrs, attr_use_overlay);
@@ -2068,6 +2087,15 @@ static void osd_nav_next_turn_init(struct osd_priv_common *opc, struct navit *na
     osd_nav_next_turn_draw(opc, nav, NULL);
 }
 
+static void osd_nav_next_turn_destroy(struct osd_priv *priv) {
+    struct osd_priv_common *opc = (struct osd_priv_common *)priv;
+    struct nav_next_turn *this = (struct nav_next_turn *)opc->data;
+    osd_destroy_std_graphic(&opc->osd_item, opc->osd_item.navit);
+    g_free(this->icon_src);
+    g_free(this);
+    g_free(opc);
+}
+
 static struct osd_priv *osd_nav_next_turn_new(struct navit *nav, struct osd_methods *meth, struct attr **attrs) {
     struct nav_next_turn *this = g_new0(struct nav_next_turn, 1);
     struct osd_priv_common *opc = g_new0(struct osd_priv_common, 1);
@@ -2082,6 +2110,7 @@ static struct osd_priv *osd_nav_next_turn_new(struct navit *nav, struct osd_meth
     opc->osd_item.font_size = 200;
     opc->osd_item.meth.draw = osd_draw_cast(osd_nav_next_turn_draw);
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_nav_next_turn_destroy;
 
     osd_set_std_attr(attrs, &opc->osd_item, 0);
 
@@ -2486,6 +2515,19 @@ static void osd_speed_cam_init(struct osd_priv_common *opc, struct navit *nav) {
     navit_add_callback(nav, callback_new_attr_1(callback_cast(osd_speed_cam_draw), attr_position_coord_geo, opc));
 }
 
+static void osd_speed_cam_destroy(struct osd_priv *priv) {
+    struct osd_priv_common *opc = (struct osd_priv_common *)priv;
+    struct osd_speed_cam *this = (struct osd_speed_cam *)opc->data;
+    osd_destroy_std_graphic(&opc->osd_item, opc->osd_item.navit);
+    if (this->red)
+        graphics_gc_destroy(this->red);
+    if (this->orange)
+        graphics_gc_destroy(this->orange);
+    g_free(this->text);
+    g_free(this);
+    g_free(opc);
+}
+
 static struct osd_priv *osd_speed_cam_new(struct navit *nav, struct osd_methods *meth, struct attr **attrs) {
 
     struct color default_color = {0xffff, 0xa5a5, 0x0000, 0xffff};
@@ -2503,6 +2545,7 @@ static struct osd_priv *osd_speed_cam_new(struct navit *nav, struct osd_methods 
     opc->osd_item.font_size = 200;
     opc->osd_item.meth.draw = osd_draw_cast(osd_speed_cam_draw);
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_speed_cam_destroy;
 
     osd_set_std_attr(attrs, &opc->osd_item, ITEM_HAS_TEXT);
     attr = attr_search(attrs, attr_width);
@@ -2748,6 +2791,26 @@ static void osd_speed_warner_init(struct osd_priv_common *opc, struct navit *nav
     osd_speed_warner_draw(opc, nav, NULL);
 }
 
+static void osd_speed_warner_destroy(struct osd_priv *priv) {
+    struct osd_priv_common *opc = (struct osd_priv_common *)priv;
+    struct osd_speed_warner *this = (struct osd_speed_warner *)opc->data;
+    osd_destroy_std_graphic(&opc->osd_item, opc->osd_item.navit);
+    if (this->click_cb) {
+        navit_remove_callback(opc->osd_item.navit, this->click_cb);
+        callback_destroy(this->click_cb);
+    }
+    if (this->red)
+        graphics_gc_destroy(this->red);
+    if (this->green)
+        graphics_gc_destroy(this->green);
+    if (this->grey)
+        graphics_gc_destroy(this->grey);
+    if (this->black)
+        graphics_gc_destroy(this->black);
+    g_free(this);
+    g_free(opc);
+}
+
 static struct osd_priv *osd_speed_warner_new(struct navit *nav, struct osd_methods *meth, struct attr **attrs) {
     struct osd_speed_warner *this = g_new0(struct osd_speed_warner, 1);
     struct osd_priv_common *opc = g_new0(struct osd_priv_common, 1);
@@ -2762,6 +2825,7 @@ static struct osd_priv *osd_speed_warner_new(struct navit *nav, struct osd_metho
     this->active = -1;
     opc->osd_item.meth.draw = osd_draw_cast(osd_speed_warner_draw);
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_speed_warner_destroy;
 
     attr = attr_search(attrs, attr_speed_exceed_limit_offset);
     if (attr) {
@@ -3382,6 +3446,25 @@ static int osd_text_set_attr(struct osd_priv_common *opc, struct attr *attr) {
     return 0;
 }
 
+static void osd_text_destroy(struct osd_priv *priv) {
+    struct osd_priv_common *opc = (struct osd_priv_common *)priv;
+    struct osd_text *this = (struct osd_text *)opc->data;
+    struct osd_text_item *item;
+    osd_destroy_std_graphic(&opc->osd_item, opc->osd_item.navit);
+    g_free(this->text);
+    g_free(this->last);
+    item = this->items;
+    while (item) {
+        struct osd_text_item *next = item->next;
+        g_free(item->text);
+        g_free(item->format);
+        g_free(item);
+        item = next;
+    }
+    g_free(this);
+    g_free(opc);
+}
+
 static struct osd_priv *osd_text_new(struct navit *nav, struct osd_methods *meth, struct attr **attrs) {
     struct osd_text *this = g_new0(struct osd_text, 1);
     struct osd_priv_common *opc = g_new0(struct osd_priv_common, 1);
@@ -3396,6 +3479,7 @@ static struct osd_priv *osd_text_new(struct navit *nav, struct osd_methods *meth
     opc->osd_item.font_size = 200;
     opc->osd_item.meth.draw = osd_draw_cast(osd_text_draw);
     meth->set_attr = set_std_osd_attr;
+    meth->destroy = osd_text_destroy;
     opc->spec_set_attr_func = osd_text_set_attr;
     osd_set_std_attr(attrs, &opc->osd_item, ITEM_HAS_TEXT);
 

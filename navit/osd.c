@@ -450,6 +450,35 @@ void osd_set_std_graphic(struct navit *nav, struct osd_item *item, struct osd_pr
     osd_set_keypress(nav, item);
 }
 
+void osd_destroy_std_graphic(struct osd_item *item, struct navit *nav) {
+    if (item->resize_cb) {
+        graphics_remove_callback(item->gr, item->resize_cb);
+        callback_destroy(item->resize_cb);
+    }
+    if (item->keypress_cb) {
+        struct graphics *navit_gr = navit_get_graphics(nav);
+        graphics_remove_callback(navit_gr, item->keypress_cb);
+        callback_destroy(item->keypress_cb);
+    }
+    if (item->cb) {
+        navit_remove_callback(nav, item->cb);
+        callback_destroy(item->cb);
+    }
+    if (item->graphic_bg)
+        graphics_gc_destroy(item->graphic_bg);
+    if (item->graphic_fg)
+        graphics_gc_destroy(item->graphic_fg);
+    if (item->graphic_fg_text)
+        graphics_gc_destroy(item->graphic_fg_text);
+    if (item->font)
+        graphics_font_destroy(item->font);
+    if (item->enable_cs)
+        command_saved_destroy(item->enable_cs);
+    g_free(item->command);
+    g_free(item->accesskey);
+    g_free(item->font_name);
+}
+
 void osd_fill_with_bgcolor(struct osd_item *item) {
     struct point p[1];
     graphics_draw_mode(item->gr, draw_mode_begin);
