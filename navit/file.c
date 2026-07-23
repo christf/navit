@@ -814,6 +814,19 @@ void file_init(void) {
 #ifdef CACHE_SIZE
     file_name_hash = g_hash_table_new(g_str_hash, g_str_equal);
     file_cache = cache_new(sizeof(struct file_cache_id), CACHE_SIZE);
+
+    {
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long page_size = sysconf(_SC_PAGESIZE);
+        if (pages > 0 && page_size > 0) {
+            int cache_size = (int)((long long)pages * page_size / 100);
+            if (cache_size < 4 * 1024 * 1024)
+                cache_size = 4 * 1024 * 1024;
+            if (cache_size > 64 * 1024 * 1024)
+                cache_size = 64 * 1024 * 1024;
+            cache_resize(file_cache, cache_size);
+        }
+    }
 #endif
     if (sizeof(off_t) < 8)
         dbg(lvl_error, "Maps larger than 2GB are not supported by this binary, sizeof(off_t)=%zu", sizeof(off_t));
