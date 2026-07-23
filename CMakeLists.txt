@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.21)
+cmake_policy(SET CMP0077 NEW)
+cmake_policy(SET CMP0079 NEW)
 
 set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.navitproject.navit")
 set(CMAKE_EXECUTABLE_ENABLE_EXPORTS "true")
@@ -58,19 +60,12 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 set(NAVIT_BINARY navit CACHE STRING "Navit binary name")
 # install path
 set(BIN_DIR bin CACHE PATH "Navit bin path")
-add_definitions ("-DBIN_DIR=\"${BIN_DIR}\"")
 set(SHARE_DIR share/navit CACHE PATH "Navit share path")
-add_definitions ("-DSHARE_DIR=\"${SHARE_DIR}\"")
 set(LOCALE_DIR share/locale CACHE PATH "Navit locale path")
-add_definitions ("-DLOCALE_DIR=\"${LOCALE_DIR}\"")
 set(IMAGE_DIR share/navit/icons CACHE PATH "Navit image path")
-add_definitions ("-DIMAGE_DIR=\"${IMAGE_DIR}\"")
 set(TEXTURE_DIR share/navit/textures CACHE PATH "Navit texture path")
-add_definitions ("-DTEXTURE_DIR=\"${TEXTURE_DIR}\"")
 set(MAN_DIR share/man/man1 CACHE PATH "Navit man path")
-add_definitions ("-DMAN_DIR=\"${MAN_DIR}\"")
 set(HOMECONFIG_DIR .navit CACHE PATH "Navit config path in home dir")
-add_definitions ("-DHOMECONFIG_DIR=\"${HOMECONFIG_DIR}\"")
 # LIB_DIR
 IF(UNIX AND NOT ANDROID AND NOT APPLE)
 	IF (NOT LIBDIR)
@@ -95,7 +90,22 @@ set(CMAKE_INSTALL_RPATH \$ORIGIN "\$ORIGIN/../${LIB_DIR}")
 foreach(EXTRA_MODULE ${EXTRA_MODULES})
 	add_module(${EXTRA_MODULE} "extra module specified" TRUE)
 endforeach()
-add_definitions ("-DLIB_DIR=\"${LIB_DIR}\"")
+
+add_library(navit_config INTERFACE)
+target_compile_definitions(navit_config INTERFACE
+	"BIN_DIR=\"${BIN_DIR}\""
+	"SHARE_DIR=\"${SHARE_DIR}\""
+	"LOCALE_DIR=\"${LOCALE_DIR}\""
+	"IMAGE_DIR=\"${IMAGE_DIR}\""
+	"TEXTURE_DIR=\"${TEXTURE_DIR}\""
+	"MAN_DIR=\"${MAN_DIR}\""
+	"HOMECONFIG_DIR=\"${HOMECONFIG_DIR}\""
+	"LIB_DIR=\"${LIB_DIR}\""
+)
+target_include_directories(navit_config INTERFACE
+	"${PROJECT_SOURCE_DIR}"
+	"${PROJECT_BINARY_DIR}"
+)
 
 if (EXTRA_LIBS)
 	list(APPEND NAVIT_LIBS ${EXTRA_LIBS})
@@ -549,7 +559,7 @@ endif(HAVE_LIBSPEECHD)
 
 if (HAVE_SYSTEM)
 	set_with_reason(speech/cmdline "system() call is available" TRUE)
-	add_compile_definitions(HAVE_SYSTEM)
+	target_compile_definitions(navit_config INTERFACE HAVE_SYSTEM)
 endif(HAVE_SYSTEM)
 
 if (HAVE_CREATEPROCESS)
@@ -818,7 +828,7 @@ if(ANDROID)
 	set_with_reason(support/libpng "Android detected" FALSE)
 
 	add_feature(XPM2PNG "Android detected" TRUE)
-	set(NAVIT_COMPILE_FLAGS "${NAVIT_COMPILE_FLAGS} -fPIC")
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 endif(ANDROID)
 
@@ -869,12 +879,11 @@ set(XSLTS ${XSLTS} CACHE STRING "define a semicolon seperated list of XSLTs to p
 # Plugins
 if(ANDROID)
 	set(SHARED_LIBNAVIT TRUE)
-	add_definitions("-fPIC")
 	list(APPEND NAVIT_LIBS dl)
 elseif(NOT ANDROID AND USE_PLUGINS)
 	set(MODULE_BUILD_TYPE "MODULE")
 	set(SHARED_LIBNAVIT TRUE)
-	add_definitions("-fPIC")
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 	list(APPEND NAVIT_LIBS dl)
 else()
 	set(MODULE_BUILD_TYPE "STATIC")
@@ -918,11 +927,8 @@ add_compiler_flag_if_available("-Werror=format-security")
 
 if (ASAN)
 	message(STATUS "Activating AddressSanitizer. To prevent libasan breaking the build, export ASAN_OPTIONS=detect_leaks=0")
-	add_compile_options(-fsanitize=address)
-	add_compile_options(-g)
-	add_compile_options(-fno-omit-frame-pointer)
-	add_link_options(-fsanitize=address)
-	add_link_options(-fno-omit-frame-pointer)
+	target_compile_options(navit_compile_options INTERFACE -fsanitize=address -g -fno-omit-frame-pointer)
+	target_link_options(navit_compile_options INTERFACE -fsanitize=address -fno-omit-frame-pointer -static-libasan)
 endif(ASAN)
 
 if(NOT WIN32)
