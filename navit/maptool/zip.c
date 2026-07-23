@@ -54,9 +54,29 @@ static int zip_write(struct zip_info *info, void *data, int len) {
 }
 
 #ifdef HAVE_LZMA
-static int compress_lzma_int(uint8_t *dest, size_t *destLen, const uint8_t *source, size_t sourceLen, int level) {
+void *arena_alloc(void *opaque, size_t nmemb, size_t size) {
+    struct lzma_arena *a = (struct lzma_arena *)opaque;
+    if (nmemb && size > SIZE_MAX / nmemb)
+        return NULL;
+    size_t total = nmemb * size;
+    size_t aligned = (total + 15) & ~(size_t)15;
+    if (a->pos + aligned > a->size)
+        return NULL;
+    char *ptr = a->buf + a->pos;
+    a->pos += aligned;
+    return ptr;
+}
+
+void arena_free(void *opaque, void *ptr) {
+    (void)opaque;
+    (void)ptr;
+}
+
+static int compress_lzma_int(uint8_t *dest, size_t *destLen, const uint8_t *source, size_t sourceLen, int level,
+                             const lzma_allocator *allocator) {
     size_t out_pos = 0;
-    lzma_ret ret = lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, NULL, source, sourceLen, dest, &out_pos, *destLen);
+    lzma_ret ret =
+        lzma_easy_buffer_encode(level, LZMA_CHECK_CRC64, allocator, source, sourceLen, dest, &out_pos, *destLen);
     if (ret == LZMA_OK) {
         *destLen = out_pos;
         return 0;
@@ -98,7 +118,7 @@ static int compress2_int(Byte *dest, uLongf *destLen, const Bytef *source, uLong
 #endif
 
 char *compress_for_zip(char *input, int input_size, int level, int method, int *out_size, int *out_method,
-                       char **reuse_buf, size_t *reuse_size) {
+                       char **reuse_buf, size_t *reuse_size, void *lzma_alloc) {
     size_t compbuflen = input_size + input_size / 3 + 200;
 
     if (*reuse_size < compbuflen) {
@@ -113,7 +133,9 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
         if (method == ZIP_COMPRESSION_LZMA) {
             tried_lzma = 1;
             size_t out_len = compbuflen;
-            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level) == 0) {
+            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level,
+                                  (const lzma_allocator *)lzma_alloc)
+                == 0) {
                 if (out_len < (size_t)input_size) {
                     char *result = g_malloc(out_len);
                     memcpy(result, *reuse_buf, out_len);
@@ -141,7 +163,9 @@ char *compress_for_zip(char *input, int input_size, int level, int method, int *
 #if defined(HAVE_LZMA)
         if (!*out_method && !tried_lzma) {
             size_t out_len = compbuflen;
-            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level) == 0) {
+            if (compress_lzma_int((uint8_t *)*reuse_buf, &out_len, (uint8_t *)input, input_size, level,
+                                  (const lzma_allocator *)lzma_alloc)
+                == 0) {
                 if (out_len < (size_t)input_size) {
                     char *result = g_malloc(out_len);
                     memcpy(result, *reuse_buf, out_len);
@@ -168,7 +192,7 @@ void write_zipmember(struct zip_info *zip_info, char *name, int filelen, char *d
     crc = crc32(crc, (unsigned char *)data, data_size);
 
     comp_data = compress_for_zip(data, data_size, zip_info->compression_level, zip_info->compression_method, &comp_size,
-                                 &zipmthd, &reuse_buf, &reuse_size);
+                                 &zipmthd, &reuse_buf, &reuse_size, NULL);
     if (!comp_data) {
         comp_data = data;
         comp_size = data_size;
