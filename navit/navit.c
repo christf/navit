@@ -520,16 +520,12 @@ static int navit_animation_tick(void *data) {
             if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
                 dbg(lvl_error, "scroll_tick: offset (%d,%d) > threshold %d, re-centering", offset.x, offset.y,
                     margin_threshold);
-                navit_set_center_cursor(this_, 0, 0);
+                navit_get_cursor_pnt(this_, &cursor_fixed, 0, NULL);
+                navit_set_center_coord_screen(this_, &nv->coord, &cursor_fixed, 0);
                 transform_copy(this_->trans, this_->trans_cursor);
-                transform_set_yaw(this_->trans, yaw);
-                transform_set_yaw(this_->trans_cursor, yaw);
                 navit_draw_displaylist(this_);
                 this_->anim_last_redraw_yaw = yaw;
-                {
-                    struct point zero = {0, 0};
-                    vehicle_update_scroll_target(nv->vehicle, &zero);
-                }
+                vehicle_reset_map_scroll(nv->vehicle);
                 offset.x = 0;
                 offset.y = 0;
             }
