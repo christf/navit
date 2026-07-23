@@ -173,6 +173,7 @@ struct navit {
     int pitch;
     int follow_cursor;
     int map_animating;
+    int menu_was_active;
     int anim_last_redraw_yaw;
     struct timeval scroll_last_fix;
     struct timeval scroll_finished_ts;
@@ -491,6 +492,19 @@ static int navit_animation_tick(void *data) {
     }
 
     dbg(lvl_debug, "anim_tick: primary=%d was_anim=%d", primary_animating, was_animating);
+
+    if (was_animating && this_->menu_was_active && !navit_gui_menu_active(this_)) {
+        dbg(lvl_error, "anim_tick: menu closed during animation, forcing redraw");
+        this_->map_animating = 0;
+        this_->menu_was_active = 0;
+        navit_set_center_cursor(this_, 0, 0);
+        transform_copy(this_->trans, this_->trans_cursor);
+        navit_draw(this_);
+        vehicle_reset_map_scroll(this_->vehicle->vehicle);
+        gettimeofday(&this_->scroll_finished_ts, NULL);
+        return TRUE;
+    }
+    this_->menu_was_active = navit_gui_menu_active(this_);
 
     if (primary_animating && this_->vehicle && this_->gra && !navit_gui_menu_active(this_)) {
         struct navit_vehicle *nv = this_->vehicle;
