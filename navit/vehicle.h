@@ -63,6 +63,7 @@ int vehicle_get_cursor_data(struct vehicle *this_, struct point *pnt, int *angle
 void vehicle_get_cursor_center(struct vehicle *this_, struct point *center);
 void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct point *to, int from_yaw, int to_yaw,
                               int duration_ms);
+void vehicle_update_scroll_target(struct vehicle *this_, struct point *target);
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset);
 int vehicle_get_interp_yaw(struct vehicle *this_);
 void vehicle_reset_map_scroll(struct vehicle *this_);
