@@ -1321,6 +1321,12 @@ int graphics_draw_drag(struct graphics *this_, struct point *p) {
     return 1;
 }
 
+void graphics_set_display_rotation(struct graphics *this_, double angle_degrees, int center_x, int center_y) {
+    if (!this_->meth.set_display_rotation)
+        return;
+    this_->meth.set_display_rotation(this_->priv, angle_degrees, center_x, center_y);
+}
+
 void graphics_background_gc(struct graphics *this_, struct graphics_gc *gc) {
     this_->meth.background_gc(this_->priv, gc ? gc->priv : NULL);
 }

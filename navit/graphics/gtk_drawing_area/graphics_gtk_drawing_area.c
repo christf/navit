@@ -62,6 +62,13 @@ struct graphics_priv {
     struct window window;
     cairo_t *cairo;
     struct point p;
+    double display_rotation;
+    double target_rotation;
+    double rotation_from;
+    int rotation_center_x;
+    int rotation_center_y;
+    struct timeval rotation_t0;
+    int rotation_duration;
     int width;
     int height;
     int win_w;
@@ -86,6 +93,8 @@ struct graphics_priv {
     guint tick_callback_id;
     int needs_redraw;
     int render_margin;
+    double touch_start_x;
+    double touch_start_y;
 };
 
 struct graphics_gc_priv {
@@ -612,6 +621,36 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
     }
 }
 
+static void set_display_rotation(struct graphics_priv *gr, double angle_degrees, int center_x, int center_y) {
+    double delta;
+    if (angle_degrees == gr->target_rotation)
+        return;
+    if (angle_degrees == 0.0) {
+        gr->display_rotation = 0.0;
+        gr->target_rotation = 0.0;
+        gr->rotation_center_x = center_x;
+        gr->rotation_center_y = center_y;
+        dbg(lvl_debug, "set_display_rotation: snapped to 0.0");
+        return;
+    }
+    delta = angle_degrees - gr->target_rotation;
+    if (delta < 0)
+        delta = -delta;
+    gr->rotation_from = gr->display_rotation;
+    gr->target_rotation = angle_degrees;
+    gr->rotation_center_x = center_x;
+    gr->rotation_center_y = center_y;
+    gettimeofday(&gr->rotation_t0, NULL);
+    if (delta < 1.0)
+        gr->rotation_duration = 100;
+    else if (delta < 5.0)
+        gr->rotation_duration = 200;
+    else
+        gr->rotation_duration = 300;
+    dbg(lvl_debug, "set_display_rotation: target=%.1f from=%.1f center=(%d,%d) dur=%d", angle_degrees,
+        gr->rotation_from, center_x, center_y, gr->rotation_duration);
+}
+
 static void background_gc(struct graphics_priv *gr, struct graphics_gc_priv *gc) {
     gr->background_gc = gc;
 }
@@ -665,9 +704,38 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
             cairo_paint(cr);
         }
     }
+
+    if (gra->display_rotation != 0.0 || gra->target_rotation != 0.0) {
+        struct timeval now;
+        int elapsed;
+        double t;
+        gettimeofday(&now, NULL);
+        elapsed = (now.tv_sec - gra->rotation_t0.tv_sec) * 1000 + (now.tv_usec - gra->rotation_t0.tv_usec) / 1000;
+        if (gra->rotation_duration > 0)
+            t = (double)elapsed / gra->rotation_duration;
+        else
+            t = 1.0;
+        if (t > 1.0)
+            t = 1.0;
+        t = t * t * (3.0 - 2.0 * t);
+        gra->display_rotation = gra->rotation_from + t * (gra->target_rotation - gra->rotation_from);
+    }
+
+    if (gra->display_rotation != 0.0) {
+        dbg(lvl_debug, "draw_func: rotating %.2f around (%d,%d)", gra->display_rotation, gra->rotation_center_x,
+            gra->rotation_center_y);
+        cairo_translate(cr, gra->rotation_center_x, gra->rotation_center_y);
+        cairo_rotate(cr, -gra->display_rotation * G_PI / 180.0);
+        cairo_translate(cr, -gra->rotation_center_x, -gra->rotation_center_y);
+    }
+
     cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x - gra->render_margin,
                              gra->p.y - gra->render_margin);
     cairo_paint(cr);
+
+    if (gra->display_rotation != 0.0) {
+        cairo_identity_matrix(cr);
+    }
 
     GdkRectangle area_rect = {0, 0, width, height};
 
@@ -701,8 +769,18 @@ static void on_gesture_click_pressed(GtkGestureClick *gesture, int n_press, doub
     struct timeval tv;
     struct timezone tz;
     guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+    GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture));
 
     gettimeofday(&tv, &tz);
+
+    if (gdk_event_get_event_type(event) == GDK_TOUCH_BEGIN) {
+        this->touch_start_x = x;
+        this->touch_start_y = y;
+        p.x = (int)x;
+        p.y = (int)y;
+        callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(1), (void *)&p);
+        return;
+    }
 
     if (button < 8) {
         if (tv_delta(&this->button_press[button], &tv) < this->timeout)
@@ -722,8 +800,16 @@ static void on_gesture_click_released(GtkGestureClick *gesture, int n_press, dou
     struct timeval tv;
     struct timezone tz;
     guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
+    GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture));
 
     gettimeofday(&tv, &tz);
+
+    if (gdk_event_get_event_type(event) == GDK_TOUCH_END) {
+        p.x = (int)x;
+        p.y = (int)y;
+        callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(1), (void *)&p);
+        return;
+    }
 
     if (button < 8) {
         if (tv_delta(&this->button_release[button], &tv) < this->timeout)
@@ -735,6 +821,20 @@ static void on_gesture_click_released(GtkGestureClick *gesture, int n_press, dou
     p.x = (int)x;
     p.y = (int)y;
     callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(button), (void *)&p);
+}
+
+static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture));
+    struct point p;
+    double x, y;
+
+    if (!event)
+        return;
+    gdk_event_get_position(event, &x, &y);
+    p.x = (int)x;
+    p.y = (int)y;
+    callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
 static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data) {
@@ -1115,6 +1215,7 @@ static struct graphics_methods graphics_methods = {
     NULL,    /* hide_native_keyboard */
     get_dpi, /* get dpi */
     draw_polygon_with_holes,
+    set_display_rotation,
 };
 
 static struct graphics_priv *graphics_gtk_drawing_area_new_helper(struct graphics_methods *meth) {
@@ -1178,6 +1279,7 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click), 0); /* 0 = all buttons */
     g_signal_connect(click, "pressed", G_CALLBACK(on_gesture_click_pressed), this);
     g_signal_connect(click, "released", G_CALLBACK(on_gesture_click_released), this);
+    g_signal_connect(click, "update", G_CALLBACK(on_gesture_update), this);
     gtk_widget_add_controller(draw, GTK_EVENT_CONTROLLER(click));
 
     /* Motion controller (replaces motion_notify_event) */
