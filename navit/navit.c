@@ -175,6 +175,7 @@ struct navit {
     int map_animating;
     int menu_was_active;
     int anim_last_redraw_yaw;
+    int anim_last_displayed_yaw;
     struct timeval scroll_last_fix;
     struct timeval scroll_finished_ts;
     int prevTs;
@@ -410,10 +411,6 @@ void navit_draw_async(struct navit *this_, int async) {
         dbg(lvl_error, "draw_async: blocked=%d, deferred", this_->blocked);
         return;
     }
-    if (this_->map_animating) {
-        dbg(lvl_error, "draw_async: skipped, map_animating=1");
-        return;
-    }
     graphics_draw_drag(this_->gra, NULL);
     transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
@@ -494,11 +491,14 @@ static int navit_animation_tick(void *data) {
     dbg(lvl_debug, "anim_tick: primary=%d was_anim=%d", primary_animating, was_animating);
 
     if (was_animating && this_->menu_was_active && !navit_gui_menu_active(this_)) {
+        struct point cursor_fixed_menu;
         dbg(lvl_error, "anim_tick: menu closed during animation, forcing redraw");
         this_->map_animating = 0;
         this_->menu_was_active = 0;
+        navit_get_cursor_pnt(this_, &cursor_fixed_menu, 0, NULL);
         navit_set_center_cursor(this_, 0, 0);
         transform_copy(this_->trans, this_->trans_cursor);
+        graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed_menu.x, cursor_fixed_menu.y);
         navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
@@ -506,20 +506,51 @@ static int navit_animation_tick(void *data) {
     }
     this_->menu_was_active = navit_gui_menu_active(this_);
 
-    if (primary_animating && this_->vehicle && this_->gra && !navit_gui_menu_active(this_)) {
+    if (was_animating && navit_gui_menu_active(this_) && this_->gra) {
+        struct point cursor_fixed_menu;
+        navit_get_cursor_pnt(this_, &cursor_fixed_menu, 0, NULL);
+        graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed_menu.x, cursor_fixed_menu.y);
+    }
+
+    if (this_->follow_cursor && (primary_animating || (this_->vehicle && this_->vehicle->speed > 0.5)) && this_->vehicle
+        && this_->gra && !navit_gui_menu_active(this_) && !this_->button_pressed) {
         struct navit_vehicle *nv = this_->vehicle;
         struct point offset;
         struct point cursor_fixed;
-        int w, h, yaw, yaw_delta;
-        yaw = vehicle_get_interp_yaw(nv->vehicle);
-        transform_set_yaw(this_->trans, yaw);
-        transform_set_yaw(this_->trans_cursor, yaw);
+        struct coord predicted;
+        struct coord *scroll_coord;
+        int w, h, yaw, yaw_delta, yaw_inc_delta;
+        {
+            int target = nv->dir;
+            int current = this_->anim_last_displayed_yaw;
+            int diff = target - current;
+            int step;
+            if (diff > 180)
+                diff -= 360;
+            if (diff < -180)
+                diff += 360;
+            if (diff > 2)
+                step = 2;
+            else if (diff < -2)
+                step = -2;
+            else
+                step = diff;
+            yaw = current + step;
+            if (yaw < 0)
+                yaw += 360;
+            if (yaw >= 360)
+                yaw -= 360;
+        }
         transform_get_size(this_->trans, &w, &h);
         navit_get_cursor_pnt(this_, &cursor_fixed, 0, NULL);
+        if (this_->tracking && tracking_get_predicted_coord(this_->tracking, &predicted))
+            scroll_coord = &predicted;
+        else
+            scroll_coord = &nv->coord;
         {
             enum projection pro = transform_get_projection(this_->trans_cursor);
             struct point vehicle_screen;
-            if (pro && transform_point(this_->trans_cursor, pro, &nv->coord, &vehicle_screen)) {
+            if (pro && transform_point(this_->trans_cursor, pro, scroll_coord, &vehicle_screen)) {
                 struct point exact;
                 exact.x = cursor_fixed.x - vehicle_screen.x;
                 exact.y = cursor_fixed.y - vehicle_screen.y;
@@ -535,10 +566,14 @@ static int navit_animation_tick(void *data) {
                 dbg(lvl_error, "scroll_tick: offset (%d,%d) > threshold %d, re-centering", offset.x, offset.y,
                     margin_threshold);
                 navit_get_cursor_pnt(this_, &cursor_fixed, 0, NULL);
-                navit_set_center_coord_screen(this_, &nv->coord, &cursor_fixed, 0);
+                transform_set_yaw(this_->trans, yaw);
+                transform_set_yaw(this_->trans_cursor, yaw);
+                navit_set_center_coord_screen(this_, scroll_coord, &cursor_fixed, 0);
                 transform_copy(this_->trans, this_->trans_cursor);
-                navit_draw_displaylist(this_);
+                navit_draw(this_);
                 this_->anim_last_redraw_yaw = yaw;
+                this_->anim_last_displayed_yaw = yaw;
+                graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed.x, cursor_fixed.y);
                 vehicle_reset_map_scroll(nv->vehicle);
                 offset.x = 0;
                 offset.y = 0;
@@ -573,12 +608,30 @@ static int navit_animation_tick(void *data) {
             yaw_delta += 360;
         if (yaw_delta > 180)
             yaw_delta -= 360;
-        if (yaw_delta < 0)
-            yaw_delta = -yaw_delta;
-        dbg(lvl_error, "scroll_tick: yaw_delta=%d redraw=%s", yaw_delta, yaw_delta > 2 ? "FULL" : "drag_only");
-        if (yaw_delta > 2) {
-            navit_draw_displaylist(this_);
+
+        yaw_inc_delta = yaw - this_->anim_last_displayed_yaw;
+        if (yaw_inc_delta < -180)
+            yaw_inc_delta += 360;
+        if (yaw_inc_delta > 180)
+            yaw_inc_delta -= 360;
+
+        if (yaw_delta > 15 || yaw_delta < -15) {
+            dbg(lvl_error, "scroll_tick: yaw_delta=%d immediate redraw", yaw_delta);
+            transform_set_yaw(this_->trans, yaw);
+            transform_set_yaw(this_->trans_cursor, yaw);
+            navit_set_center_coord_screen(this_, scroll_coord, &cursor_fixed, 0);
+            transform_copy(this_->trans, this_->trans_cursor);
+            navit_draw(this_);
+            vehicle_reset_map_scroll(nv->vehicle);
             this_->anim_last_redraw_yaw = yaw;
+            this_->anim_last_displayed_yaw = yaw;
+            graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed.x, cursor_fixed.y);
+            graphics_draw_mode(this_->gra, draw_mode_end);
+        } else if (yaw_inc_delta > 1 || yaw_inc_delta < -1) {
+            dbg(lvl_error, "scroll_tick: yaw_delta=%d yaw_inc=%d display_rotation", yaw_delta, yaw_inc_delta);
+            graphics_set_display_rotation(this_->gra, (double)yaw_delta, cursor_fixed.x, cursor_fixed.y);
+            this_->anim_last_displayed_yaw = yaw;
+            graphics_draw_mode(this_->gra, draw_mode_end);
         } else {
             graphics_draw_mode(this_->gra, draw_mode_end);
         }
@@ -612,6 +665,7 @@ static int navit_animation_tick(void *data) {
             struct point zero = {0, 0};
             navit_log_road_gap(this_, &zero, NULL);
         }
+        graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed2.x, cursor_fixed2.y);
         navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
@@ -811,6 +865,7 @@ static void update_transformation(struct transformation *tr, struct point *old, 
 
 void navit_set_timeout(struct navit *this_) {
     struct attr follow;
+    dbg(lvl_error, "navit_set_timeout: center_timeout=%d", this_->center_timeout);
     follow.type = attr_follow;
     follow.u.num = this_->center_timeout;
     navit_set_attr(this_, &follow);
@@ -3591,6 +3646,12 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
     nv->dir = *attr_dir.u.numd;
     nv->speed = *attr_speed.u.numd;
     transform_from_geo(pro, attr_pos.u.coord_geo, &nv->coord);
+    {
+        struct attr attr_time;
+        if (vehicle_get_attr(nv->vehicle, attr_position_time_iso8601, &attr_time, NULL))
+            dbg(lvl_error, "pos_update: nmea_time=%s raw=(%d,%d) speed=%d dir=%d", attr_time.u.str, nv->coord.x,
+                nv->coord.y, nv->speed, nv->dir);
+    }
     if (nv != this_->vehicle) {
         if (this_->ready == 3)
             navit_vehicle_draw(this_, nv, NULL);
@@ -3619,8 +3680,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                 "pos_update: cursor_pnt=(%d,%d) follow=%d follow_curr=%d within_border=%d border=%d animating=%d",
                 cursor_pnt.x, cursor_pnt.y, nv->follow, nv->follow_curr, within, this_->border, this_->map_animating);
         }
-        if (!this_->map_animating && this_->button_pressed != 1 && this_->follow_cursor
-            && (nv->follow == 0 || nv->follow_curr <= nv->follow)) {
+        if (this_->button_pressed != 1 && this_->follow_cursor && (nv->follow == 0 || nv->follow_curr <= nv->follow)) {
             enum projection pro_old = transform_get_projection(this_->trans);
             struct coord *tc = transform_center(this_->trans);
             struct point cursor_screen;
@@ -3671,9 +3731,10 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                                 mag = dx > dy ? dx : dy;
                                 dbg(lvl_error, "pos_update: scroll_magnitude=%d (%.1f%%)", mag,
                                     (double)mag * 100.0 / (w > h ? w : h));
-                                if (old_yaw == new_yaw && mag < 10) {
-                                    dbg(lvl_error, "pos_update: SKIP_ANIM: mag=%d yaw unchanged, re-centering now",
-                                        mag);
+                                if (mag < 10) {
+                                    dbg(lvl_error, "pos_update: SKIP_ANIM: mag=%d, re-centering now", mag);
+                                    transform_set_yaw(this_->trans, new_yaw);
+                                    transform_set_yaw(this_->trans_cursor, new_yaw);
                                     navit_set_center_cursor(this_, 0, 0);
                                     transform_copy(this_->trans, this_->trans_cursor);
                                     navit_vehicle_draw(this_, nv, &cursor_screen);
@@ -3716,13 +3777,18 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                                         interval_ms);
                             }
                         }
-                        vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, old_yaw,
-                                                 new_yaw, interval_ms);
-                        this_->map_animating = 1;
-                        this_->anim_last_redraw_yaw = new_yaw;
-                        if (this_->gra && !navit_gui_menu_active(this_)) {
-                            graphics_draw_drag(this_->gra, &scroll_zero);
-                            graphics_draw_mode(this_->gra, draw_mode_end);
+                        if (this_->map_animating) {
+                            vehicle_update_scroll_target(this_->vehicle->vehicle, &scroll_target);
+                        } else {
+                            vehicle_start_map_scroll(this_->vehicle->vehicle, &scroll_zero, &scroll_target, old_yaw,
+                                                     new_yaw, interval_ms);
+                            this_->map_animating = 1;
+                            this_->anim_last_redraw_yaw = new_yaw;
+                            this_->anim_last_displayed_yaw = new_yaw;
+                            if (this_->gra && !navit_gui_menu_active(this_)) {
+                                graphics_draw_drag(this_->gra, &scroll_zero);
+                                graphics_draw_mode(this_->gra, draw_mode_end);
+                            }
                         }
                     }
                 } else {
@@ -3740,8 +3806,6 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                 navit_vehicle_draw(this_, nv, &cursor_screen);
                 navit_log_road_gap(this_, &zero, &cursor_screen);
             }
-        } else if (this_->map_animating) {
-            dbg(lvl_error, "pos_update: skip cursor redraw (animation active)");
         } else {
             dbg(lvl_error, "pos_update: no scroll (button pressed or follow disabled), just drawing cursor");
             navit_vehicle_draw(this_, nv, NULL);

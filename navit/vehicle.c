@@ -456,8 +456,6 @@ void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct 
 
 void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     int dx, dy, dist, duration;
-    if (!this_->interpolating)
-        return;
     dx = target->x - this_->drag_pnt.x;
     dy = target->y - this_->drag_pnt.y;
     if (dx < 0)
@@ -465,6 +463,8 @@ void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     if (dy < 0)
         dy = -dy;
     dist = dx + dy;
+    if (dist < 2 && this_->interpolating)
+        return;
     duration = 150 + dist * 2;
     if (duration > 500)
         duration = 500;
@@ -472,6 +472,7 @@ void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     this_->interp_target = *target;
     gettimeofday(&this_->interp_t0, NULL);
     this_->interp_duration = duration;
+    this_->interpolating = 1;
 }
 
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
