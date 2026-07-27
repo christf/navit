@@ -1073,6 +1073,7 @@ static void get_data_window(struct graphics_priv *this, unsigned int xid) {
         gtk_window_set_default_size(GTK_WINDOW(this->win), this->win_w, this->win_h);
         dbg(lvl_debug, "h= %i, w= %i", this->win_h, this->win_w);
         gtk_window_set_title(GTK_WINDOW(this->win), this->window_title);
+        gtk_window_set_icon_name(GTK_WINDOW(this->win), "navit");
 
         /* Close request */
         g_signal_connect(this->win, "close-request", G_CALLBACK(close_request), this);
