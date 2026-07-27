@@ -538,7 +538,10 @@ static struct graphics_methods graphics_methods = {
     .get_dpi = NULL,                  // TODO add proxy
     .draw_polygon_with_holes = NULL,  // TODO add proxy
     .set_display_rotation = NULL,
-
+    .set_clip = NULL,
+    .set_clip_rects = NULL,
+    .clear_clip = NULL,
+    .scroll = NULL,
 };
 
 static struct graphics_priv *graphics_svg_debug_overlay_new(struct graphics_priv *gr, struct graphics_methods *meth,

@@ -93,6 +93,7 @@ struct graphics_priv {
     guint tick_callback_id;
     int needs_redraw;
     int render_margin;
+    cairo_surface_t *scroll_surface;
     double touch_start_x;
     double touch_start_y;
 };
@@ -144,6 +145,8 @@ static void graphics_destroy(struct graphics_priv *gr) {
         if (gr->win)
             gtk_window_destroy(GTK_WINDOW(gr->win));
         g_free(gr->window_title);
+        if (gr->scroll_surface)
+            cairo_surface_destroy(gr->scroll_surface);
         while (gr->overlays) {
             struct graphics_priv *overlay = gr->overlays;
             gr->overlays = overlay->next;
@@ -662,6 +665,48 @@ static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
             gr->parent->needs_redraw = 1;
         gtk_widget_queue_draw(gr->widget);
     }
+}
+
+static void set_clip(struct graphics_priv *gr, struct point *p, int w, int h) {
+    cairo_save(gr->cairo);
+    cairo_rectangle(gr->cairo, p->x - gr->render_margin, p->y - gr->render_margin, w, h);
+    cairo_clip(gr->cairo);
+}
+
+static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, int h1, struct point *p2, int w2,
+                           int h2) {
+    cairo_save(gr->cairo);
+    cairo_rectangle(gr->cairo, p1->x - gr->render_margin, p1->y - gr->render_margin, w1, h1);
+    cairo_rectangle(gr->cairo, p2->x - gr->render_margin, p2->y - gr->render_margin, w2, h2);
+    cairo_clip(gr->cairo);
+}
+
+static void clear_clip(struct graphics_priv *gr) {
+    cairo_restore(gr->cairo);
+}
+
+static int scroll_surface(struct graphics_priv *gr, int dx, int dy) {
+    int sw = gr->width + 2 * gr->render_margin;
+    int sh = gr->height + 2 * gr->render_margin;
+    cairo_surface_t *target = cairo_get_target(gr->cairo);
+    if (!gr->scroll_surface) {
+        gr->scroll_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, sw, sh);
+    }
+    if (cairo_surface_status(gr->scroll_surface) != CAIRO_STATUS_SUCCESS)
+        return 0;
+    {
+        cairo_t *tmp = cairo_create(gr->scroll_surface);
+        cairo_set_source_surface(tmp, target, 0, 0);
+        cairo_paint(tmp);
+        cairo_destroy(tmp);
+    }
+    cairo_save(gr->cairo);
+    cairo_identity_matrix(gr->cairo);
+    cairo_set_operator(gr->cairo, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_surface(gr->cairo, gr->scroll_surface, dx, dy);
+    cairo_paint(gr->cairo);
+    cairo_restore(gr->cairo);
+    return 1;
 }
 
 /* Drawing — GTK4 draw function replaces expose + configure */
@@ -1216,6 +1261,10 @@ static struct graphics_methods graphics_methods = {
     get_dpi, /* get dpi */
     draw_polygon_with_holes,
     set_display_rotation,
+    set_clip,
+    set_clip_rects,
+    clear_clip,
+    scroll_surface,
 };
 
 static struct graphics_priv *graphics_gtk_drawing_area_new_helper(struct graphics_methods *meth) {

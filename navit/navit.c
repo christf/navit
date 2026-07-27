@@ -473,6 +473,12 @@ static void navit_log_road_gap(struct navit *this_, struct point *drag, struct p
     }
 }
 
+static void navit_animation_ensure_timer(struct navit *this_) {
+    if (this_->ready == 3 && !this_->animation_timer) {
+        this_->animation_timer = event_add_timeout(33, 1, this_->animation_cb);
+    }
+}
+
 static int navit_animation_tick(void *data) {
     struct navit *this_ = data;
     GList *l = this_->vehicles;
@@ -669,6 +675,12 @@ static int navit_animation_tick(void *data) {
         navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
+    }
+
+    if (!primary_animating && !was_animating) {
+        event_remove_timeout(this_->animation_timer);
+        this_->animation_timer = NULL;
+        return TRUE;
     }
 
     return TRUE;
@@ -925,6 +937,8 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_draw_drag(this_->gra, NULL);
             transform_copy(this_->trans, this_->trans_cursor);
             graphics_overlay_disable(this_->gra, 0);
+            if (this_->vehicle)
+                navit_vehicle_draw(this_, this_->vehicle, NULL);
             if (!this_->zoomed)
                 navit_set_timeout(this_);
             navit_draw(this_);
@@ -952,6 +966,50 @@ static void navit_motion_timeout(struct navit *this_) {
         point.x = (this_->current.x - this_->pressed.x);
         point.y = (this_->current.y - this_->pressed.y);
         if (graphics_draw_drag(this_->gra, &point)) {
+            int abs_x = point.x < 0 ? -point.x : point.x;
+            int abs_y = point.y < 0 ? -point.y : point.y;
+            int margin_threshold = this_->render_margin * 3 / 4;
+            if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
+                int drag_dx = this_->current.x - this_->pressed.x;
+                int drag_dy = this_->current.y - this_->pressed.y;
+                int sw = this_->render_margin * 2 + navit_get_width(this_);
+                int sh = this_->render_margin * 2 + navit_get_height(this_);
+                update_transformation(this_->trans, &this_->pressed, &this_->current);
+                graphics_draw_drag(this_->gra, NULL);
+                transform_copy(this_->trans, this_->trans_cursor);
+                this_->pressed = this_->current;
+                if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
+                    struct point clip_p1, clip_p2;
+                    int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
+                    if (drag_dx != 0) {
+                        clip_p1.x = drag_dx > 0 ? 0 : sw + drag_dx;
+                        clip_p1.y = 0;
+                        clip1_w = abs(drag_dx);
+                        clip1_h = sh;
+                    }
+                    if (drag_dy != 0) {
+                        clip_p2.x = 0;
+                        clip_p2.y = drag_dy > 0 ? 0 : sh + drag_dy;
+                        clip2_w = sw;
+                        clip2_h = abs(drag_dy);
+                    }
+                    if (clip1_w && clip2_w) {
+                        graphics_set_clip_rects(this_->gra, &clip_p1, clip1_w, clip1_h, &clip_p2, clip2_w, clip2_h);
+                        navit_draw_displaylist(this_);
+                        graphics_clear_clip(this_->gra);
+                    } else if (clip1_w) {
+                        graphics_set_clip_rect(this_->gra, &clip_p1, clip1_w, clip1_h);
+                        navit_draw_displaylist(this_);
+                        graphics_clear_clip(this_->gra);
+                    } else if (clip2_w) {
+                        graphics_set_clip_rect(this_->gra, &clip_p2, clip2_w, clip2_h);
+                        navit_draw_displaylist(this_);
+                        graphics_clear_clip(this_->gra);
+                    }
+                } else {
+                    navit_draw_displaylist(this_);
+                }
+            }
             graphics_overlay_disable(this_->gra, 1);
             graphics_draw_mode(this_->gra, draw_mode_end);
             this_->moved = 1;
@@ -1040,8 +1098,11 @@ static void navit_scale(struct navit *this_, long scale, struct point *p, int dr
         center->x += c1.x - c2.x;
         center->y += c1.y - c2.y;
     }
-    if (draw)
+    if (draw) {
         navit_draw(this_);
+        if (this_->vehicle)
+            navit_vehicle_draw(this_, this_->vehicle, NULL);
+    }
 }
 
 /**
@@ -3785,6 +3846,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
                             this_->map_animating = 1;
                             this_->anim_last_redraw_yaw = new_yaw;
                             this_->anim_last_displayed_yaw = new_yaw;
+                            navit_animation_ensure_timer(this_);
                             if (this_->gra && !navit_gui_menu_active(this_)) {
                                 graphics_draw_drag(this_->gra, &scroll_zero);
                                 graphics_draw_mode(this_->gra, draw_mode_end);
