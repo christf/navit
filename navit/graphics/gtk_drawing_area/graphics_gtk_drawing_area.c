@@ -1074,6 +1074,7 @@ static void get_data_window(struct graphics_priv *this, unsigned int xid) {
         dbg(lvl_debug, "h= %i, w= %i", this->win_h, this->win_w);
         gtk_window_set_title(GTK_WINDOW(this->win), this->window_title);
         gtk_window_set_icon_name(GTK_WINDOW(this->win), "navit");
+        gtk_window_set_decorated(GTK_WINDOW(this->win), FALSE);
 
         /* Close request */
         g_signal_connect(this->win, "close-request", G_CALLBACK(close_request), this);
