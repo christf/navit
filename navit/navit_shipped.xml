@@ -48,7 +48,8 @@
 	For other formats see https://navit.readthedocs.io/en/latest/user/configuration/Coordinate%20format.html.
 	-->
 	<navit center="11.5666 48.1333" zoom="256" tracking="1" orientation="-1" recent_dest="250" drag_bitmap="1" default_layout="Car">
-		<!-- Use one of gtk_drawing_area, qt_qpainter or sdl. On windows systems, use win32 -->
+		<!-- Use one of gtk_drawing_area, gtkglarea, qt_qpainter or sdl. On windows systems, use win32 -->
+		<!-- gtkglarea uses OpenGL ES 2.0 for GPU-accelerated rendering (requires libepoxy) -->
 		<graphics type="gtk_drawing_area"/>
 
 		<!--

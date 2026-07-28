@@ -904,6 +904,8 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             this_->popped = 0;
             if (popup_callback)
                 this_->button_timeout = event_add_timeout(500, 0, popup_callback);
+            if (this_->gra)
+                graphics_freeze_display_rotation(this_->gra);
         }
         if (button == 2)
             navit_set_center_screen(this_, p, 1);

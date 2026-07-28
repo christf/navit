@@ -624,6 +624,10 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
     }
 }
 
+static void freeze_display_rotation(struct graphics_priv *gr) {
+    gr->target_rotation = gr->display_rotation;
+}
+
 static void set_display_rotation(struct graphics_priv *gr, double angle_degrees, int center_x, int center_y) {
     double delta;
     if (angle_degrees == gr->target_rotation)
@@ -1267,6 +1271,7 @@ static struct graphics_methods graphics_methods = {
     set_clip_rects,
     clear_clip,
     scroll_surface,
+    freeze_display_rotation,
 };
 
 static struct graphics_priv *graphics_gtk_drawing_area_new_helper(struct graphics_methods *meth) {
