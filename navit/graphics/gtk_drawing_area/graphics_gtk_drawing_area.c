@@ -1353,6 +1353,8 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
 }
 
 void plugin_init(void) {
+    if (!g_get_prgname())
+        g_set_prgname("navit");
     gtk_init();
 #ifdef HAVE_API_WIN32
     setlocale(LC_NUMERIC, "C"); /* WIN32 gtk resets LC_NUMERIC */
