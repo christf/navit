@@ -1,0 +1,30 @@
+name: Spelling Check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '*.md'
+      - '*.rst'
+
+jobs:
+  check_spelling:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install curl
+        run: apt-get update && apt-get -y install curl
+      - name: Install misspell
+        run: |
+          curl -L -o ./install-misspell.sh https://git.io/misspell
+          sh ./install-misspell.sh -b /usr/local/bin/
+      - name: Check docs folder for misspells
+        run: |
+          misspell docs/ > typos.txt
+          if [[ $( wc -l < typos.txt ) -gt 0 ]]; then
+            echo "Typos/misspells found, please fix them";
+            cat typos.txt;
+            exit 1;
+          fi
