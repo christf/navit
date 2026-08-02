@@ -592,8 +592,8 @@ static char *district_str(struct search_list_result *res, int level) {
 }
 
 static char *town_str(struct android_search_priv *search_priv, struct search_list_result *res, int level) {
-    const char *resolved = item_town_name_get(&res->town->common.item, navit_get_lang_pref(search_priv->nav),
-                                              search_priv->search_attr.u.str);
+    const char *resolved = search_list_town_name_get(&res->town->common, navit_get_lang_pref(search_priv->nav),
+                                                     search_priv->search_attr.u.str);
     char *town = resolved ? (char *)resolved : res->town->common.town_name;
     char *district = district_str(res, level);
     char *postal = postal_str(res, level);

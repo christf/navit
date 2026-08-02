@@ -132,7 +132,7 @@ static char *district_str(struct search_list_result *res, int level, enum attr_t
 
 static char *town_display_label(struct search_list_result *res, int level, int flags, const char **lang_pref,
                                 const char *search_query) {
-    const char *resolved = item_town_name_get(&res->town->common.item, lang_pref, search_query);
+    const char *resolved = search_list_town_name_get(&res->town->common, lang_pref, search_query);
     char *town = resolved ? (char *)resolved : district_str(res, level, attr_town_name, "");
     char *district = district_str(res, level, attr_district_name, NULL);
     char *postal = postal_str(res, level);
@@ -363,7 +363,7 @@ static void gui_internal_search_idle(struct gui_priv *this, char *wm_name, struc
     } else if (!strcmp(wm_name, "Town")) {
         const char *resolved;
         item = &res->town->common.item;
-        resolved = item_town_name_get(&res->town->common.item, lang_pref, search_text);
+        resolved = search_list_town_name_get(&res->town->common, lang_pref, search_text);
         item_name = resolved ? (char *)resolved : res->town->common.town_name;
         result_main_label = town_display_label(res, 1, 0, lang_pref, search_text);
         result_sublabel = town_display_label(res, 1, 2, lang_pref, search_text);

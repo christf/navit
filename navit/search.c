@@ -423,9 +423,9 @@ static void search_list_common_addattr(struct attr *attr, struct search_list_com
 static void search_list_common_new(struct item *item, struct search_list_common *common) {
     struct attr attr;
     int i;
-    enum attr_type common_attrs[] = {attr_state_name,  attr_county_name,   attr_municipality_name,
-                                     attr_town_name,   attr_district_name, attr_postal,
-                                     attr_town_postal, attr_postal_mask,   attr_none};
+    enum attr_type common_attrs[] = {attr_state_name,    attr_county_name, attr_municipality_name, attr_town_name,
+                                     attr_district_name, attr_postal,      attr_town_postal,       attr_postal_mask,
+                                     attr_label_l10n,    attr_none};
 
     common->town_name = NULL;
     common->district_name = NULL;
@@ -435,7 +435,15 @@ static void search_list_common_new(struct item *item, struct search_list_common 
     common->attrs = NULL;
 
     for (i = 0; common_attrs[i]; i++) {
-        if (item_attr_get(item, common_attrs[i], &attr)) {
+        if (common_attrs[i] == attr_label_l10n) {
+            while (item_attr_get(item, attr_label_l10n, &attr)) {
+                struct attr at;
+                at.type = attr.type;
+                at.u.str = map_convert_string(item->map, attr.u.str);
+                search_list_common_addattr(&at, common);
+                map_convert_free(at.u.str);
+            }
+        } else if (item_attr_get(item, common_attrs[i], &attr)) {
             struct attr at;
             at.type = attr.type;
             at.u.str = map_convert_string(item->map, attr.u.str);
@@ -472,6 +480,53 @@ static void search_list_common_destroy(struct search_list_common *common) {
     common->postal_mask = NULL;
     common->c = NULL;
     common->attrs = NULL;
+}
+
+/**
+ * @brief Get the display name of a town search result.
+ *
+ * This works on the string attributes stored in the search result, not on the
+ * item itself, since the item's map rect is destroyed once the search is done.
+ * It matches the behavior of {@link item_label_get()} for live map items.
+ *
+ * @param common The search result's common data
+ * @param lang_pref The language preferences, or NULL
+ * @param search_query The search query, or NULL. If given, a localized name
+ *                     matching the query is preferred.
+ * @return The best matching name, or NULL
+ */
+const char *search_list_town_name_get(struct search_list_common *common, const char **lang_pref,
+                                      const char *search_query) {
+    const char *native = common->town_name ? common->town_name : common->district_name;
+    int i, pi;
+
+    if (search_query && search_query[0]) {
+        size_t qlen = strlen(search_query);
+        for (i = 0; common->attrs && common->attrs[i]; i++) {
+            if (common->attrs[i]->type == attr_label_l10n) {
+                const char *val = common->attrs[i]->u.str;
+                const char *colon = val ? strchr(val, ':') : NULL;
+                if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
+                    return colon + 1;
+            }
+        }
+    }
+
+    if (lang_pref) {
+        for (pi = 0; lang_pref[pi]; pi++) {
+            const char *lang = lang_pref[pi];
+            size_t ll = strlen(lang);
+            for (i = 0; common->attrs && common->attrs[i]; i++) {
+                if (common->attrs[i]->type == attr_label_l10n) {
+                    const char *val = common->attrs[i]->u.str;
+                    if (val && !strncmp(val, lang, ll) && val[ll] == ':')
+                        return val + ll + 1;
+                }
+            }
+        }
+    }
+
+    return native;
 }
 
 static struct search_list_country *search_list_country_new(struct item *item) {

@@ -1796,7 +1796,7 @@ static DBusHandlerResult request_search_list_get_result(DBusConnection *connecti
         const char *display_name;
         if (config_get_attr(config_get(), attr_navit, &navit_attr, NULL))
             lang_pref = navit_get_lang_pref(navit_attr.u.navit);
-        display_name = item_town_name_get(&result->town->common.item, lang_pref, NULL);
+        display_name = search_list_town_name_get(&result->town->common, lang_pref, NULL);
         dbus_message_iter_open_container(&iter2, DBUS_TYPE_DICT_ENTRY, NULL, &iter3);
         dbus_message_iter_append_basic(&iter3, DBUS_TYPE_STRING, &town);
         dbus_message_iter_open_container(&iter3, DBUS_TYPE_ARRAY, "{sv}", &iter4);

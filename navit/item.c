@@ -660,30 +660,3 @@ const char *item_label_get(struct item *item, const char **lang_pref) {
     l10n = item_resolve_l10n(item, lang_pref);
     return l10n ? l10n : native;
 }
-
-const char *item_town_name_get(struct item *item, const char **lang_pref, const char *search_query) {
-    struct attr attr;
-    const char *native = NULL;
-    const char *l10n;
-
-    item_attr_rewind(item);
-    if (item_attr_get(item, attr_town_name, &attr))
-        native = attr.u.str;
-    else if (item_attr_get(item, attr_district_name, &attr))
-        native = attr.u.str;
-
-    if (search_query && search_query[0]) {
-        size_t qlen = strlen(search_query);
-
-        item_attr_rewind(item);
-        while (item_attr_get(item, attr_label_l10n, &attr)) {
-            const char *val = attr.u.str;
-            const char *colon = strchr(val, ':');
-            if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
-                return colon + 1;
-        }
-    }
-
-    l10n = item_resolve_l10n(item, lang_pref);
-    return l10n ? l10n : native;
-}

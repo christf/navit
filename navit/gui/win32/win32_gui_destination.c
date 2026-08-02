@@ -153,7 +153,7 @@ static void notify_textchange(struct datawindow_priv *datawindow, int param1, in
             break;
         case attr_town_name: {
             const char *name =
-                item_town_name_get(&res->town->common.item, navit_get_lang_pref(datawindow->nav), search_string);
+                search_list_town_name_get(&res->town->common, navit_get_lang_pref(datawindow->nav), search_string);
             tcharBuffer = newSysString(name ? name : res->town->common.town_name);
         } break;
         case attr_street_name:
