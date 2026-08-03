@@ -2322,36 +2322,6 @@ static void osm_town_relations_to_poly(GList *boundaries, FILE *towns_poly) {
     }
 }
 
-static void osm_town_write_l10n_search_entries(struct item_bin *ib, enum attr_type type, enum attr_type match,
-                                               int maxdepth, FILE *out) {
-    char *native = item_bin_get_attr(ib, type, NULL);
-    char *l10n = NULL;
-    size_t snap_size;
-    struct item_bin *snapshot;
-
-    if (!native)
-        return;
-
-    snap_size = (ib->len + 1) * sizeof(uint32_t);
-    snapshot = g_alloca(snap_size);
-    memcpy(snapshot, ib, snap_size);
-
-    while ((l10n = item_bin_get_attr(snapshot, attr_label_l10n, l10n))) {
-        char *colon = strchr(l10n, ':');
-        char *value = colon ? colon + 1 : NULL;
-        if (!value || !*value) {
-            itembin_warning(ib, 0, "malformed attr_label_l10n '%s', skipping\n", l10n);
-            continue;
-        }
-        if (!strcmp(value, native))
-            continue;
-        item_bin_remove_attr(ib, item_bin_get_attr(ib, type, NULL));
-        item_bin_add_attr_string(ib, type, value);
-        item_bin_write_match(ib, type, match, maxdepth, out);
-        memcpy(ib, snapshot, snap_size);
-    }
-}
-
 void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
     struct item_bin *ib;
     GList *bl;
@@ -2459,14 +2429,10 @@ void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
                     item_bin_add_attr(ib, &tc->attrs[i]);
             }
 
-            if (item_bin_get_attr(ib, attr_district_name, NULL)) {
-                osm_town_write_l10n_search_entries(ib, attr_district_name, attr_district_name_match, 5,
-                                                   tc->country->file);
+            if (item_bin_get_attr(ib, attr_district_name, NULL))
                 item_bin_write_match(ib, attr_district_name, attr_district_name_match, 5, tc->country->file);
-            } else {
-                osm_town_write_l10n_search_entries(ib, attr_town_name, attr_town_name_match, 5, tc->country->file);
+            else
                 item_bin_write_match(ib, attr_town_name, attr_town_name_match, 5, tc->country->file);
-            }
 
             town_country_destroy(tc);
             processed_nodes_out++;
