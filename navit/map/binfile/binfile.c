@@ -2186,6 +2186,7 @@ static struct item *binmap_search_get_item(struct map_search_priv *map_search) {
                     }
                 }
                 {
+                    enum attr_type dedup_type = item_is_district(*it) ? attr_district_name : attr_town_name;
                     struct attr l10n_attr;
                     int found_match = 0;
                     while (binfile_attr_get(it->priv_data, attr_label_l10n, &l10n_attr)) {
@@ -2196,7 +2197,7 @@ static struct item *binmap_search_get_item(struct map_search_priv *map_search) {
                             break;
                         }
                     }
-                    if (found_match && !duplicate(map_search, it, attr_town_name, 0))
+                    if (found_match && !duplicate(map_search, it, dedup_type, 0))
                         return it;
                 }
                 break;
