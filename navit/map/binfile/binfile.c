@@ -20,6 +20,7 @@
 #include "attr.h"
 #include "callback.h"
 #include "config.h"
+#include "config_.h"
 #include "coord.h"
 #include "debug.h"
 #include "endianess.h"
@@ -29,6 +30,7 @@
 #include "linguistics.h"
 #include "map.h"
 #include "maptype.h"
+#include "navit.h"
 #include "plugin.h"
 #include "projection.h"
 #include "transform.h"
@@ -167,7 +169,8 @@ struct map_search_priv {
     struct attr search; /**< Attribute specifying what to search for. */
     struct map_selection ms;
     GList *boundaries;
-    int partial; /**< Find partial matches? */
+    int partial;            /**< Find partial matches? */
+    const char **lang_pref; /**< Languages to consider for translated names. */
     int mode;
     struct coord_rect rect_new;
     char *parent_name;
@@ -1902,15 +1905,31 @@ static int binmap_get_estimated_boundaries(struct item *town, GList **boundaries
     return 0;
 }
 
+static int lang_pref_contains(const char **lang_pref, const char *lang, int lang_len) {
+    int i;
+
+    if (!lang_pref)
+        return 1;
+    for (i = 0; lang_pref[i]; i++)
+        if (strlen(lang_pref[i]) == (size_t)lang_len && !strncmp(lang_pref[i], lang, lang_len))
+            return 1;
+    return 0;
+}
+
 static struct map_search_priv *binmap_search_new(struct map_priv *map, struct item *item, struct attr *search,
                                                  int partial) {
     struct map_rect_priv *map_rec;
     struct map_search_priv *msp = g_new0(struct map_search_priv, 1);
     struct item *town;
+    struct attr nav_attr;
+    struct config *cfg;
     int idx;
 
     msp->search = *search;
     msp->partial = partial;
+    cfg = config_get();
+    if (cfg && config_get_attr(cfg, attr_navit, &nav_attr, NULL) && nav_attr.u.navit)
+        msp->lang_pref = navit_get_lang_pref(nav_attr.u.navit);
     if (ATTR_IS_STRING(msp->search.type))
         msp->search.u.str = linguistics_casefold(search->u.str);
 
@@ -2192,7 +2211,10 @@ static struct item *binmap_search_get_item(struct map_search_priv *map_search) {
                     while (binfile_attr_get(it->priv_data, attr_label_l10n, &l10n_attr)) {
                         char *colon = strchr(l10n_attr.u.str, ':');
                         char *value = colon ? colon + 1 : NULL;
-                        if (value && *value && !linguistics_compare(value, map_search->search.u.str, mode)) {
+                        if (value && *value
+                            && lang_pref_contains(map_search->lang_pref, l10n_attr.u.str,
+                                                  (int)(colon - l10n_attr.u.str))
+                            && !linguistics_compare(value, map_search->search.u.str, mode)) {
                             found_match = 1;
                             break;
                         }

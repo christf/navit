@@ -495,18 +495,32 @@ static void search_list_common_destroy(struct search_list_common *common) {
  *                     matching the query is preferred.
  * @return The best matching name, or NULL
  */
-static const char *search_list_town_name_match_query(struct search_list_common *common, const char *search_query) {
+static const char *search_list_town_name_match_query(struct search_list_common *common, const char *search_query,
+                                                     const char **lang_pref) {
     size_t qlen = strlen(search_query);
-    int i;
+    int i, pi;
 
-    for (i = 0; common->attrs && common->attrs[i]; i++) {
-        if (common->attrs[i]->type == attr_label_l10n) {
-            const char *val = common->attrs[i]->u.str;
-            const char *colon = val ? strchr(val, ':') : NULL;
-            if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
-                return colon + 1;
+    for (pi = 0; lang_pref && lang_pref[pi]; pi++) {
+        const char *lang = lang_pref[pi];
+        size_t ll = strlen(lang);
+        for (i = 0; common->attrs && common->attrs[i]; i++) {
+            if (common->attrs[i]->type == attr_label_l10n) {
+                const char *val = common->attrs[i]->u.str;
+                const char *colon = val ? strchr(val, ':') : NULL;
+                if (colon && !strncmp(val, lang, ll) && val[ll] == ':'
+                    && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
+                    return colon + 1;
+            }
         }
     }
+    if (!lang_pref)
+        for (i = 0; common->attrs && common->attrs[i]; i++)
+            if (common->attrs[i]->type == attr_label_l10n) {
+                const char *val = common->attrs[i]->u.str;
+                const char *colon = val ? strchr(val, ':') : NULL;
+                if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
+                    return colon + 1;
+            }
     return NULL;
 }
 
@@ -533,7 +547,7 @@ const char *search_list_town_name_get(struct search_list_common *common, const c
     const char *name;
 
     if (search_query && search_query[0])
-        name = search_list_town_name_match_query(common, search_query);
+        name = search_list_town_name_match_query(common, search_query, lang_pref);
     else
         name = NULL;
     if (!name && lang_pref)
