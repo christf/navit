@@ -495,38 +495,50 @@ static void search_list_common_destroy(struct search_list_common *common) {
  *                     matching the query is preferred.
  * @return The best matching name, or NULL
  */
-const char *search_list_town_name_get(struct search_list_common *common, const char **lang_pref,
-                                      const char *search_query) {
-    const char *native = common->town_name ? common->town_name : common->district_name;
+static const char *search_list_town_name_match_query(struct search_list_common *common, const char *search_query) {
+    size_t qlen = strlen(search_query);
+    int i;
+
+    for (i = 0; common->attrs && common->attrs[i]; i++) {
+        if (common->attrs[i]->type == attr_label_l10n) {
+            const char *val = common->attrs[i]->u.str;
+            const char *colon = val ? strchr(val, ':') : NULL;
+            if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
+                return colon + 1;
+        }
+    }
+    return NULL;
+}
+
+static const char *search_list_town_name_match_lang_pref(struct search_list_common *common, const char **lang_pref) {
     int i, pi;
 
-    if (search_query && search_query[0]) {
-        size_t qlen = strlen(search_query);
+    for (pi = 0; lang_pref[pi]; pi++) {
+        const char *lang = lang_pref[pi];
+        size_t ll = strlen(lang);
         for (i = 0; common->attrs && common->attrs[i]; i++) {
             if (common->attrs[i]->type == attr_label_l10n) {
                 const char *val = common->attrs[i]->u.str;
-                const char *colon = val ? strchr(val, ':') : NULL;
-                if (colon && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
-                    return colon + 1;
+                if (val && !strncmp(val, lang, ll) && val[ll] == ':')
+                    return val + ll + 1;
             }
         }
     }
+    return NULL;
+}
 
-    if (lang_pref) {
-        for (pi = 0; lang_pref[pi]; pi++) {
-            const char *lang = lang_pref[pi];
-            size_t ll = strlen(lang);
-            for (i = 0; common->attrs && common->attrs[i]; i++) {
-                if (common->attrs[i]->type == attr_label_l10n) {
-                    const char *val = common->attrs[i]->u.str;
-                    if (val && !strncmp(val, lang, ll) && val[ll] == ':')
-                        return val + ll + 1;
-                }
-            }
-        }
-    }
+const char *search_list_town_name_get(struct search_list_common *common, const char **lang_pref,
+                                      const char *search_query) {
+    const char *native = common->town_name ? common->town_name : common->district_name;
+    const char *name;
 
-    return native;
+    if (search_query && search_query[0])
+        name = search_list_town_name_match_query(common, search_query);
+    else
+        name = NULL;
+    if (!name && lang_pref)
+        name = search_list_town_name_match_lang_pref(common, lang_pref);
+    return name ? name : native;
 }
 
 static struct search_list_country *search_list_country_new(struct item *item) {
