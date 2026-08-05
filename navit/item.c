@@ -615,6 +615,23 @@ void item_dump_filedesc(struct item *item, struct map *map, FILE *out) {
             fprintf(out, "mg:0x%x 0x%x\n", ca[i].x, ca[i].y);
 }
 
+int item_l10n_lang_matches(const char *pref, const char *lang, int lang_len) {
+    int preflen;
+    int langlen;
+    int len;
+
+    if (!pref || !lang || lang_len <= 0)
+        return 0;
+    preflen = (int)strcspn(pref, "-_");
+    langlen = (int)strcspn(lang, "-_:");
+    if (langlen > lang_len)
+        langlen = lang_len;
+    len = preflen < langlen ? preflen : langlen;
+    if (!len)
+        return 0;
+    return !g_ascii_strncasecmp(pref, lang, len);
+}
+
 static const char *item_resolve_l10n(struct item *item, const char **lang_pref) {
     struct attr attr;
     const char *l10n = NULL;
@@ -625,13 +642,13 @@ static const char *item_resolve_l10n(struct item *item, const char **lang_pref) 
 
     for (pi = 0; lang_pref[pi]; pi++) {
         const char *lang = lang_pref[pi];
-        size_t ll = strlen(lang);
 
         item_attr_rewind(item);
         while (item_attr_get(item, attr_label_l10n, &attr)) {
             const char *val = attr.u.str;
-            if (!strncmp(val, lang, ll) && val[ll] == ':') {
-                l10n = val + ll + 1;
+            const char *colon = val ? strchr(val, ':') : NULL;
+            if (colon && item_l10n_lang_matches(lang, val, (int)(colon - val))) {
+                l10n = colon + 1;
                 break;
             }
         }

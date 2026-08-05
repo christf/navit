@@ -502,12 +502,11 @@ static const char *search_list_town_name_match_query(struct search_list_common *
 
     for (pi = 0; lang_pref && lang_pref[pi]; pi++) {
         const char *lang = lang_pref[pi];
-        size_t ll = strlen(lang);
         for (i = 0; common->attrs && common->attrs[i]; i++) {
             if (common->attrs[i]->type == attr_label_l10n) {
                 const char *val = common->attrs[i]->u.str;
                 const char *colon = val ? strchr(val, ':') : NULL;
-                if (colon && !strncmp(val, lang, ll) && val[ll] == ':'
+                if (colon && item_l10n_lang_matches(lang, val, (int)(colon - val))
                     && !g_ascii_strncasecmp(colon + 1, search_query, qlen))
                     return colon + 1;
             }
@@ -529,12 +528,12 @@ static const char *search_list_town_name_match_lang_pref(struct search_list_comm
 
     for (pi = 0; lang_pref[pi]; pi++) {
         const char *lang = lang_pref[pi];
-        size_t ll = strlen(lang);
         for (i = 0; common->attrs && common->attrs[i]; i++) {
             if (common->attrs[i]->type == attr_label_l10n) {
                 const char *val = common->attrs[i]->u.str;
-                if (val && !strncmp(val, lang, ll) && val[ll] == ':')
-                    return val + ll + 1;
+                const char *colon = val ? strchr(val, ':') : NULL;
+                if (colon && item_l10n_lang_matches(lang, val, (int)(colon - val)))
+                    return colon + 1;
             }
         }
     }

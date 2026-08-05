@@ -1911,7 +1911,7 @@ static int lang_pref_contains(const char **lang_pref, const char *lang, int lang
     if (!lang_pref)
         return 1;
     for (i = 0; lang_pref[i]; i++)
-        if (strlen(lang_pref[i]) == (size_t)lang_len && !strncmp(lang_pref[i], lang, lang_len))
+        if (item_l10n_lang_matches(lang_pref[i], lang, lang_len))
             return 1;
     return 0;
 }
