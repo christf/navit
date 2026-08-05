@@ -1611,9 +1611,6 @@ static void map_parse_country_binfile(struct map_rect_priv *mr) {
         if (search->type == attr_town_name || search->type == attr_district_name
             || search->type == attr_town_or_district_name) {
             dbg(lvl_debug, "Town name '%s' outside key range, may match l10n", search->u.str);
-        } else if (search->type == attr_street_name || search->type == attr_house_number) {
-            dbg(lvl_debug, "Skipping index item, name '%s' outside key range", search->u.str);
-            return;
         }
     }
 
