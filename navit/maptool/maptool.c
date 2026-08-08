@@ -587,6 +587,7 @@ static void osm_read_input_data(struct maptool_params *p, char *suffix) {
         p->osm.associated_streets = tempfile(suffix, "associated_streets", 1);
         p->osm.house_number_interpolations = tempfile(suffix, "house_number_interpolations", 1);
     }
+    tile_sizing_set_file("nodes", p->osm.nodes);
 #ifdef HAVE_POSTGRESQL
     if (p->dbstr)
         map_collect_data_osm_db(p->dbstr, &p->osm);
@@ -615,6 +616,7 @@ static void osm_read_input_data(struct maptool_params *p, char *suffix) {
         exit(1);
     }
     flush_nodes(1);
+    tile_sizing_clear();
     if (p->osm.ways)
         fclose(p->osm.ways);
     if (p->osm.nodes)
@@ -685,7 +687,10 @@ static void osm_resolve_coords_and_split_at_intersections(struct maptool_params 
         coastline = tempfile(suffix, "coastline", 1);
         if (i)
             load_buffer(coord_tmp_path, &node_buffer, i * slice_size, slice_size);
+        if (final)
+            tile_sizing_set_file("ways_split", ways_split);
         map_resolve_coords_and_split_at_intersections(ways, ways_split, ways_split_index, graph, coastline, final);
+        tile_sizing_clear();
         fclose(ways_split);
         if (ways_split_index)
             fclose(ways_split_index);
@@ -706,6 +711,7 @@ static void osm_process_way2poi(struct maptool_params *p, char *suffix) {
     FILE *poly2poi = tempfile(suffix, "poly2poi_resolved", 0);
     FILE *line2poi = tempfile(suffix, "line2poi_resolved", 0);
     FILE *way2poi_result = tempfile(suffix, "way2poi_result", 1);
+    tile_sizing_set_file("way2poi_result", way2poi_result);
     if (poly2poi) {
         process_way2poi(poly2poi, way2poi_result, type_area);
         fclose(poly2poi);
@@ -714,6 +720,7 @@ static void osm_process_way2poi(struct maptool_params *p, char *suffix) {
         process_way2poi(line2poi, way2poi_result, type_line);
         fclose(line2poi);
     }
+    tile_sizing_clear();
     fclose(way2poi_result);
 }
 
@@ -721,7 +728,9 @@ static void osm_process_coastlines(struct maptool_params *p, char *suffix) {
     FILE *coastline = tempfile(suffix, "coastline", 0);
     if (coastline) {
         FILE *coastline_result = tempfile(suffix, "coastline_result", 1);
+        tile_sizing_set_file("coastline_result", coastline_result);
         process_coastlines(coastline, coastline_result);
+        tile_sizing_clear();
         fclose(coastline_result);
         fclose(coastline);
     }
@@ -736,7 +745,9 @@ static void osm_process_turn_restrictions(struct maptool_params *p, char *suffix
     coords = fopen(coord_tmp_path, "rb");
     ways_split = tempfile(suffix, "ways_split", 0);
     ways_split_index = tempfile(suffix, "ways_split_index", 0);
+    tile_sizing_set_file("relations", relations);
     process_turn_restrictions(p->osm.turn_restrictions, coords, ways_split, ways_split_index, relations);
+    tile_sizing_clear();
     fclose(ways_split_index);
     fclose(ways_split);
     fclose(coords);
@@ -756,7 +767,9 @@ static void osm_process_multipolygons(struct maptool_params *p, char *suffix) {
     // coords=fopen(coord_tmp_path, "rb");
     ways_split = tempfile(suffix, "ways_split", 0);
     ways_split_index = tempfile(suffix, "ways_split_index", 0);
+    tile_sizing_set_file("multipolygons_out", relations);
     process_multipolygons(p->osm.multipolygons, /*coords*/ NULL, ways_split, ways_split_index, relations);
+    tile_sizing_clear();
     fclose(ways_split_index);
     fclose(ways_split);
     // fclose(coords);
@@ -872,6 +885,7 @@ static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **
         tempfile_unlink(suffix, "multipolygons");
         tempfile_unlink(suffix, "graph");
         tempfile_unlink(suffix, "tilesdir");
+        tempfile_unlink(suffix, "tilesdir_pos");
         tempfile_unlink(suffix, "boundaries");
         tempfile_unlink(suffix, "way2poi_result");
         tempfile_unlink(suffix, "coastline_result");
@@ -915,7 +929,10 @@ static void maptool_load_countries(struct maptool_params *p) {
 static void maptool_load_tilesdir(struct maptool_params *p, char *suffix) {
     if (!p->tilesdir_loaded) {
         FILE *tilesdir = tempfile(suffix, "tilesdir", 0);
-        load_tilesdir(tilesdir);
+        FILE *tilesdir_pos = tempfile(suffix, "tilesdir_pos", 0);
+        load_tilesdir(tilesdir, tilesdir_pos);
+        if (tilesdir_pos)
+            fclose(tilesdir_pos);
         p->tilesdir_loaded = 1;
     }
 }
@@ -996,6 +1013,28 @@ int main(int argc, char **argv) {
     maptool_init(p.rule_file);
     phase = 0;
 
+    if (p.process_relations) {
+        filenames[filename_count] = "multipolygons_out";
+        referencenames[filename_count++] = NULL;
+        filenames[filename_count] = "relations";
+        referencenames[filename_count++] = NULL;
+        filenames[filename_count] = "towns_poly";
+        referencenames[filename_count++] = NULL;
+    }
+    if (p.process_ways) {
+        filenames[filename_count] = "ways_split";
+        referencenames[filename_count++] = NULL;
+        filenames[filename_count] = "coastline_result";
+        referencenames[filename_count++] = NULL;
+    }
+    if (p.process_nodes) {
+        filenames[filename_count] = "nodes";
+        referencenames[filename_count++] = NULL;
+        filenames[filename_count] = "way2poi_result";
+        referencenames[filename_count++] = NULL;
+    }
+    tile_sizing_init(filenames, filename_count);
+
     // input from an OSM file
     if (p.input == 0) {
         if (start_phase(&p, "reading input data")) {
@@ -1023,7 +1062,9 @@ int main(int argc, char **argv) {
     } else {
         if (start_phase(&p, "reading data")) {
             FILE *ways_split = tempfile(suffix, "ways_split", 1);
+            tile_sizing_set_file("ways_split", ways_split);
             process_binfile(stdin, ways_split);
+            tile_sizing_clear();
             fclose(ways_split);
         }
     }
@@ -1094,26 +1135,6 @@ int main(int argc, char **argv) {
     if (p.dump == 1 && start_phase(&p, "dumping")) {
         maptool_dump(&p, suffix);
         exit(0);
-    }
-    if (p.process_relations) {
-        filenames[filename_count] = "multipolygons_out";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "relations";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "towns_poly";
-        referencenames[filename_count++] = NULL;
-    }
-    if (p.process_ways) {
-        filenames[filename_count] = "ways_split";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "coastline_result";
-        referencenames[filename_count++] = NULL;
-    }
-    if (p.process_nodes) {
-        filenames[filename_count] = "nodes";
-        referencenames[filename_count++] = NULL;
-        filenames[filename_count] = "way2poi_result";
-        referencenames[filename_count++] = NULL;
     }
     for (i = suffix_start; i < suffix_count; i++) {
         suffix = suffixes[i];

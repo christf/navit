@@ -45,6 +45,36 @@ GList *aux_tile_list;
 struct tile_head *tile_head_root;
 GHashTable *strings_hash, *tile_hash, *tile_hash2;
 
+long long phase34_item_pos = -1;
+void (*tile_dispatch_func)(struct tile_head *th) = NULL;
+int tile_data_mmap_active = 0;
+
+void tile_buffer_append(struct tile_head *th, const char *data, int size) {
+    int new_cap;
+    if (th->total_size_used + size > th->zip_data_cap) {
+        if (tile_data_mmap_active) {
+            fprintf(stderr, "Overflow in tile '%s' (used %d max %d item %d): phase 4 and phase 5 disagree on sizes\n",
+                    th->name, th->total_size_used, th->zip_data_cap, size);
+            exit(1);
+        }
+        new_cap = th->zip_data_cap ? th->zip_data_cap : 4096;
+        while (new_cap < th->total_size_used + size)
+            new_cap *= 2;
+        th->zip_data = g_realloc(th->zip_data, new_cap);
+        th->zip_data_cap = new_cap;
+    }
+    memcpy(th->zip_data + th->total_size_used, data, size);
+    th->total_size_used += size;
+}
+
+void tile_check_complete(struct tile_head *th) {
+    if (phase34_item_pos >= 0 && th->name[0] && th->process && tile_dispatch_func
+        && phase34_item_pos >= th->completion_pos) {
+        th->process = 0;
+        tile_dispatch_func(th);
+    }
+}
+
 static char *string_hash_lookup(const char *key) {
     char *key_ptr = NULL;
 
@@ -180,13 +210,14 @@ static void tile_extend(char *tile, struct item_bin *ib, GList **tiles_list) {
     if (!th)
         th = g_hash_table_lookup(tile_hash, tile);
     if (!th) {
-        th = g_malloc(sizeof(struct tile_head) + sizeof(char *));
+        th = g_malloc0(sizeof(struct tile_head) + sizeof(char *));
         // strcpy(th->subtiles, tile);
         th->num_subtiles = 1;
         th->total_size = 0;
         th->total_size_used = 0;
         th->zipnum = 0;
         th->zip_data = NULL;
+        th->completion_file = -1;
         th->name = string_hash_lookup(tile);
         *th_get_subtile(th, 0) = th->name;
 
@@ -199,6 +230,16 @@ static void tile_extend(char *tile, struct item_bin *ib, GList **tiles_list) {
             fprintf(stderr, "new '%s'\n", tile);
     }
     th->total_size += ib->len * 4 + 4;
+    if (tile_sizing_active && tile_sizing_slot >= 0)
+        th->total_size_file[tile_sizing_slot] += ib->len * 4 + 4;
+    if (tile_sizing_active) {
+        if (tile_sizing_file > th->completion_file) {
+            th->completion_file = tile_sizing_file;
+            th->completion_pos = tile_sizing_pos;
+        } else if (tile_sizing_file == th->completion_file && tile_sizing_pos > th->completion_pos)
+            th->completion_pos = tile_sizing_pos;
+    } else if (phase34_item_pos > th->completion_pos)
+        th->completion_pos = phase34_item_pos;
     if (debug_tile(tile))
         fprintf(stderr, "New total size of %s(%p):%d\n", th->name, th, th->total_size);
     g_hash_table_insert(tile_hash, string_hash_lookup(th->name), th);
@@ -232,6 +273,8 @@ static int merge_tile(char *base, char *sub) {
         memcpy(th_get_subtile(thb, thb->num_subtiles), th_get_subtile(ths, 0), ths->num_subtiles * sizeof(char *));
         thb->num_subtiles += ths->num_subtiles;
         thb->total_size += ths->total_size;
+        if (ths->completion_pos > thb->completion_pos)
+            thb->completion_pos = ths->completion_pos;
         g_hash_table_insert(tile_hash, string_hash_lookup(thb->name), thb);
         g_hash_table_remove(tile_hash, sub);
         g_free(ths);
@@ -302,20 +345,13 @@ static void write_item(char *tile, struct item_bin *ib, FILE *reference) {
                     g_hash_table_lookup(tile_hash, tile), tile_hash2 ? g_hash_table_lookup(tile_hash2, tile) : NULL,
                     ib->type);
         size = (ib->len + 1) * 4;
-        if (th->total_size_used + size > th->total_size) {
-            fprintf(stderr, "Overflow in tile %s (used %d max %d item %d)\n", tile, th->total_size_used, th->total_size,
-                    size);
-            exit(1);
-            return;
-        }
         if (reference) {
             int offset = th->total_size_used / 4;
             dbg_assert(fwrite(&th->zipnum, sizeof(th->zipnum), 1, reference) == 1);
             dbg_assert(fwrite(&offset, sizeof(th->total_size_used), 1, reference) == 1);
         }
-        if (th->zip_data)
-            memcpy(th->zip_data + th->total_size_used, ib, size);
-        th->total_size_used += size;
+        tile_buffer_append(th, (const char *)ib, size);
+        tile_check_complete(th);
     } else {
         fprintf(stderr, "no tile hash found for %s\n", tile);
         exit(1);
@@ -454,7 +490,7 @@ static void create_tile_hash_list(GList *list) {
     }
 }
 
-void load_tilesdir(FILE *in) {
+void load_tilesdir(FILE *in, FILE *pos_in) {
     char tile[32], subtile[32], c;
     int size, zipnum = 0;
     struct tile_head **last;
@@ -470,7 +506,11 @@ void load_tilesdir(FILE *in) {
         th->total_size_used = 0;
         th->zipnum = zipnum++;
         th->zip_data = NULL;
+        th->completion_pos = 0;
+        th->completion_file = -1;
         th->name = string_hash_lookup(tile);
+        if (pos_in && fscanf(pos_in, "%lld", &th->completion_pos) != 1)
+            th->completion_pos = 0;
         while (fscanf(in, ":%[^:\n]", subtile) == 1) {
             th = g_realloc(th, sizeof(struct tile_head) + (th->num_subtiles + 1) * sizeof(char *));
             *th_get_subtile(th, th->num_subtiles) = string_hash_lookup(subtile);
@@ -487,9 +527,26 @@ void load_tilesdir(FILE *in) {
     *last = NULL;
 }
 
+static gint tile_completion_cmp(gconstpointer a, gconstpointer b) {
+    const struct tile_head *ta = (const struct tile_head *)a;
+    const struct tile_head *tb = (const struct tile_head *)b;
+    if (ta->completion_pos != tb->completion_pos)
+        return ta->completion_pos < tb->completion_pos ? -1 : 1;
+    {
+        int la = strlen(ta->name), lb = strlen(tb->name);
+        if (la != lb)
+            return lb - la;
+        return strcmp(ta->name, tb->name);
+    }
+}
+
+static void collect_tile_heads_func(char *key, struct tile_head *th, GList **list) {
+    *list = g_list_prepend(*list, th);
+}
+
 void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out) {
-    int idx, len, maxlen;
-    GList *next, *tiles_list;
+    int idx, maxlen;
+    GList *next, *tiles_list, *all = NULL;
     char **data;
     struct tile_head *th, **last = NULL;
 
@@ -497,45 +554,49 @@ void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out
     info->tiles_list = &tiles_list;
     if (!info->write)
         create_tile_hash_list(tiles_list);
-    next = g_list_first(tiles_list);
-    last = &tile_head_root;
     maxlen = info->maxlen;
     if (!maxlen) {
+        next = g_list_first(tiles_list);
         while (next) {
             if (strlen(next->data) > maxlen)
                 maxlen = strlen(next->data);
             next = g_list_next(next);
         }
     }
-    len = maxlen;
-    while (len >= 0) {
-        next = g_list_first(tiles_list);
-        while (next) {
-            if (strlen(next->data) == len) {
-                th = g_hash_table_lookup(tile_hash, next->data);
-                if (!info->write) {
-                    *last = th;
-                    last = &th->next;
-                    th->next = NULL;
-                    th->zipnum = zip_get_zipnum(zip_info);
-                    fprintf(out, "%s:%d", strlen((char *)next->data) ? (char *)next->data : "index", th->total_size);
-
-                    for (idx = 0; idx < th->num_subtiles; idx++) {
-                        data = th_get_subtile(th, idx);
-                        fprintf(out, ":%s", *data);
-                    }
-
-                    fprintf(out, "\n");
-                }
-                if (th->name[strlen(info->suffix)])
-                    index_submap_add(info, th);
-                zip_add_member(zip_info);
-                processed_tiles++;
-            }
-            next = g_list_next(next);
-        }
-        len--;
+    /* Emit the submaps first; they can create the short prefix and "index" tiles. */
+    next = g_list_first(tiles_list);
+    while (next) {
+        th = g_hash_table_lookup(tile_hash, next->data);
+        if (th->name[strlen(info->suffix)])
+            index_submap_add(info, th);
+        next = g_list_next(next);
     }
+    /* Order by completion position so the streaming assembly finishes them in zip order. */
+    g_hash_table_foreach(tile_hash, (GHFunc)collect_tile_heads_func, &all);
+    all = g_list_sort(all, tile_completion_cmp);
+    next = g_list_first(all);
+    last = &tile_head_root;
+    while (next) {
+        th = next->data;
+        if (!info->write) {
+            *last = th;
+            last = &th->next;
+            th->next = NULL;
+            th->zipnum = zip_get_zipnum(zip_info);
+            fprintf(out, "%s:%d", strlen(th->name) ? th->name : "index", th->total_size);
+
+            for (idx = 0; idx < th->num_subtiles; idx++) {
+                data = th_get_subtile(th, idx);
+                fprintf(out, ":%s", *data);
+            }
+
+            fprintf(out, "\n");
+        }
+        zip_add_member(zip_info);
+        processed_tiles++;
+        next = g_list_next(next);
+    }
+    g_list_free(all);
     g_list_free(tiles_list);
     if (info->suffix[0] && info->write) {
         struct item_bin *item_bin = init_item(type_submap);

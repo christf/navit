@@ -2054,6 +2054,7 @@ void osm_end_node(struct maptool_osm *osm) {
             item_bin_add_attr_string(item_bin, item_is_town(*item_bin) ? attr_town_postal : attr_postal, postal);
         }
         item_bin_write(item_bin, osm->nodes);
+        tile_sizing_write_file(osm->nodes, item_bin);
         if (item_is_town(*item_bin) && attr_strings[attr_string_label] && osm->towns) {
             item_bin = init_item(item_bin->type);
             item_bin_add_coord(item_bin, &current_node->c, 1);
@@ -2313,6 +2314,7 @@ static void osm_town_relations_to_poly(GList *boundaries, FILE *towns_poly) {
                     if (a)
                         item_bin_add_attr_longlong(ib, attr_osm_relationid, atol(a));
                     item_bin_write(ib, towns_poly);
+                    tile_sizing_write_file(towns_poly, ib);
                 }
                 s = g_list_next(s);
             }
@@ -2445,7 +2447,9 @@ void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
     }
 
     towns_poly = tempfile(suffix, "towns_poly", 1);
+    tile_sizing_set_file("towns_poly", towns_poly);
     osm_town_relations_to_poly(bl, towns_poly);
+    tile_sizing_clear();
     fclose(towns_poly);
 
     g_hash_table_destroy(town_hash);
@@ -2648,6 +2652,7 @@ static void process_associated_street_member(void *func_priv, void *relation_pri
             && (type_implies_streetname || item_bin_get_attr(member, attr_house_number, NULL)))
             item_bin_add_attr_string(member, attr_street_name, rel->name);
         item_bin_write(member, fp->out);
+        tile_sizing_write_file(fp->out, member);
     }
 }
 
@@ -2708,14 +2713,17 @@ static void process_house_number_interpolation_member(void *func_priv, void *rel
             item_bin_add_attr_string(member, attr_for_interpolation, house_number_from_to);
         }
         item_bin_write(member, fp->out);
+        tile_sizing_write_file(fp->out, member);
     }
 }
 
 static void relation_func_writethrough(void *func_priv, void *relation_priv_unused, struct item_bin *member,
                                        void *member_priv_unused) {
     FILE *out = *(FILE **)func_priv;
-    if (out)
+    if (out) {
         item_bin_write(member, out);
+        tile_sizing_write_file(out, member);
+    }
 }
 
 static void process_associated_streets_setup(FILE *in, struct relations *relations,
@@ -2774,21 +2782,30 @@ void process_associated_streets(FILE *in, struct files_relation_processing *file
     fseek(in, 0, SEEK_SET);
     process_associated_streets_setup(in, relations, &fp);
 
+    /* The three files below are rewritten, so redo their sizing contribution. */
+    tile_sizing_reset_file("ways_split");
+    tile_sizing_reset_file("nodes");
+    if (files_relproc->nodes2_in)
+        tile_sizing_reset_file("way2poi_result");
+
     /* Set noname relations names from their street members */
     fseek(files_relproc->ways_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->ways_in);
 
     /* Set street names on all members */
     fp.out = files_relproc->ways_out;
+    tile_sizing_set_file("ways_split", fp.out);
     fseek(files_relproc->ways_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->ways_in);
 
     fp.out = files_relproc->nodes_out;
+    tile_sizing_set_file("nodes", fp.out);
     fseek(files_relproc->nodes_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->nodes_in);
 
     if (files_relproc->nodes2_in) {
         fp.out = files_relproc->nodes2_out;
+        tile_sizing_set_file("way2poi_result", fp.out);
         fseek(files_relproc->nodes2_in, 0, SEEK_SET);
         relations_process(relations, NULL, files_relproc->nodes2_in);
     }
@@ -2831,6 +2848,12 @@ void process_house_number_interpolations(FILE *in, struct files_relation_process
     fseek(in, 0, SEEK_SET);
     process_house_number_interpolations_setup(in, relations, &fp);
 
+    /* The files rewritten below get their sizing contribution redone. */
+    tile_sizing_reset_file("ways_split");
+    tile_sizing_reset_file("nodes");
+    if (files_relproc->nodes2_in)
+        tile_sizing_reset_file("way2poi_result");
+
     /* Copy house numbers & street names from first/last node to interpolation way. */
     fseek(files_relproc->ways_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->ways_in);
@@ -2840,15 +2863,18 @@ void process_house_number_interpolations(FILE *in, struct files_relation_process
 
     /* Set street names on all members */
     fp.out = files_relproc->ways_out;
+    tile_sizing_set_file("ways_split", fp.out);
     fseek(files_relproc->ways_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->ways_in);
 
     fp.out = files_relproc->nodes_out;
+    tile_sizing_set_file("nodes", fp.out);
     fseek(files_relproc->nodes_in, 0, SEEK_SET);
     relations_process(relations, NULL, files_relproc->nodes_in);
 
     if (files_relproc->nodes2_in) {
         fp.out = files_relproc->nodes2_out;
+        tile_sizing_set_file("way2poi_result", fp.out);
         fseek(files_relproc->nodes2_in, 0, SEEK_SET);
         relations_process(relations, NULL, files_relproc->nodes2_in);
     }
@@ -3175,6 +3201,7 @@ static void process_multipolygons_finish(GList *tr, FILE *out) {
                 g_free(buffer);
             }
             item_bin_write(ib, out);
+            tile_sizing_write_file(out, ib);
         }
         /* just for fun...*/
         processed_relations++;
@@ -3581,6 +3608,7 @@ static void process_turn_restrictions_finish(GList *tr, FILE *out) {
                     item_bin_add_attr_range(ib, attr_order, 0, order);
 
                     item_bin_write(ib, out);
+                    tile_sizing_write_file(out, ib);
                 }
             }
         }
@@ -4037,6 +4065,8 @@ static void write_item_way_subsection(FILE *out, FILE *out_index, FILE *out_grap
     struct coord *c = (struct coord *)(orig + 1);
     char *attr = (char *)(c + orig->clen / 2);
     int attr_len = orig->len - orig->clen - 2;
+    static char *sizing_buffer = NULL;
+    static size_t sizing_buffer_cap = 0;
     processed_ways++;
     new.type = orig->type;
     new.clen = (last - first + 1) * 2;
@@ -4046,6 +4076,17 @@ static void write_item_way_subsection(FILE *out, FILE *out_index, FILE *out_grap
     dbg_assert(fwrite(&new, sizeof(new), 1, out) == 1);
     dbg_assert(fwrite(c + first, new.clen * 4, 1, out) == 1);
     dbg_assert(fwrite(attr, attr_len * 4, 1, out) == 1);
+    if (tile_sizing_active && out == tile_sizing_out) {
+        size_t len = sizeof(new) + new.clen * 4 + attr_len * 4;
+        if (len > sizing_buffer_cap) {
+            sizing_buffer_cap = len;
+            sizing_buffer = g_realloc(sizing_buffer, sizing_buffer_cap);
+        }
+        memcpy(sizing_buffer, &new, sizeof(new));
+        memcpy(sizing_buffer + sizeof(new), c + first, new.clen * 4);
+        memcpy(sizing_buffer + sizeof(new) + new.clen * 4, attr, attr_len * 4);
+        tile_sizing_write_file(out, (struct item_bin *)sizing_buffer);
+    }
 }
 
 void ref_ways(FILE *in) {

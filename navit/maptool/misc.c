@@ -40,6 +40,8 @@
 #include <zlib.h>
 #ifndef _MSC_VER
 #    include <getopt.h>
+#    include <sys/mman.h>
+#    include <sys/stat.h>
 #    include <unistd.h>
 #endif
 
@@ -144,8 +146,10 @@ void phase1_map(GList *maps, FILE *out_ways, FILE *out_nodes) {
             }
             if (item->type >= type_line)
                 item_bin_write(item_bin, out_ways);
-            else
+            else {
                 item_bin_write(item_bin, out_nodes);
+                tile_sizing_write_file(out_nodes, item_bin);
+            }
         }
         map_rect_destroy(mr);
         maps = g_list_next(maps);
@@ -219,26 +223,31 @@ static inline int filter_unknown(struct item_bin *ib) {
     return 0;
 }
 
+static void phase34_process_item(struct tile_info *info, struct item_bin *ib, FILE *reference) {
+    int max;
+    struct attr_bin *a;
+    if (filter_unknown(ib))
+        return;
+    if (ib->type < 0x80000000)
+        processed_nodes++;
+    else
+        processed_ways++;
+    max = item_order_by_type(ib->type);
+    a = item_bin_get_attr_bin(ib, attr_order, NULL);
+    if (a) {
+        int max2 = ((struct range *)(a + 1))->max;
+        if (max < max2)
+            max = max2;
+    }
+    tile_write_item_minmax(info, ib, reference, 0, max);
+}
+
 static void phase34_process_file(struct tile_info *info, FILE *in, FILE *reference) {
     struct item_bin *ib;
-    struct attr_bin *a;
-    int max;
 
     while ((ib = read_item(in))) {
-        if (filter_unknown(ib))
-            continue;
-        if (ib->type < 0x80000000)
-            processed_nodes++;
-        else
-            processed_ways++;
-        max = item_order_by_type(ib->type);
-        a = item_bin_get_attr_bin(ib, attr_order, NULL);
-        if (a) {
-            int max2 = ((struct range *)(a + 1))->max;
-            if (max > max2)
-                max = max2;
-        }
-        tile_write_item_minmax(info, ib, reference, 0, max);
+        phase34_item_pos++;
+        phase34_process_item(info, ib, reference);
     }
 }
 
@@ -247,6 +256,7 @@ static void phase34_process_file_range(struct tile_info *info, FILE *in, FILE *r
     int min, max;
 
     while ((ib = read_item_range(in, &min, &max))) {
+        phase34_item_pos++;
         if (filter_unknown(ib))
             continue;
         if (ib->type < 0x80000000)
@@ -257,13 +267,13 @@ static void phase34_process_file_range(struct tile_info *info, FILE *in, FILE *r
     }
 }
 
-static int phase34(struct tile_info *info, struct zip_info *zip_info, FILE **in, FILE **reference, int in_count,
-                   int with_range) {
+static void phase34_collect(struct tile_info *info, FILE **in, FILE **reference, int in_count, int with_range) {
     int i;
 
     processed_nodes = processed_nodes_out = processed_ways = processed_relations = processed_tiles = 0;
     bytes_read = 0;
     sig_alrm(0);
+    phase34_item_pos = -1;
     if (!info->write)
         tile_hash = g_hash_table_new(g_str_hash, g_str_equal);
     for (i = 0; i < in_count; i++) {
@@ -274,12 +284,20 @@ static int phase34(struct tile_info *info, struct zip_info *zip_info, FILE **in,
                 phase34_process_file(info, in[i], reference ? reference[i] : NULL);
         }
     }
+}
+
+static void phase34_finish(struct tile_info *info, struct zip_info *zip_info) {
     if (!info->write)
         merge_tiles(info);
     sig_alrm(0);
     sig_alrm_end();
     write_tilesdir(info, zip_info, info->tilesdir_out);
+}
 
+static int phase34(struct tile_info *info, struct zip_info *zip_info, FILE **in, FILE **reference, int in_count,
+                   int with_range) {
+    phase34_collect(info, in, reference, in_count, with_range);
+    phase34_finish(info, zip_info);
     return 0;
 }
 
@@ -292,14 +310,184 @@ void dump(FILE *in) {
     }
 }
 
+#define TILE_SIZING_MAX_FILES 20
+
+int tile_sizing_active = 0;
+int tile_sizing_file = -1;
+int tile_sizing_slot = -1;
+long long tile_sizing_pos = 0;
+FILE *tile_sizing_out = NULL;
+
+static char *tile_sizing_names[TILE_SIZING_MAX_FILES];
+static long long tile_sizing_counts[TILE_SIZING_MAX_FILES];
+static int tile_sizing_sized[TILE_SIZING_MAX_FILES];
+static int tile_sizing_count = 0;
+static struct tile_info tile_sizing_info;
+
+static int tile_sizing_slot_of(int file_index) {
+    const char *name = tile_sizing_names[file_index];
+    if (!g_strcmp0(name, "ways_split"))
+        return 0;
+    if (!g_strcmp0(name, "nodes"))
+        return 1;
+    if (!g_strcmp0(name, "way2poi_result"))
+        return 2;
+    return -1;
+}
+
+void tile_sizing_init(char **filenames, int count) {
+    int i;
+    tile_sizing_count = 0;
+    for (i = 0; i < count && i < TILE_SIZING_MAX_FILES; i++) {
+        tile_sizing_names[tile_sizing_count] = filenames[i];
+        tile_sizing_counts[tile_sizing_count] = 0;
+        tile_sizing_sized[tile_sizing_count] = 0;
+        tile_sizing_count++;
+    }
+    memset(&tile_sizing_info, 0, sizeof(tile_sizing_info));
+    tile_sizing_info.write = 0;
+    tile_sizing_info.suffix = "";
+    tile_hash = g_hash_table_new(g_str_hash, g_str_equal);
+    tile_sizing_active = 1;
+    tile_sizing_file = -1;
+    tile_sizing_slot = -1;
+    tile_sizing_out = NULL;
+}
+
+void tile_sizing_set_file(char *name, FILE *out) {
+    int i;
+    if (!tile_sizing_active) {
+        tile_sizing_file = -1;
+        tile_sizing_slot = -1;
+        tile_sizing_out = NULL;
+        return;
+    }
+    for (i = 0; i < tile_sizing_count; i++) {
+        if (!g_strcmp0(tile_sizing_names[i], name)) {
+            tile_sizing_file = i;
+            tile_sizing_slot = tile_sizing_slot_of(i);
+            tile_sizing_out = out;
+            tile_sizing_pos = 0;
+            tile_sizing_sized[i] = 1;
+            return;
+        }
+    }
+    tile_sizing_file = -1;
+    tile_sizing_slot = -1;
+    tile_sizing_out = NULL;
+}
+
+void tile_sizing_clear(void) {
+    tile_sizing_file = -1;
+    tile_sizing_slot = -1;
+    tile_sizing_out = NULL;
+}
+
+void tile_sizing_write_file(FILE *out, struct item_bin *ib) {
+    if (!tile_sizing_active || !out || out != tile_sizing_out)
+        return;
+    tile_sizing_pos++;
+    tile_sizing_counts[tile_sizing_file]++;
+    phase34_process_item(&tile_sizing_info, ib, NULL);
+}
+
+struct tile_sizing_reset_args {
+    int file;
+    int slot;
+};
+
+static void tile_sizing_reset_func(char *key, struct tile_head *th, struct tile_sizing_reset_args *args) {
+    if (th->total_size_file[args->slot] > 0) {
+        th->total_size -= th->total_size_file[args->slot];
+        if (th->total_size < 0)
+            th->total_size = 0;
+        th->total_size_file[args->slot] = 0;
+    }
+    /* The file is about to be rewritten: forget its old completion position, so
+     * the rewrite re-records it and it cannot exceed the file's final size. */
+    if (th->completion_file == args->file) {
+        th->completion_file = -1;
+        th->completion_pos = 0;
+    }
+}
+
+void tile_sizing_reset_file(char *name) {
+    int i, slot;
+    struct tile_sizing_reset_args args;
+    if (!tile_sizing_active)
+        return;
+    for (i = 0; i < tile_sizing_count; i++) {
+        if (!g_strcmp0(tile_sizing_names[i], name))
+            break;
+    }
+    if (i >= tile_sizing_count)
+        return;
+    slot = tile_sizing_slot_of(i);
+    if (slot < 0)
+        return;
+    args.file = i;
+    args.slot = slot;
+    g_hash_table_foreach(tile_hash, (GHFunc)tile_sizing_reset_func, &args);
+    tile_sizing_counts[i] = 0;
+}
+
+int tile_sizing_complete(FILE **in, int in_count) {
+    int i;
+    if (!tile_sizing_active)
+        return 0;
+    for (i = 0; i < tile_sizing_count && i < in_count; i++)
+        if (in[i] && !tile_sizing_sized[i])
+            return 0;
+    return 1;
+}
+
+static void tile_sizing_convert_func(char *key, struct tile_head *th, long long *offsets) {
+    if (th->completion_file >= 0 && th->completion_file < tile_sizing_count) {
+        /* tile_sizing_pos is 1-based while phase34_item_pos is 0-based */
+        th->completion_pos = offsets[th->completion_file] + th->completion_pos - 1;
+    }
+}
+
+void tile_sizing_finalize(void) {
+    long long offsets[TILE_SIZING_MAX_FILES];
+    long long total = 0;
+    int i;
+    for (i = 0; i < tile_sizing_count; i++) {
+        offsets[i] = total;
+        total += tile_sizing_counts[i];
+    }
+    g_hash_table_foreach(tile_hash, (GHFunc)tile_sizing_convert_func, offsets);
+    phase34_item_pos = total - 1;
+    tile_sizing_active = 0;
+}
+
 int phase4(FILE **in, int in_count, int with_range, char *suffix, FILE *tilesdir_out, struct zip_info *zip_info) {
     struct tile_info info;
+    struct tile_head *th;
+    FILE *pos;
+    int ret;
     info.write = 0;
     info.maxlen = 0;
     info.suffix = suffix;
     info.tiles_list = NULL;
     info.tilesdir_out = tilesdir_out;
-    return phase34(&info, zip_info, in, NULL, in_count, with_range);
+    if (tile_sizing_complete(in, in_count)) {
+        /* Sizes and completion positions were collected while producing the item
+         * files, so we can build the tilesdir without re-reading them. */
+        tile_sizing_finalize();
+        phase34_finish(&info, zip_info);
+        ret = 0;
+    } else {
+        tile_sizing_active = 0;
+        ret = phase34(&info, zip_info, in, NULL, in_count, with_range);
+    }
+    pos = tempfile(suffix, "tilesdir_pos", 1);
+    if (pos) {
+        for (th = tile_head_root; th; th = th->next)
+            fprintf(pos, "%lld\n", th->completion_pos);
+        fclose(pos);
+    }
+    return ret;
 }
 
 static struct tile_head tile_killer;
@@ -325,7 +513,7 @@ static gpointer process_tile_worker(gpointer data) {
     struct tile_head *th;
 
     while ((th = (struct tile_head *)g_async_queue_pop(me->queue)) != &tile_killer) {
-        int data_size = th->total_size;
+        int data_size = th->total_size_used;
         th->crc = crc32(0, NULL, 0);
         th->crc = crc32(th->crc, (unsigned char *)th->zip_data, data_size);
 
@@ -388,141 +576,201 @@ static void tile_worker_pool_fini(void) {
     worker_count = 0;
 }
 
-static int write_tiles_for_slice(struct zip_info *zip_info) {
-    int zipfiles = 0;
-    int tile_count = 0;
-    int compression_level = zip_get_compression_level(zip_info);
-    int compression_method = zip_get_compression_method(zip_info);
-    struct tile_head *th;
+static int stream_compression_level = 0;
+static int stream_compression_method = 0;
 
-    if (!worker_threads) {
-        fprintf(stderr, "Tile worker pool not initialized\n");
-        exit(1);
-    }
+static GList *completed_pending = NULL;
+static int next_zipnum = 0;
+static int members_written = 0;
 
-    th = tile_head_root;
-    while (th) {
-        if (th->process && th->name[0])
-            tile_count++;
-        th = th->next;
-    }
-
-    for (th = tile_head_root; th; th = th->next) {
-        if (th->process && !th->name[0])
-            dbg_assert(fwrite(th->zip_data, th->total_size, 1, zip_get_index(zip_info)) == 1);
-    }
-
-    th = tile_head_root;
-    while (th) {
-        if (th->process && th->name[0]) {
-            th->compression_level = compression_level;
-            th->compression_method = compression_method;
-            g_async_queue_push(tile_queue, th);
-        }
-        th = th->next;
-    }
-
-    while (tile_count > 0) {
-        th = g_async_queue_pop(tile_done_queue);
-        if (th->total_size != th->total_size_used) {
-            fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
-            exit(1);
-        }
-        write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info), th->comp_data, th->comp_size,
-                            th->total_size, th->crc, th->zipmthd);
-        if (th->comp_data != th->zip_data)
-            g_free(th->comp_data);
-        th->comp_data = NULL;
-        zipfiles++;
-        tile_count--;
-    }
-    return zipfiles;
+static gint tile_zipnum_cmp(gconstpointer a, gconstpointer b) {
+    const struct tile_head *ta = a, *tb = b;
+    return ta->zipnum - tb->zipnum;
 }
 
-static int process_slice(FILE **in, FILE **reference, int in_count, int with_range, long long size, char *suffix,
-                         struct zip_info *zip_info, char **slice_data_ptr) {
-    struct tile_head *th;
-    char *slice_data, *zip_data;
-    struct tile_info info;
-    int i;
+static void tile_stream_dispatch(struct tile_head *th) {
+    if (th->total_size_used != th->total_size) {
+        fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
+        exit(1);
+    }
+    th->compression_level = stream_compression_level;
+    th->compression_method = stream_compression_method;
+    g_async_queue_push(tile_queue, th);
+}
 
-    slice_data = g_realloc(*slice_data_ptr, size);
-    *slice_data_ptr = slice_data;
-    zip_data = slice_data;
-    th = tile_head_root;
-    while (th) {
-        if (th->process) {
-            th->zip_data = zip_data;
-            zip_data += th->total_size;
+static void stream_write_completed(struct zip_info *zip_info) {
+    struct tile_head *th;
+    while ((th = g_async_queue_try_pop(tile_done_queue)) != NULL)
+        completed_pending = g_list_insert_sorted(completed_pending, th, tile_zipnum_cmp);
+    while (completed_pending && ((struct tile_head *)completed_pending->data)->zipnum == next_zipnum) {
+        th = completed_pending->data;
+        completed_pending = g_list_delete_link(completed_pending, completed_pending);
+        if (th->name[0]) {
+            write_zipmember_raw(zip_info, th->name, zip_get_maxnamelen(zip_info), th->comp_data, th->comp_size,
+                                th->total_size_used, th->crc, th->zipmthd);
+            if (th->comp_data != th->zip_data)
+                g_free(th->comp_data);
+            if (!tile_data_mmap_active)
+                g_free(th->zip_data);
+            th->zip_data = NULL;
+            th->comp_data = NULL;
+            members_written++;
         }
-        th = th->next;
+        next_zipnum++;
     }
-    for (i = 0; i < in_count; i++) {
-        if (in[i])
-            fseek(in[i], 0, SEEK_SET);
-        if (reference && reference[i]) {
-            fseek(reference[i], 0, SEEK_SET);
-        }
+}
+
+static void emit_index_submaps(struct tile_info *info) {
+    struct tile_head *th;
+    for (th = tile_head_root; th; th = th->next)
+        if (th->name[strlen(info->suffix)])
+            index_submap_add(info, th);
+}
+
+/* Disk-backed tile storage: phase 5 pre-sizes one temp file and mmaps it, so
+ * tile buffers live in the page cache instead of heap memory. */
+static char *tile_data_map = NULL;
+static size_t tile_data_map_size = 0;
+static FILE *tile_data_file = NULL;
+
+static void tile_data_map_init(char *suffix) {
+    struct tile_head *th;
+    long long total = 0, off = 0;
+#ifndef _MSC_VER
+    for (th = tile_head_root; th; th = th->next)
+        total += th->total_size;
+    if (!total)
+        return;
+    tile_data_file = tempfile(suffix, "tiles_data", 1);
+    if (!tile_data_file) {
+        fprintf(stderr, "Cannot create tile data file\n");
+        exit(1);
     }
+    if (ftruncate(fileno(tile_data_file), total)) {
+        perror("ftruncate");
+        exit(1);
+    }
+    tile_data_map = mmap(NULL, (size_t)total, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(tile_data_file), 0);
+    if (tile_data_map == MAP_FAILED) {
+        perror("mmap");
+        exit(1);
+    }
+    tile_data_map_size = (size_t)total;
+    for (th = tile_head_root; th; th = th->next) {
+        th->zip_data = tile_data_map + off;
+        th->zip_data_cap = th->total_size;
+        off += th->total_size;
+    }
+    tile_data_mmap_active = 1;
+#else
+    (void)suffix;
+#endif
+}
+
+static void tile_data_map_fini(void) {
+    struct tile_head *th;
+#ifndef _MSC_VER
+    if (tile_data_map) {
+        munmap(tile_data_map, tile_data_map_size);
+        tile_data_map = NULL;
+        tile_data_map_size = 0;
+    }
+    if (tile_data_file) {
+        fclose(tile_data_file);
+        tile_data_file = NULL;
+    }
+#endif
+    for (th = tile_head_root; th; th = th->next)
+        th->zip_data = NULL;
+    tile_data_mmap_active = 0;
+}
+
+int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suffix, struct zip_info *zip_info) {
+    struct tile_info info;
+    struct tile_head *th;
+    int named_tiles = 0, i;
+
+    create_tile_hash();
+
+    stream_compression_level = zip_get_compression_level(zip_info);
+    stream_compression_method = zip_get_compression_method(zip_info);
+    completed_pending = NULL;
+    next_zipnum = 0;
+    members_written = 0;
+
+    for (th = tile_head_root; th; th = th->next) {
+        th->process = 1;
+        th->total_size_used = 0;
+        th->zip_data = NULL;
+        th->zip_data_cap = 0;
+        th->comp_data = NULL;
+        if (th->name[0])
+            named_tiles++;
+    }
+
+    tile_data_map_init(suffix);
+
+    tile_worker_pool_init(thread_count, zip_info);
+    tile_dispatch_func = tile_stream_dispatch;
+
     info.write = 1;
     info.maxlen = zip_get_maxnamelen(zip_info);
     info.suffix = suffix;
     info.tiles_list = NULL;
     info.tilesdir_out = NULL;
-    phase34(&info, zip_info, in, reference, in_count, with_range);
-    return write_tiles_for_slice(zip_info);
-}
 
-int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suffix, struct zip_info *zip_info) {
-    long long size;
-    int slices;
-    int zipnum, written_tiles;
-    struct tile_head *th, *th2;
-    char *slice_data_reuse = NULL;
-    create_tile_hash();
+    phase34_item_pos = -1;
+    emit_index_submaps(&info);
 
-    th = tile_head_root;
-    size = 0;
-    slices = 0;
-    fprintf(stderr, "Maximum slice size " LONGLONG_FMT "\n", slice_size);
-    while (th) {
-        if (size + th->total_size > slice_size) {
-            fprintf(stderr, "Slice %d is of size " LONGLONG_FMT "\n", slices, size);
-            size = 0;
-            slices++;
+    processed_nodes = processed_nodes_out = processed_ways = processed_relations = processed_tiles = 0;
+    bytes_read = 0;
+    sig_alrm(0);
+    for (i = 0; i < in_count; i++) {
+        if (in[i]) {
+            if (with_range)
+                phase34_process_file_range(&info, in[i], references ? references[i] : NULL);
+            else
+                phase34_process_file(&info, in[i], references ? references[i] : NULL);
         }
-        size += th->total_size;
-        th = th->next;
-    }
-    if (size)
-        fprintf(stderr, "Slice %d is of size " LONGLONG_FMT "\n", slices, size);
-    tile_worker_pool_init(thread_count, zip_info);
-
-    th = tile_head_root;
-    size = 0;
-    slices = 0;
-    while (th) {
-        th2 = tile_head_root;
-        while (th2) {
-            th2->process = 0;
-            th2 = th2->next;
-        }
-        size = 0;
-        while (th && size + th->total_size < slice_size) {
-            size += th->total_size;
-            th->process = 1;
-            th = th->next;
-        }
-        /* process_slice() modifies zip_info, but need to retain old info */
-        zipnum = zip_get_zipnum(zip_info);
-        written_tiles = process_slice(in, references, in_count, with_range, size, suffix, zip_info, &slice_data_reuse);
-        zip_set_zipnum(zip_info, zipnum + written_tiles);
-        slices++;
+        stream_write_completed(zip_info);
     }
 
-    g_free(slice_data_reuse);
+    for (th = tile_head_root; th; th = th->next)
+        if (th->process && th->name[0])
+            tile_stream_dispatch(th);
 
+    while (next_zipnum < named_tiles) {
+        struct tile_head *t = g_async_queue_pop(tile_done_queue);
+        completed_pending = g_list_insert_sorted(completed_pending, t, tile_zipnum_cmp);
+        stream_write_completed(zip_info);
+    }
+
+    for (th = tile_head_root; th; th = th->next) {
+        if (!th->name[0] && th->zip_data) {
+            if (th->total_size_used != th->total_size) {
+                fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
+                exit(1);
+            }
+            dbg_assert(fwrite(th->zip_data, th->total_size_used, 1, zip_get_index(zip_info)) == 1);
+        }
+    }
+
+    for (th = tile_head_root; th; th = th->next) {
+        if (!tile_data_mmap_active)
+            g_free(th->zip_data);
+        th->zip_data = NULL;
+        g_free(th->comp_data);
+        th->comp_data = NULL;
+    }
+
+    g_list_free(completed_pending);
+    completed_pending = NULL;
+    tile_dispatch_func = NULL;
     tile_worker_pool_fini();
+    tile_data_map_fini();
+    zip_set_zipnum(zip_info, members_written);
+    sig_alrm(0);
+    sig_alrm_end();
     return 0;
 }
 
@@ -530,6 +778,7 @@ void process_binfile(FILE *in, FILE *out) {
     struct item_bin *ib;
     while ((ib = read_item(in))) {
         item_bin_write(ib, out);
+        tile_sizing_write_file(out, ib);
     }
 }
 

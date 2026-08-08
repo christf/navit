@@ -97,6 +97,7 @@ int file_reader_finish(struct item_bin_sink *sink) {
 int file_writer_process(struct item_bin_sink_func *func, struct item_bin *ib, struct tile_data *tile_data) {
     FILE *out = func->priv_data[0];
     item_bin_write(ib, out);
+    tile_sizing_write_file(out, ib);
     return 0;
 }
 

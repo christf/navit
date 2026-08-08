@@ -67,6 +67,7 @@ extern struct tile_head {
     int total_size;
     char *name;
     char *zip_data;
+    int zip_data_cap;
     int total_size_used;
     int zipnum;
     int process;
@@ -77,8 +78,41 @@ extern struct tile_head {
     int zipmthd;
     int compression_level;
     int compression_method;
+    long long completion_pos;
+    /* File that last touched this tile while sizes are computed during production.
+     * Index into the phase34 file order, -1 while not sized. */
+    int completion_file;
+    /* Per-file sizes contributed to this tile by the three files that get rewritten
+     * (associated streets / house number interpolations): 0=ways_split, 1=nodes,
+     * 2=way2poi_result. Used to undo and redo their contribution on rewrite. */
+    int total_size_file[3];
     // char subtiles[0];
 } *tile_head_root;
+
+/* Position of the item currently being routed to tiles during phase34. */
+extern long long phase34_item_pos;
+/* Hook called by the streaming collection pass once a tile is complete. */
+extern void (*tile_dispatch_func)(struct tile_head *th);
+/* Non-zero while tile buffers live in a shared mmap region. */
+extern int tile_data_mmap_active;
+void tile_check_complete(struct tile_head *th);
+void tile_buffer_append(struct tile_head *th, const char *data, int size);
+
+/* Tile sizing: per-tile sizes and completion positions are computed as a side
+ * effect of the phases that produce the item files, so phase 4 can skip
+ * re-reading them. */
+void tile_sizing_init(char **filenames, int count);
+void tile_sizing_set_file(char *name, FILE *out);
+void tile_sizing_clear(void);
+void tile_sizing_reset_file(char *name);
+int tile_sizing_complete(FILE **in, int in_count);
+void tile_sizing_finalize(void);
+/* State used by tile_extend and the producers; only meaningful while active. */
+extern int tile_sizing_active;
+extern int tile_sizing_file;
+extern int tile_sizing_slot;
+extern long long tile_sizing_pos;
+extern FILE *tile_sizing_out;
 
 /**
  * A map item (street, POI, border etc.) as it is stored in a Navit binfile.
@@ -98,6 +132,8 @@ struct item_bin {
     /** Length of the following coordinate array in 32-bit ints. */
     int clen;
 };
+
+void tile_sizing_write_file(FILE *out, struct item_bin *ib);
 
 /**
  * An attribute for an item_bin as it is stored in a Navit binfile.
@@ -396,7 +432,7 @@ extern GList *aux_tile_list;
 int tile(struct rect *r, char *suffix, char *ret, int max, int overlap, struct rect *tr);
 void tile_bbox(char *tile, struct rect *r, int overlap);
 int tile_len(char *tile);
-void load_tilesdir(FILE *in);
+void load_tilesdir(FILE *in, FILE *pos_in);
 void tile_write_item_to_tile(struct tile_info *info, struct item_bin *ib, FILE *reference, char *name);
 void tile_write_item_minmax(struct tile_info *info, struct item_bin *ib, FILE *reference, int min, int max);
 int add_aux_tile(struct zip_info *zip_info, char *name, char *filename, int size);
