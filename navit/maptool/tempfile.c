@@ -18,6 +18,7 @@
  */
 #include "debug.h"
 #include "maptool.h"
+#include <errno.h>
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,6 +78,11 @@ FILE *tempfile(char *suffix, char *name, int mode) {
     case 2:
         ret = fopen(buffer, "ab");
         break;
+    }
+    if (!ret && mode != 0) {
+        fprintf(stderr, "maptool: cannot create temp file %s: %s\n", buffer, strerror(errno));
+        tempfile_cleanup();
+        exit(1);
     }
     g_free(buffer);
     return ret;

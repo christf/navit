@@ -49,7 +49,7 @@ struct zip_info {
 
 static int zip_write(struct zip_info *info, void *data, int len) {
     if (fwrite(data, len, 1, info->res2) != 1)
-        return 0;
+        fatal_file_error("writing output map file failed");
     return 1;
 }
 
@@ -293,11 +293,14 @@ void write_zipmember_raw(struct zip_info *zip_info, char *name, int filelen, cha
     zip_info->offset += sizeof(lfh) + filelen;
     zip_write(zip_info, compressed_data, compressed_size);
     zip_info->offset += compressed_size;
-    dbg_assert(fwrite(&cd, sizeof(cd), 1, zip_info->dir) == 1);
-    dbg_assert(fwrite(filename, filelen, 1, zip_info->dir) == 1);
+    if (fwrite(&cd, sizeof(cd), 1, zip_info->dir) != 1)
+        fatal_file_error("writing zip directory failed");
+    if (fwrite(filename, filelen, 1, zip_info->dir) != 1)
+        fatal_file_error("writing zip directory entry name failed");
     zip_info->dir_size += sizeof(cd) + filelen;
     if (zip_info->zip64) {
-        dbg_assert(fwrite(&cd_ext, sizeof(cd_ext), 1, zip_info->dir) == 1);
+        if (fwrite(&cd_ext, sizeof(cd_ext), 1, zip_info->dir) != 1)
+            fatal_file_error("writing zip directory extension failed");
         zip_info->dir_size += sizeof(cd_ext);
     }
 }

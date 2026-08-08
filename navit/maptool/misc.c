@@ -32,6 +32,7 @@
 #include "maptool.h"
 #include "types.h"
 #include "zipfile.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <glib.h>
 #include <stdio.h>
@@ -63,6 +64,12 @@ void bbox_extend(struct coord *c, struct rect *r) {
         r->h.x = c->x;
     if (c->y > r->h.y)
         r->h.y = c->y;
+}
+
+void fatal_file_error(const char *what) {
+    fprintf(stderr, "maptool: %s: %s\n", what, strerror(errno));
+    tempfile_cleanup();
+    exit(1);
 }
 
 void bbox(struct coord *c, int count, struct rect *r) {
@@ -751,7 +758,8 @@ int phase5(FILE **in, FILE **references, int in_count, int with_range, char *suf
                 fprintf(stderr, "Size error '%s': %d vs %d\n", th->name, th->total_size, th->total_size_used);
                 exit(1);
             }
-            dbg_assert(fwrite(th->zip_data, th->total_size_used, 1, zip_get_index(zip_info)) == 1);
+            if (fwrite(th->zip_data, th->total_size_used, 1, zip_get_index(zip_info)) != 1)
+                fatal_file_error("writing tile data to index file failed");
         }
     }
 

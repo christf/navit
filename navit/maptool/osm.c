@@ -4053,7 +4053,8 @@ static void write_item_way_subsection_index(FILE *out, FILE *out_index, FILE *ou
             g_hash_table_insert(way_hash, (gpointer)(long long)idx[0], (gpointer)(long long)idx[1]);
     } else {
         if (!last_id || *last_id != idx[0])
-            dbg_assert(fwrite(idx, sizeof(idx), 1, out_index) == 1);
+            if (fwrite(idx, sizeof(idx), 1, out_index) != 1)
+                fatal_file_error("writing way index entry failed");
         if (last_id)
             *last_id = idx[0];
     }
@@ -4073,9 +4074,12 @@ static void write_item_way_subsection(FILE *out, FILE *out_index, FILE *out_grap
     new.len = new.clen + attr_len + 2;
     if (out_index)
         write_item_way_subsection_index(out, out_index, out_graph, orig, last_id);
-    dbg_assert(fwrite(&new, sizeof(new), 1, out) == 1);
-    dbg_assert(fwrite(c + first, new.clen * 4, 1, out) == 1);
-    dbg_assert(fwrite(attr, attr_len * 4, 1, out) == 1);
+    if (fwrite(&new, sizeof(new), 1, out) != 1)
+        fatal_file_error("writing way subsection header failed");
+    if (fwrite(c + first, new.clen * 4, 1, out) != 1)
+        fatal_file_error("writing way subsection coordinates failed");
+    if (fwrite(attr, attr_len * 4, 1, out) != 1)
+        fatal_file_error("writing way subsection attributes failed");
     if (tile_sizing_active && out == tile_sizing_out) {
         size_t len = sizeof(new) + new.clen * 4 + attr_len * 4;
         if (len > sizing_buffer_cap) {

@@ -411,6 +411,9 @@ struct item_bin_sink_func *tile_collector_new(struct item_bin_sink *out);
 
 /* tempfile.c */
 
+/* Fatal I/O error: print a clear message (including errno), remove temp files and exit. */
+void fatal_file_error(const char *what);
+
 char *tempfile_name(char *suffix, char *name);
 FILE *tempfile(char *suffix, char *name, int mode);
 void tempfile_unlink(char *suffix, char *name);

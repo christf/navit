@@ -347,8 +347,9 @@ static void write_item(char *tile, struct item_bin *ib, FILE *reference) {
         size = (ib->len + 1) * 4;
         if (reference) {
             int offset = th->total_size_used / 4;
-            dbg_assert(fwrite(&th->zipnum, sizeof(th->zipnum), 1, reference) == 1);
-            dbg_assert(fwrite(&offset, sizeof(th->total_size_used), 1, reference) == 1);
+            if (fwrite(&th->zipnum, sizeof(th->zipnum), 1, reference) != 1
+                || fwrite(&offset, sizeof(th->total_size_used), 1, reference) != 1)
+                fatal_file_error("writing tile reference entry failed");
         }
         tile_buffer_append(th, (const char *)ib, size);
         tile_check_complete(th);

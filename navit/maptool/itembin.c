@@ -249,7 +249,8 @@ void item_bin_add_hole(struct item_bin *ib, struct coord *coord, int ccount) {
 }
 
 void item_bin_write(struct item_bin *ib, FILE *out) {
-    dbg_assert(fwrite(ib, (ib->len + 1) * 4, 1, out) == 1);
+    if (fwrite(ib, (ib->len + 1) * 4, 1, out) != 1)
+        fatal_file_error("writing item data to output file failed");
 }
 
 struct item_bin *item_bin_dup(struct item_bin *ib) {
