@@ -493,7 +493,7 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         p->start = atoi(optarg);
         break;
     case 't':
-        p->timestamp = optarg;
+        p->timestamp = g_strdup(optarg);
         break;
     case 'T':
         thread_count = atoi(optarg);
@@ -1144,6 +1144,7 @@ int main(int argc, char **argv) {
     start_phase(&p, "done");
     if (p.timestamp != NULL)
         g_free(p.timestamp);
-    tempfile_cleanup();
+    if (!p.keep_tmpfiles)
+        tempfile_cleanup();
     return 0;
 }
