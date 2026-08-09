@@ -354,6 +354,8 @@ void flush_nodes(int final);
 void sort_countries(int keep_tmpfiles);
 void process_associated_streets(FILE *in, struct files_relation_processing *files_relproc);
 void process_house_number_interpolations(FILE *in, struct files_relation_processing *files_relproc);
+void process_associated_streets_and_house_number_interpolations(FILE *in_as, FILE *in_hni,
+                                                                struct files_relation_processing *files_relproc);
 void process_multipolygons(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
 void process_turn_restrictions(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
 void process_turn_restrictions_old(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out);
@@ -384,12 +386,19 @@ struct relations *relations_new(void);
 struct relations_func *relations_func_new(void (*func)(void *func_priv, void *relation_priv, struct item_bin *member,
                                                        void *member_priv),
                                           void *func_priv);
+struct relations_member {
+    osmid memberid;
+    void *relation_priv, *member_priv;
+    struct relations_func *func;
+};
 void relations_add_relation_member_entry(struct relations *rel, struct relations_func *func, void *relation_priv,
                                          void *member_priv, enum relation_member_type type, osmid id);
 void relations_add_func(struct relations *rel, struct relations_func *func);
 void relations_add_relation_default_entry(struct relations *rel, struct relations_func *func);
 void relations_process(struct relations *rel, FILE *nodes, FILE *ways);
 void relations_process_multi(struct relations **rel, int count, FILE *nodes, FILE *ways);
+/** Look up the relation memberships of an item, or NULL if it is not a member of any relation. */
+GList *relations_member_lookup(struct relations *rel, struct item_bin *ib);
 void relations_destroy(struct relations *rel);
 
 /* sourcesink.c */

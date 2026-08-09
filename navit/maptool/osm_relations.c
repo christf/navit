@@ -39,12 +39,6 @@ struct relations_func {
     void *func_priv;
 };
 
-struct relations_member {
-    osmid memberid;
-    void *relation_priv, *member_priv;
-    struct relations_func *func;
-};
-
 static guint relations_member_hash(gconstpointer key) {
     const struct relations_member *memb = key;
     return (memb->memberid >> 32) ^ (memb->memberid & 0xffffffff);
@@ -232,6 +226,25 @@ void relations_process_multi(struct relations **rel, int count, FILE *nodes, FIL
             }
         }
     }
+}
+
+/*
+ * @brief Look up all relation memberships of an item, or NULL if it is not a
+ * member of any relation of the collection.
+ * This mirrors the lookup done by relations_process for a single item.
+ * @param in rel relations collection
+ * @param in ib item to look up
+ * @returns GList of struct relations_member, or NULL
+ */
+GList *relations_member_lookup(struct relations *rel, struct item_bin *ib) {
+    osmid *id;
+    if (NULL != (id = item_bin_get_attr(ib, attr_osm_nodeid, NULL)))
+        return g_hash_table_lookup(rel->member_hash[0], id);
+    if (NULL != (id = item_bin_get_attr(ib, attr_osm_wayid, NULL)))
+        return g_hash_table_lookup(rel->member_hash[1], id);
+    if (NULL != (id = item_bin_get_attr(ib, attr_osm_relationid, NULL)))
+        return g_hash_table_lookup(rel->member_hash[2], id);
+    return NULL;
 }
 
 static void relations_destroy_func(void *key, GList *l, void *data) {

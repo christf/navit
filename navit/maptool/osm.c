@@ -2629,28 +2629,39 @@ struct process_relation_member_func_priv {
     GList *allocations;
 };
 
+static void process_associated_street_member_collect(struct process_relation_member_func_priv *fp, void *relation_priv,
+                                                     struct item_bin *member) {
+    struct associated_street *rel = relation_priv;
+    /* Pass 1, fill associated street names in relation_priv */
+    char *name;
+    if (!rel->name && item_is_street(*member)
+        && (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
+        rel->name = g_strdup(name);
+        fp->allocations = g_list_prepend(fp->allocations, rel->name);
+    }
+}
+
+static void process_associated_street_member_modify(struct process_relation_member_func_priv *fp, void *relation_priv,
+                                                    struct item_bin *member) {
+    struct associated_street *rel = relation_priv;
+    /* Pass 2, add associated street names to relation members which do not have street name attr defined but
+       have house number defined or are streets */
+    int type_implies_streetname = item_is_street(*member) || member->type == type_house_number_interpolation_even
+                                  || member->type == type_house_number_interpolation_odd
+                                  || member->type == type_house_number_interpolation_all
+                                  || member->type == type_house_number_interpolation_alphabetic;
+    if (rel->name && !item_bin_get_attr(member, attr_street_name, NULL)
+        && (type_implies_streetname || item_bin_get_attr(member, attr_house_number, NULL)))
+        item_bin_add_attr_string(member, attr_street_name, rel->name);
+}
+
 static void process_associated_street_member(void *func_priv, void *relation_priv, struct item_bin *member,
                                              void *member_priv_unused) {
     struct process_relation_member_func_priv *fp = func_priv;
-    struct associated_street *rel = relation_priv;
     if (!fp->out) {
-        /* Pass 1, fill associated street names in relation_priv */
-        char *name;
-        if (!rel->name && item_is_street(*member)
-            && (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
-            rel->name = g_strdup(name);
-            fp->allocations = g_list_prepend(fp->allocations, rel->name);
-        }
+        process_associated_street_member_collect(fp, relation_priv, member);
     } else {
-        /* Pass 2, add associated street names to relation members which do not have street name attr defined but
-           have house number defined or are streets */
-        int type_implies_streetname = item_is_street(*member) || member->type == type_house_number_interpolation_even
-                                      || member->type == type_house_number_interpolation_odd
-                                      || member->type == type_house_number_interpolation_all
-                                      || member->type == type_house_number_interpolation_alphabetic;
-        if (rel->name && !item_bin_get_attr(member, attr_street_name, NULL)
-            && (type_implies_streetname || item_bin_get_attr(member, attr_house_number, NULL)))
-            item_bin_add_attr_string(member, attr_street_name, rel->name);
+        process_associated_street_member_modify(fp, relation_priv, member);
         item_bin_write(member, fp->out);
         tile_sizing_write_file(fp->out, member);
     }
@@ -2665,53 +2676,64 @@ struct house_number_interpolation {
     char *house_number_last_node;
 };
 
+static void process_house_number_interpolation_member_collect(struct process_relation_member_func_priv *fp,
+                                                              void *relation_priv, struct item_bin *member) {
+    struct house_number_interpolation *rel = relation_priv;
+    /* Pass 1, read street name & house numbers from first & last node.*/
+    char *street_name;
+    char *house_number;
+    if ((street_name = item_bin_get_attr(member, attr_street_name, NULL))) {
+        rel->street_name = g_strdup(street_name);
+        fp->allocations = g_list_prepend(fp->allocations, rel->street_name);
+    }
+    if ((house_number = item_bin_get_attr(member, attr_house_number, NULL))) {
+        osmid *nodeid;
+        char *house_number_dup;
+        if ((nodeid = item_bin_get_attr(member, attr_osm_nodeid, NULL))) {
+            house_number_dup = g_strdup(house_number);
+            fp->allocations = g_list_prepend(fp->allocations, house_number_dup);
+            if (*nodeid == rel->nodeid_first_node) {
+                rel->house_number_first_node = house_number_dup;
+            } else {
+                rel->house_number_last_node = house_number_dup;
+            }
+        }
+    }
+}
+
+static void process_house_number_interpolation_member_modify(struct process_relation_member_func_priv *fp,
+                                                             void *relation_priv, struct item_bin *member) {
+    struct house_number_interpolation *rel = relation_priv;
+    /* Pass 2, add interpolation information to interpolation ways. */
+    enum attr_type attr_for_interpolation = 0;
+    switch (member->type) {
+    case type_house_number_interpolation_even:
+    case type_house_number_interpolation_odd:
+        attr_for_interpolation = attr_house_number_interpolation_no_ends_incrmt_2;
+        break;
+    case type_house_number_interpolation_all:
+        attr_for_interpolation = attr_house_number_interpolation_no_ends_incrmt_1;
+        break;
+    default:
+        // alphabetic interpolation not (yet) supported
+        break;
+    }
+    if (attr_for_interpolation && rel->street_name) {
+        item_bin_add_attr_string(member, attr_street_name, rel->street_name);
+        char *house_number_from_to =
+            g_strconcat(rel->house_number_first_node, "-", rel->house_number_last_node, NULL);
+        fp->allocations = g_list_prepend(fp->allocations, house_number_from_to);
+        item_bin_add_attr_string(member, attr_for_interpolation, house_number_from_to);
+    }
+}
+
 static void process_house_number_interpolation_member(void *func_priv, void *relation_priv, struct item_bin *member,
                                                       void *member_priv_unused) {
     struct process_relation_member_func_priv *fp = func_priv;
-    struct house_number_interpolation *rel = relation_priv;
     if (!fp->out) {
-        /* Pass 1, read street name & house numbers from first & last node.*/
-        char *street_name;
-        char *house_number;
-        if ((street_name = item_bin_get_attr(member, attr_street_name, NULL))) {
-            rel->street_name = g_strdup(street_name);
-            fp->allocations = g_list_prepend(fp->allocations, rel->street_name);
-        }
-        if ((house_number = item_bin_get_attr(member, attr_house_number, NULL))) {
-            osmid *nodeid;
-            char *house_number_dup;
-            if ((nodeid = item_bin_get_attr(member, attr_osm_nodeid, NULL))) {
-                house_number_dup = g_strdup(house_number);
-                fp->allocations = g_list_prepend(fp->allocations, house_number_dup);
-                if (*nodeid == rel->nodeid_first_node) {
-                    rel->house_number_first_node = house_number_dup;
-                } else {
-                    rel->house_number_last_node = house_number_dup;
-                }
-            }
-        }
+        process_house_number_interpolation_member_collect(fp, relation_priv, member);
     } else {
-        /* Pass 2, add interpolation information to interpolation ways. */
-        enum attr_type attr_for_interpolation = 0;
-        switch (member->type) {
-        case type_house_number_interpolation_even:
-        case type_house_number_interpolation_odd:
-            attr_for_interpolation = attr_house_number_interpolation_no_ends_incrmt_2;
-            break;
-        case type_house_number_interpolation_all:
-            attr_for_interpolation = attr_house_number_interpolation_no_ends_incrmt_1;
-            break;
-        default:
-            // alphabetic interpolation not (yet) supported
-            break;
-        }
-        if (attr_for_interpolation && rel->street_name) {
-            item_bin_add_attr_string(member, attr_street_name, rel->street_name);
-            char *house_number_from_to =
-                g_strconcat(rel->house_number_first_node, "-", rel->house_number_last_node, NULL);
-            fp->allocations = g_list_prepend(fp->allocations, house_number_from_to);
-            item_bin_add_attr_string(member, attr_for_interpolation, house_number_from_to);
-        }
+        process_house_number_interpolation_member_modify(fp, relation_priv, member);
         item_bin_write(member, fp->out);
         tile_sizing_write_file(fp->out, member);
     }
@@ -2882,6 +2904,148 @@ void process_house_number_interpolations(FILE *in, struct files_relation_process
     relations_destroy(relations);
     g_list_foreach(fp.allocations, (GFunc)g_free_helper, NULL);
     g_list_free(fp.allocations);
+}
+
+/* Single pass combining associated street names and house number interpolations.
+ * The two sequential passes are fused into one pass over each of the three
+ * rewritten files.  To keep the output byte-identical to the sequential
+ * processing, this replicates its exact semantics:
+ * - Associated street names are collected from street members first (they may
+ *   appear after the members they name in the input).
+ * - House number interpolation info is then collected from ways and nodes, with
+ *   associated street names assigned first so the collection sees the same
+ *   street names the sequential flow would have produced.
+ * - During the write pass each item is written once per associated street
+ *   membership (or once for a non-member) and, for each of those copies, once
+ *   per house number interpolation membership (or once for a non-member), with
+ *   the interpolation attributes accumulating on the copy just like the
+ *   sequential passes did. */
+
+static void fused_write_item(FILE *out, struct item_bin *ib) {
+    item_bin_write(ib, out);
+    tile_sizing_write_file(out, ib);
+}
+
+static void relations_process_fused_collect(FILE *in, struct relations *relations_as, struct relations *relations_hni,
+                                            struct process_relation_member_func_priv *fp_as,
+                                            struct process_relation_member_func_priv *fp_hni) {
+    struct item_bin *ib;
+    while ((ib = read_item(in))) {
+        GList *l;
+        /* Assign associated street names first, as the sequential associated
+         * street pass would have before the interpolation pass read the data. */
+        l = relations_member_lookup(relations_as, ib);
+        while (l) {
+            struct relations_member *m = l->data;
+            process_associated_street_member_modify(fp_as, m->relation_priv, ib);
+            l = g_list_next(l);
+        }
+        l = relations_member_lookup(relations_hni, ib);
+        while (l) {
+            struct relations_member *m = l->data;
+            process_house_number_interpolation_member_collect(fp_hni, m->relation_priv, ib);
+            l = g_list_next(l);
+        }
+    }
+}
+
+static void relations_process_fused_write(FILE *in, FILE *out, struct relations *relations_as,
+                                          struct relations *relations_hni,
+                                          struct process_relation_member_func_priv *fp_as,
+                                          struct process_relation_member_func_priv *fp_hni) {
+    struct item_bin *ib;
+    while ((ib = read_item(in))) {
+        GList *as_members = relations_member_lookup(relations_as, ib);
+        GList *hn_members = relations_member_lookup(relations_hni, ib);
+        int n_as = as_members ? g_list_length(as_members) : 1;
+        int n_hn = hn_members ? g_list_length(hn_members) : 1;
+        int i;
+        for (i = 0; i < n_as; i++) {
+            if (as_members) {
+                struct relations_member *m = g_list_nth_data(as_members, i);
+                process_associated_street_member_modify(fp_as, m->relation_priv, ib);
+            }
+            if (!hn_members) {
+                fused_write_item(out, ib);
+            } else {
+                /* Start from a fresh copy of the item so the interpolation
+                 * attributes accumulate like they did on the sequential passes'
+                 * re-read of each copy. */
+                int ib_size = (ib->len + 1) * sizeof(int);
+                int slack = 8192 + 512 * n_hn;
+                struct item_bin *acc = g_malloc(ib_size + slack);
+                GList *h;
+                memcpy(acc, ib, ib_size);
+                for (h = hn_members; h; h = g_list_next(h)) {
+                    struct relations_member *m = h->data;
+                    process_house_number_interpolation_member_modify(fp_hni, m->relation_priv, acc);
+                    item_bin_write(acc, out);
+                    tile_sizing_write_file(out, acc);
+                }
+                g_free(acc);
+            }
+        }
+    }
+}
+
+void process_associated_streets_and_house_number_interpolations(FILE *in_as, FILE *in_hni,
+                                                                struct files_relation_processing *files_relproc) {
+    struct relations *relations_as = relations_new();
+    struct relations *relations_hni = relations_new();
+    struct process_relation_member_func_priv fp_as = {NULL, NULL};
+    struct process_relation_member_func_priv fp_hni = {NULL, NULL};
+
+    fseek(in_as, 0, SEEK_SET);
+    process_associated_streets_setup(in_as, relations_as, &fp_as);
+    fseek(in_hni, 0, SEEK_SET);
+    process_house_number_interpolations_setup(in_hni, relations_hni, &fp_hni);
+
+    /* The three files below are rewritten, so redo their sizing contribution. */
+    tile_sizing_reset_file("ways_split");
+    tile_sizing_reset_file("nodes");
+    if (files_relproc->nodes2_in)
+        tile_sizing_reset_file("way2poi_result");
+
+    /* Set noname relations names from their street members. */
+    fseek(files_relproc->ways_in, 0, SEEK_SET);
+    relations_process(relations_as, NULL, files_relproc->ways_in);
+
+    /* Copy house numbers & street names from first/last node to interpolation way. */
+    fseek(files_relproc->ways_in, 0, SEEK_SET);
+    relations_process_fused_collect(files_relproc->ways_in, relations_as, relations_hni, &fp_as, &fp_hni);
+    fseek(files_relproc->nodes_in, 0, SEEK_SET);
+    relations_process_fused_collect(files_relproc->nodes_in, relations_as, relations_hni, &fp_as, &fp_hni);
+
+    /* Set street names on all members and add interpolation info. */
+    fp_as.out = files_relproc->ways_out;
+    fp_hni.out = files_relproc->ways_out;
+    tile_sizing_set_file("ways_split", fp_as.out);
+    fseek(files_relproc->ways_in, 0, SEEK_SET);
+    relations_process_fused_write(files_relproc->ways_in, files_relproc->ways_out, relations_as, relations_hni, &fp_as,
+                                  &fp_hni);
+
+    fp_as.out = files_relproc->nodes_out;
+    fp_hni.out = files_relproc->nodes_out;
+    tile_sizing_set_file("nodes", fp_as.out);
+    fseek(files_relproc->nodes_in, 0, SEEK_SET);
+    relations_process_fused_write(files_relproc->nodes_in, files_relproc->nodes_out, relations_as, relations_hni, &fp_as,
+                                  &fp_hni);
+
+    if (files_relproc->nodes2_in) {
+        fp_as.out = files_relproc->nodes2_out;
+        fp_hni.out = files_relproc->nodes2_out;
+        tile_sizing_set_file("way2poi_result", fp_as.out);
+        fseek(files_relproc->nodes2_in, 0, SEEK_SET);
+        relations_process_fused_write(files_relproc->nodes2_in, files_relproc->nodes2_out, relations_as, relations_hni,
+                                      &fp_as, &fp_hni);
+    }
+
+    relations_destroy(relations_as);
+    relations_destroy(relations_hni);
+    g_list_foreach(fp_as.allocations, (GFunc)g_free_helper, NULL);
+    g_list_free(fp_as.allocations);
+    g_list_foreach(fp_hni.allocations, (GFunc)g_free_helper, NULL);
+    g_list_free(fp_hni.allocations);
 }
 
 struct multipolygon {

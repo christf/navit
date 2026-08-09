@@ -1102,32 +1102,21 @@ int main(int argc, char **argv) {
         tempfile_unlink(suffix, "ways_split_index");
 
     if (p.process_relations && p.process_ways && p.process_nodes
-        && start_phase(&p, "processing associated street relations")) {
+        && start_phase(&p, "processing associated street relations and house number interpolations")) {
         struct files_relation_processing *files_relproc = files_relation_processing_new(p.osm.line2poi, suffix);
         p.osm.associated_streets = tempfile(suffix, "associated_streets", 0);
-        if (p.osm.associated_streets) {
+        p.osm.house_number_interpolations = tempfile(suffix, "house_number_interpolations", 0);
+        if (p.osm.associated_streets && p.osm.house_number_interpolations) {
 
-            process_associated_streets(p.osm.associated_streets, files_relproc);
+            process_associated_streets_and_house_number_interpolations(p.osm.associated_streets,
+                                                                       p.osm.house_number_interpolations,
+                                                                       files_relproc);
 
             fclose(p.osm.associated_streets);
-            files_relation_processing_destroy(files_relproc, suffix);
-            if (!p.keep_tmpfiles) {
-                tempfile_unlink(suffix, "associated_streets");
-            }
-        }
-    }
-    if (p.process_relations && p.process_ways && p.process_nodes
-        && start_phase(&p, "processing house number interpolations")) {
-        // OSM house number interpolations are handled like a relation.
-        struct files_relation_processing *files_relproc = files_relation_processing_new(p.osm.line2poi, suffix);
-        p.osm.house_number_interpolations = tempfile(suffix, "house_number_interpolations", 0);
-        if (p.osm.house_number_interpolations) {
-
-            process_house_number_interpolations(p.osm.house_number_interpolations, files_relproc);
-
             fclose(p.osm.house_number_interpolations);
             files_relation_processing_destroy(files_relproc, suffix);
             if (!p.keep_tmpfiles) {
+                tempfile_unlink(suffix, "associated_streets");
                 tempfile_unlink(suffix, "house_number_interpolations");
             }
         }
