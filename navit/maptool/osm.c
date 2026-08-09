@@ -46,6 +46,8 @@
 #include "projection.h"
 #include "transform.h"
 
+#include "extsort.h"
+
 struct relations;
 struct relations_func;
 struct zip_info;
@@ -3048,6 +3050,219 @@ void process_associated_streets_and_house_number_interpolations(FILE *in_as, FIL
     g_list_free(fp_hni.allocations);
 }
 
+/*
+ * Streaming (external-sort) relation processing.
+ *
+ * This is the memory-bounded alternative to the GHashTable based
+ * relations machinery above. Instead of keying every member in RAM it
+ * emits fixed-size membership records, sorts them together with the way
+ * items by member id, merge-joins the two sorted streams and finally
+ * re-sorts the matched "parts" by (relation seq, original ordinal) so a
+ * relation's members come out in exactly the order the hash path appends
+ * them (i.e. ways_split scan order). That keeps the produced map
+ * byte-identical while bounding memory by the largest single relation.
+ */
+
+/** Shared on-disk record layout. Every record is [int32 len][frame].
+ *  The frame layouts below are packed after the length prefix.
+ */
+
+/** Membership record: "way X is a member of relation seq with role". */
+struct rel_sort_memb_rec {
+    osmid id;
+    int64_t seq;
+    int32_t role;
+};
+
+/** Way item frame header: [wayid][ordinal][item bytes]. */
+struct rel_sort_way_rec {
+    osmid wayid;
+    int64_t ordinal;
+};
+
+/** Part frame header: [seq][ordinal][role][item bytes]. */
+struct rel_sort_part_rec {
+    int64_t seq;
+    int64_t ordinal;
+    int32_t role;
+};
+
+/** Relation payload frame header: [seq][item bytes]. */
+struct rel_sort_relp_rec {
+    int64_t seq;
+};
+
+static int rel_sort_cmp_memb(const struct ext_sort_rec *a, const struct ext_sort_rec *b, void *user) {
+    const struct rel_sort_memb_rec *ma = a->data;
+    const struct rel_sort_memb_rec *mb = b->data;
+    if (ma->id != mb->id)
+        return ma->id < mb->id ? -1 : 1;
+    if (ma->seq != mb->seq)
+        return ma->seq < mb->seq ? -1 : 1;
+    if (ma->role != mb->role)
+        return ma->role < mb->role ? -1 : 1;
+    return 0;
+}
+
+static int rel_sort_cmp_way(const struct ext_sort_rec *a, const struct ext_sort_rec *b, void *user) {
+    const struct rel_sort_way_rec *wa = a->data;
+    const struct rel_sort_way_rec *wb = b->data;
+    if (wa->wayid != wb->wayid)
+        return wa->wayid < wb->wayid ? -1 : 1;
+    if (wa->ordinal != wb->ordinal)
+        return wa->ordinal < wb->ordinal ? -1 : 1;
+    return 0;
+}
+
+static int rel_sort_cmp_part(const struct ext_sort_rec *a, const struct ext_sort_rec *b, void *user) {
+    const struct rel_sort_part_rec *pa = a->data;
+    const struct rel_sort_part_rec *pb = b->data;
+    if (pa->seq != pb->seq)
+        return pa->seq < pb->seq ? -1 : 1;
+    if (pa->ordinal != pb->ordinal)
+        return pa->ordinal < pb->ordinal ? -1 : 1;
+    return 0;
+}
+
+/** Memory budget for each external sort pass: the -S slice size. */
+static long long rel_sort_budget(void) {
+    long long b = slice_size;
+    if (b < 64 * 1024 * 1024)
+        b = 64 * 1024 * 1024;
+    return b;
+}
+
+/** Unique temp path for one relation-sort intermediate stream. */
+static char *rel_sort_tmp_path(const char *name, int which) {
+    return g_strdup_printf("%s/rel_%s_%d_%d.tmp", tempfile_obtain_prefix(), name, which, (int)getpid());
+}
+
+/** Write one [int32 len][frame] record. */
+static void rel_sort_write_frame(FILE *out, const void *frame, int len) {
+    if (fwrite(&len, sizeof(int), 1, out) != 1 || (len && fwrite(frame, len, 1, out) != 1))
+        fatal_file_error("writing relation sort data failed");
+}
+
+/** Read one [int32 len][frame] record. Returns 0 at EOF. Caller frees *frame. */
+static int rel_sort_read_frame(FILE *in, void **frame, int *len) {
+    int l = 0;
+    if (fread(&l, sizeof(int), 1, in) != 1) {
+        *frame = NULL;
+        return 0;
+    }
+    if (l < 0)
+        fatal_file_error("corrupt relation sort data");
+    *frame = g_malloc(l > 0 ? l : 1);
+    if (l && fread(*frame, l, 1, in) != 1)
+        fatal_file_error("reading relation sort data failed");
+    *len = l;
+    return 1;
+}
+
+/** Emit a way item as a sorted-ways record. */
+static void rel_sort_add_way(struct ext_sort *s, osmid wayid, long long ordinal, struct item_bin *ib) {
+    struct rel_sort_way_rec head;
+    int item_len = (ib->len + 1) * 4;
+    char *frame = g_malloc(sizeof(head) + item_len);
+    head.wayid = wayid;
+    head.ordinal = ordinal;
+    memcpy(frame, &head, sizeof(head));
+    memcpy(frame + sizeof(head), ib, item_len);
+    ext_sort_add(s, frame, sizeof(head) + item_len);
+    g_free(frame);
+}
+
+/** Emit a matched part as a parts record. */
+static void rel_sort_add_part(struct ext_sort *s, long long seq, long long ordinal, int32_t role, struct item_bin *ib) {
+    struct rel_sort_part_rec head;
+    int item_len = (ib->len + 1) * 4;
+    char *frame = g_malloc(sizeof(head) + item_len);
+    head.seq = seq;
+    head.ordinal = ordinal;
+    head.role = role;
+    memcpy(frame, &head, sizeof(head));
+    memcpy(frame + sizeof(head), ib, item_len);
+    ext_sort_add(s, frame, sizeof(head) + item_len);
+    g_free(frame);
+}
+
+/**
+ * Merge-join the sorted membership and sorted-ways streams.
+ *
+ * Both streams are sorted by member id. For every way that is a member of
+ * at least one relation, one part record is emitted per (segment,
+ * membership) pair, matching the per-membership GList entries the hash
+ * path creates. The caller's assembly applies the phase-specific member
+ * callback to each part.
+ */
+static void rel_sort_join(const char *memb_path, const char *way_path, struct ext_sort *parts) {
+    FILE *mf = fopen(memb_path, "rb");
+    FILE *wf = fopen(way_path, "rb");
+    void *mframe = NULL, *wframe = NULL;
+    int mlen = 0, wlen = 0;
+    int mok, wok;
+    int s, m;
+    if (!mf || !wf)
+        fatal_file_error("opening relation sort streams");
+    mok = rel_sort_read_frame(mf, &mframe, &mlen);
+    wok = rel_sort_read_frame(wf, &wframe, &wlen);
+    while (mok && wok) {
+        struct rel_sort_memb_rec *mrec = mframe;
+        struct rel_sort_way_rec *wrec = wframe;
+        if (mrec->id < wrec->wayid) {
+            g_free(mframe);
+            mok = rel_sort_read_frame(mf, &mframe, &mlen);
+        } else if (wrec->wayid < mrec->id) {
+            g_free(wframe);
+            wok = rel_sort_read_frame(wf, &wframe, &wlen);
+        } else {
+            /* match group: gather all memberships and all segments of this id */
+            struct rel_sort_memb_rec *memberships = NULL;
+            int m_count = 0;
+            struct item_bin **segments = NULL;
+            int s_count = 0;
+            long long *ordinals = NULL;
+            osmid id = mrec->id;
+            while (mok) {
+                mrec = mframe;
+                if (mrec->id != id)
+                    break;
+                memberships = g_realloc(memberships, sizeof(struct rel_sort_memb_rec) * (m_count + 1));
+                memberships[m_count] = *mrec;
+                m_count++;
+                g_free(mframe);
+                mok = rel_sort_read_frame(mf, &mframe, &mlen);
+            }
+            while (wok) {
+                wrec = wframe;
+                if (wrec->wayid != id)
+                    break;
+                struct item_bin *ib = (struct item_bin *)((char *)wframe + sizeof(struct rel_sort_way_rec));
+                segments = g_realloc(segments, sizeof(struct item_bin *) * (s_count + 1));
+                ordinals = g_realloc(ordinals, sizeof(long long) * (s_count + 1));
+                segments[s_count] = item_bin_dup(ib);
+                ordinals[s_count] = wrec->ordinal;
+                s_count++;
+                g_free(wframe);
+                wok = rel_sort_read_frame(wf, &wframe, &wlen);
+            }
+            /* for each segment in file order, for each membership in seq order */
+            for (s = 0; s < s_count; s++)
+                for (m = 0; m < m_count; m++)
+                    rel_sort_add_part(parts, memberships[m].seq, ordinals[s], memberships[m].role, segments[s]);
+            for (s = 0; s < s_count; s++)
+                g_free(segments[s]);
+            g_free(segments);
+            g_free(ordinals);
+            g_free(memberships);
+        }
+    }
+    g_free(mframe);
+    g_free(wframe);
+    fclose(mf);
+    fclose(wf);
+}
+
 struct multipolygon {
     osmid relid;
     struct item_bin *rel;
@@ -3282,111 +3497,112 @@ static inline void dump_sequence(const char *string, int loop_count, int *scount
 #endif
 }
 
+static void process_multipolygons_finish_one(struct multipolygon *multipolygon, FILE *out) {
+    int a;
+    int b;
+    int inner_loop_count = 0;
+    int *inner_scount = NULL;
+    int *inner_direction = NULL;
+    int **inner_sequences = NULL;
+    int outer_loop_count = 0;
+    int *outer_scount = NULL;
+    int *outer_direction = NULL;
+    int **outer_sequences = NULL;
+    /* combine outer to full loops */
+    outer_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->outer_count,
+                                                        multipolygon->outer, &outer_scount, &outer_sequences,
+                                                        &outer_direction);
+
+    /* combine inner to full loops */
+    inner_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->inner_count,
+                                                        multipolygon->inner, &inner_scount, &inner_sequences,
+                                                        &inner_direction);
+
+    dump_sequence("outer", outer_loop_count, outer_scount, outer_sequences, outer_direction);
+    dump_sequence("inner", inner_loop_count, inner_scount, inner_sequences, inner_direction);
+
+    if (outer_loop_count == 0)
+        fprintf(stderr, "unresolved outer  %lld\n", multipolygon->relid);
+
+    for (b = 0; b < outer_loop_count; b++) {
+        struct rect outer_bbox;
+        /* write out */
+        struct item_bin *ib = tmp_item_bin;
+        int outer_length;
+        struct coord *outer_buffer;
+        // long long relid=item_bin_get_relationid(multipolygon->rel);
+        // fprintf(stderr,"process %lld\n", relid);
+        outer_length = process_multipolygons_loop_count(multipolygon->outer, outer_scount[b], outer_sequences[b])
+                       * sizeof(struct coord);
+        outer_buffer = (struct coord *)g_malloc0(outer_length);
+        outer_length = process_multipolygons_loop_dump(multipolygon->outer, outer_scount[b], outer_sequences[b],
+                                                       outer_direction, outer_buffer);
+        item_bin_init(ib, multipolygon->rel->type);
+        item_bin_add_coord(ib, outer_buffer, outer_length);
+        g_free(outer_buffer);
+        item_bin_copy_attr(ib, multipolygon->rel, attr_osm_relationid);
+        item_bin_copy_attr(ib, multipolygon->rel, attr_label);
+        /*calculate bbox*/
+        bbox((struct coord *)(ib + 1), (ib->clen / 2), &outer_bbox);
+
+        for (a = 0; a < inner_loop_count; a++) {
+            int d;
+            int hole_len;
+            char *buffer;
+            int used = 0;
+            int inner_len = 0;
+            int inside = 0;
+            struct coord *hole_coord;
+            hole_len = process_multipolygons_loop_count(multipolygon->inner, inner_scount[a], inner_sequences[a]);
+            inner_len = (hole_len * sizeof(struct coord));
+            inner_len += 4;
+            buffer = g_malloc0(inner_len);
+            memcpy(&(buffer[used]), &(hole_len), sizeof(int));
+            used += sizeof(int);
+            hole_coord = (struct coord *)&(buffer[used]);
+            used += process_multipolygons_loop_dump(multipolygon->inner, inner_scount[a], inner_sequences[a],
+                                                    inner_direction, (struct coord *)&(buffer[used]))
+                    * sizeof(struct coord);
+            /* check if at least one point is inside the outer */
+            for (d = 0; d < hole_len; d++)
+                if (bbox_contains_coord(&outer_bbox, hole_coord))
+                    inside = 1;
+
+            if (inside)
+                item_bin_add_attr_data(ib, attr_poly_hole, buffer, inner_len);
+            g_free(buffer);
+        }
+        item_bin_write(ib, out);
+        tile_sizing_write_file(out, ib);
+    }
+    /* just for fun...*/
+    processed_relations++;
+    /* clean up the sequences */
+    for (a = 0; a < outer_loop_count; a++)
+        g_free(outer_sequences[a]);
+    g_free(outer_sequences);
+    g_free(outer_scount);
+    g_free(outer_direction);
+    for (a = 0; a < inner_loop_count; a++)
+        g_free(inner_sequences[a]);
+    g_free(inner_sequences);
+    g_free(inner_scount);
+    g_free(inner_direction);
+    /* clean up this item */
+    for (a = 0; a < multipolygon->inner_count; a++)
+        g_free(multipolygon->inner[a]);
+    g_free(multipolygon->inner);
+    for (a = 0; a < multipolygon->outer_count; a++)
+        g_free(multipolygon->outer[a]);
+    g_free(multipolygon->outer);
+}
+
 static void process_multipolygons_finish(GList *tr, FILE *out) {
     GList *l = tr;
     // fprintf(stderr,"process_multipolygons_finish\n");
     while (l) {
-        int a;
-        int b;
         struct multipolygon *multipolygon = l->data;
-        int inner_loop_count = 0;
-        int *inner_scount = NULL;
-        int *inner_direction = NULL;
-        int **inner_sequences = NULL;
-        int outer_loop_count = 0;
-        int *outer_scount = NULL;
-        int *outer_direction = NULL;
-        int **outer_sequences = NULL;
-        /* combine outer to full loops */
-        outer_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->outer_count,
-                                                            multipolygon->outer, &outer_scount, &outer_sequences,
-                                                            &outer_direction);
-
-        /* combine inner to full loops */
-        inner_loop_count = process_multipolygons_find_loops(multipolygon->relid, multipolygon->inner_count,
-                                                            multipolygon->inner, &inner_scount, &inner_sequences,
-                                                            &inner_direction);
-
-        dump_sequence("outer", outer_loop_count, outer_scount, outer_sequences, outer_direction);
-        dump_sequence("inner", inner_loop_count, inner_scount, inner_sequences, inner_direction);
-
-        for (b = 0; b < outer_loop_count; b++) {
-            struct rect outer_bbox;
-            /* write out */
-            struct item_bin *ib = tmp_item_bin;
-            int outer_length;
-            struct coord *outer_buffer;
-            if (outer_loop_count == 0) {
-                fprintf(stderr, "unresolved outer  %lld\n", multipolygon->relid);
-                /* seems this polygons "outer" could not be resolved. Skip it */
-                l = g_list_next(l);
-                continue;
-            }
-            // long long relid=item_bin_get_relationid(multipolygon->rel);
-            // fprintf(stderr,"process %lld\n", relid);
-            outer_length = process_multipolygons_loop_count(multipolygon->outer, outer_scount[b], outer_sequences[b])
-                           * sizeof(struct coord);
-            outer_buffer = (struct coord *)g_malloc0(outer_length);
-            outer_length = process_multipolygons_loop_dump(multipolygon->outer, outer_scount[b], outer_sequences[b],
-                                                           outer_direction, outer_buffer);
-            item_bin_init(ib, multipolygon->rel->type);
-            item_bin_add_coord(ib, outer_buffer, outer_length);
-            g_free(outer_buffer);
-            item_bin_copy_attr(ib, multipolygon->rel, attr_osm_relationid);
-            item_bin_copy_attr(ib, multipolygon->rel, attr_label);
-            /*calculate bbox*/
-            bbox((struct coord *)(ib + 1), (ib->clen / 2), &outer_bbox);
-
-            for (a = 0; a < inner_loop_count; a++) {
-                int d;
-                int hole_len;
-                char *buffer;
-                int used = 0;
-                int inner_len = 0;
-                int inside = 0;
-                struct coord *hole_coord;
-                hole_len = process_multipolygons_loop_count(multipolygon->inner, inner_scount[a], inner_sequences[a]);
-                inner_len = (hole_len * sizeof(struct coord));
-                inner_len += 4;
-                buffer = g_malloc0(inner_len);
-                memcpy(&(buffer[used]), &(hole_len), sizeof(int));
-                used += sizeof(int);
-                hole_coord = (struct coord *)&(buffer[used]);
-                used += process_multipolygons_loop_dump(multipolygon->inner, inner_scount[a], inner_sequences[a],
-                                                        inner_direction, (struct coord *)&(buffer[used]))
-                        * sizeof(struct coord);
-                /* check if at least one point is inside the outer */
-                for (d = 0; d < hole_len; d++)
-                    if (bbox_contains_coord(&outer_bbox, hole_coord))
-                        inside = 1;
-
-                if (inside)
-                    item_bin_add_attr_data(ib, attr_poly_hole, buffer, inner_len);
-                g_free(buffer);
-            }
-            item_bin_write(ib, out);
-            tile_sizing_write_file(out, ib);
-        }
-        /* just for fun...*/
-        processed_relations++;
-        /* clean up the sequences */
-        for (a = 0; a < outer_loop_count; a++)
-            g_free(outer_sequences[a]);
-        g_free(outer_sequences);
-        g_free(outer_scount);
-        g_free(outer_direction);
-        for (a = 0; a < inner_loop_count; a++)
-            g_free(inner_sequences[a]);
-        g_free(inner_sequences);
-        g_free(inner_scount);
-        g_free(inner_direction);
-        /* clean up this item */
-        for (a = 0; a < multipolygon->inner_count; a++)
-            g_free(multipolygon->inner[a]);
-        g_free(multipolygon->inner);
-        for (a = 0; a < multipolygon->outer_count; a++)
-            g_free(multipolygon->outer[a]);
-        g_free(multipolygon->outer);
+        process_multipolygons_finish_one(multipolygon, out);
         g_free(multipolygon->rel);
         g_free(multipolygon);
         /* next item */
@@ -3616,12 +3832,258 @@ static GList **process_multipolygons_setup(FILE *in, int thread_count, struct re
     return multipolygons;
 }
 
+/* MAPTOOL_RELATIONS_MODE selects the relation processing implementation:
+ * "hash" = always the in-RAM GHashTable path, "sort" = always the
+ * streaming external-sort path, anything else (or unset) = adaptive. */
+static int rel_sort_forced(void) {
+    const char *mode = g_getenv("MAPTOOL_RELATIONS_MODE");
+    if (mode) {
+        if (!g_strcmp0(mode, "sort"))
+            return 1;
+        if (!g_strcmp0(mode, "hash"))
+            return -1;
+    }
+    return 0;
+}
+
+/* Decide between the in-RAM hash path and the external-sort path.
+ * Estimates the per-thread hash memory of the current code (~96 B per
+ * membership plus the duplicated member item bytes) and uses the sort path
+ * once it would exceed the -S slice size. */
+static int rel_sort_decide(long long members, long long payload) {
+    int forced = rel_sort_forced();
+    long long threads, est;
+    if (forced)
+        return forced > 0;
+    threads = thread_count > 0 ? thread_count : 1;
+    est = threads * (members * 96LL + payload);
+    return est > slice_size;
+}
+
+/* Count multipolygon relations and their members without emitting
+ * warnings; used by the adaptive path decision. */
+static void count_multipolygon_relations(FILE *in, long long *members, long long *payload, long long *valid) {
+    struct item_bin *ib;
+    fseek(in, 0, SEEK_SET);
+    *members = *payload = *valid = 0;
+    while ((ib = read_item(in))) {
+        int outer_count = 0;
+        int inner_count = 0;
+        int min_count = 0;
+        struct relation_member outer, inner;
+        while (search_relation_member(ib, "outer", &outer, &min_count))
+            outer_count++;
+        min_count = 0;
+        while (search_relation_member(ib, "", &outer, &min_count))
+            outer_count++;
+        min_count = 0;
+        while (search_relation_member(ib, "inner", &inner, &min_count))
+            inner_count++;
+        if (outer_count > 0) {
+            (*valid)++;
+            *members += outer_count + inner_count;
+            *payload += (ib->len + 1) * 4;
+        }
+    }
+}
+
+/**
+ * @brief streaming (external-sort) multipolygon processing.
+ *
+ * Memory-bounded variant of the hash based process_multipolygons: emits
+ * fixed-size membership records plus the relation payloads, sorts the
+ * member ways of ways_split by way id, merge-joins the two sorted streams
+ * into per-relation "parts", re-sorts those by (seq, ordinal) and assembles
+ * one relation at a time using the regular find_loops/finish logic.
+ */
+static void process_multipolygons_streaming(FILE *in, FILE *ways, FILE *out) {
+    char *relp_path = rel_sort_tmp_path("mp_relp", 0);
+    char *memb_path = rel_sort_tmp_path("mp_memb", 0);
+    char *way_path = rel_sort_tmp_path("mp_ways", 0);
+    char *part_path = rel_sort_tmp_path("mp_parts", 0);
+    FILE *relp;
+    FILE *tmpf;
+    struct ext_sort *memb, *way_sort, *part_sort;
+    struct item_bin *ib;
+    long long seq = 0;
+    long long ordinal = 0;
+
+    memb = ext_sort_new(rel_sort_budget(), rel_sort_cmp_memb, NULL);
+    way_sort = ext_sort_new(rel_sort_budget(), rel_sort_cmp_way, NULL);
+    part_sort = ext_sort_new(rel_sort_budget(), rel_sort_cmp_part, NULL);
+    relp = fopen(relp_path, "wb+");
+    if (!relp)
+        fatal_file_error(relp_path);
+
+    sig_alrm(0);
+    fprintf(stderr, "process_multipolygons:setup (streaming)\n");
+    fseek(in, 0, SEEK_SET);
+    while ((ib = read_item(in))) {
+        struct relation_member *outer = NULL;
+        struct relation_member *inner = NULL;
+        int outer_count = 0;
+        int inner_count = 0;
+        int min_count = 0;
+        int a;
+        long long relid = item_bin_get_relationid(ib);
+        struct rel_sort_memb_rec mrec;
+        outer = g_malloc0(sizeof(struct relation_member));
+        inner = g_malloc0(sizeof(struct relation_member));
+        while (search_relation_member(ib, "outer", &(outer[outer_count]), &min_count)) {
+            if (outer[outer_count].type != rel_member_way)
+                osm_warning("relation", relid, 0, "multipolygon: wrong type for outer member\n");
+            outer_count++;
+            outer = g_realloc(outer, sizeof(struct relation_member) * (outer_count + 1));
+        }
+        min_count = 0;
+        while (search_relation_member(ib, "", &(outer[outer_count]), &min_count)) {
+            if (outer[outer_count].type != rel_member_way)
+                osm_warning("relation", relid, 0, "multipolygon: wrong type for outer member\n");
+            outer_count++;
+            outer = g_realloc(outer, sizeof(struct relation_member) * (outer_count + 1));
+        }
+        min_count = 0;
+        while (search_relation_member(ib, "inner", &(inner[inner_count]), &min_count)) {
+            if (inner[inner_count].type != rel_member_way)
+                osm_warning("relation", relid, 0, "multipolygon: wrong type for inner member\n");
+            inner_count++;
+            inner = g_realloc(inner, sizeof(struct relation_member) * (inner_count + 1));
+        }
+        if (outer_count == 0) {
+            osm_warning("relation", relid, 0, "multipolygon: missing outer member\n");
+        } else {
+            struct rel_sort_relp_rec relp_rec;
+            int item_len = (ib->len + 1) * 4;
+            char *relp_frame = g_malloc(sizeof(relp_rec) + item_len);
+            relp_rec.seq = seq;
+            memcpy(relp_frame, &relp_rec, sizeof(relp_rec));
+            memcpy(relp_frame + sizeof(relp_rec), ib, item_len);
+            rel_sort_write_frame(relp, relp_frame, sizeof(relp_rec) + item_len);
+            g_free(relp_frame);
+            mrec.seq = seq;
+            for (a = 0; a < outer_count; a++) {
+                mrec.id = outer[a].id;
+                mrec.role = 0;
+                ext_sort_add(memb, &mrec, sizeof(mrec));
+            }
+            for (a = 0; a < inner_count; a++) {
+                mrec.id = inner[a].id;
+                mrec.role = 1;
+                ext_sort_add(memb, &mrec, sizeof(mrec));
+            }
+            seq++;
+        }
+        g_free(outer);
+        g_free(inner);
+    }
+    fclose(relp);
+
+    fprintf(stderr, "process_multipolygons:sort ways\n");
+    fseek(ways, 0, SEEK_SET);
+    while ((ib = read_item(ways))) {
+        osmid wid = item_bin_get_wayid(ib);
+        if (wid)
+            rel_sort_add_way(way_sort, wid, ordinal++, ib);
+    }
+
+    tmpf = fopen(memb_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(memb_path);
+    ext_sort_finish(memb, tmpf);
+    fclose(tmpf);
+    tmpf = fopen(way_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(way_path);
+    ext_sort_finish(way_sort, tmpf);
+    fclose(tmpf);
+    tmpf = fopen(part_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(part_path);
+    rel_sort_join(memb_path, way_path, part_sort);
+    ext_sort_finish(part_sort, tmpf);
+    fclose(tmpf);
+
+    fprintf(stderr, "process_multipolygons:assembly (%lld relations)\n", seq);
+    {
+        FILE *pf = fopen(part_path, "rb");
+        FILE *rf = fopen(relp_path, "rb");
+        void *pframe = NULL;
+        void *rframe = NULL;
+        int plen = 0;
+        int rlen = 0;
+        int pok, rok;
+        if (!pf || !rf)
+            fatal_file_error("opening relation sort streams");
+        pok = rel_sort_read_frame(pf, &pframe, &plen);
+        rok = rel_sort_read_frame(rf, &rframe, &rlen);
+        processed_relations = 0;
+        processed_ways = 0;
+        while (rok) {
+            struct rel_sort_relp_rec *rr = rframe;
+            struct rel_sort_part_rec *pr;
+            struct multipolygon *m = g_new0(struct multipolygon, 1);
+            m->relid = item_bin_get_relationid((struct item_bin *)((char *)rframe + sizeof(*rr)));
+            m->rel = item_bin_dup((struct item_bin *)((char *)rframe + sizeof(*rr)));
+            while (pok) {
+                pr = pframe;
+                if (pr->seq != rr->seq)
+                    break;
+                if (!item_bin_get_attr((struct item_bin *)((char *)pframe + sizeof(*pr)), attr_duplicate, NULL)) {
+                    struct item_bin *pib = item_bin_dup((struct item_bin *)((char *)pframe + sizeof(*pr)));
+                    if (pr->role == 0) {
+                        m->outer = g_realloc(m->outer, sizeof(struct item_bin *) * (m->outer_count + 1));
+                        m->outer[m->outer_count++] = pib;
+                    } else {
+                        m->inner = g_realloc(m->inner, sizeof(struct item_bin *) * (m->inner_count + 1));
+                        m->inner[m->inner_count++] = pib;
+                    }
+                    processed_ways++;
+                }
+                g_free(pframe);
+                pok = rel_sort_read_frame(pf, &pframe, &plen);
+            }
+            process_multipolygons_finish_one(m, out);
+            g_free(m->rel);
+            g_free(m);
+            g_free(rframe);
+            rok = rel_sort_read_frame(rf, &rframe, &rlen);
+        }
+        g_free(pframe);
+        g_free(rframe);
+        fclose(pf);
+        fclose(rf);
+    }
+
+    ext_sort_destroy(memb);
+    ext_sort_destroy(way_sort);
+    ext_sort_destroy(part_sort);
+    unlink(memb_path);
+    unlink(way_path);
+    unlink(part_path);
+    unlink(relp_path);
+    g_free(memb_path);
+    g_free(way_path);
+    g_free(part_path);
+    g_free(relp_path);
+    sig_alrm(0);
+    sig_alrm_end();
+}
+
 void process_multipolygons(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out) {
     /* thread count is from maptool.c as commandline parameter */
+    long long members, payload, valid;
     int i;
     struct relations **relations;
     GList **multipolygons = NULL;
     sig_alrm(0);
+
+    count_multipolygon_relations(in, &members, &payload, &valid);
+    if (rel_sort_decide(members, payload)) {
+        fprintf(stderr, "process_multipolygons: streaming path (%lld members, %lld bytes)\n", members, payload);
+        process_multipolygons_streaming(in, ways, out);
+        return;
+    }
+    fprintf(stderr, "process_multipolygons:setup (threads %d, %lld members)\n", thread_count, members);
 
     relations = g_malloc0(sizeof(struct relations *) * thread_count);
     for (i = 0; i < thread_count; i++)
@@ -3724,60 +4186,64 @@ static void process_turn_restrictions_dump_coord(struct coord *c, int count) {
     }
 }
 
+static void process_turn_restrictions_finish_one(struct turn_restriction *t, FILE *out) {
+    struct coord *c[4] = {NULL, NULL, NULL, NULL};
+    struct item_bin *ib = tmp_item_bin;
+
+    if (!t->c_count[0]) {
+        osm_warning("relation", t->relid, 0, "turn restriction: from member not found\n");
+    } else if (!t->c_count[1]) {
+        osm_warning("relation", t->relid, 0, "turn restriction: via member not found\n");
+    } else if (!t->c_count[2]) {
+        osm_warning("relation", t->relid, 0, "turn restriction: to member not found\n");
+    } else {
+        process_turn_restrictions_fromto(t, 0, c);
+        process_turn_restrictions_fromto(t, 2, c + 2);
+        if (!c[0] || !c[2]) {
+            osm_warning("relation", t->relid, 0, "turn restriction: via (");
+            process_turn_restrictions_dump_coord(t->c[1], t->c_count[1]);
+            fprintf(stderr, ")");
+            if (!c[0]) {
+                fprintf(stderr, " failed to connect to from (");
+                process_turn_restrictions_dump_coord(t->c[0], t->c_count[0]);
+                fprintf(stderr, ")");
+            }
+            if (!c[2]) {
+                fprintf(stderr, " failed to connect to to (");
+                process_turn_restrictions_dump_coord(t->c[2], t->c_count[2]);
+                fprintf(stderr, ")");
+            }
+            fprintf(stderr, "\n");
+        } else {
+            if (t->c_count[1] <= 2) {
+                int order;
+                char tilebuf[20] = "";
+                item_bin_init(ib, t->type);
+                item_bin_add_coord(ib, c[0], 1);
+                item_bin_add_coord(ib, c[1], 1);
+                if (t->c_count[1] > 1)
+                    item_bin_add_coord(ib, c[3], 1);
+                item_bin_add_coord(ib, c[2], 1);
+
+                order = tile(&t->r, "", tilebuf, sizeof(tilebuf) - 1, overlap, NULL);
+                if (order > t->order)
+                    order = t->order;
+                item_bin_add_attr_range(ib, attr_order, 0, order);
+
+                item_bin_write(ib, out);
+                tile_sizing_write_file(out, ib);
+            }
+        }
+    }
+    /* just for fun...*/
+    processed_relations++;
+}
+
 static void process_turn_restrictions_finish(GList *tr, FILE *out) {
     GList *l = tr;
     while (l) {
         struct turn_restriction *t = l->data;
-        struct coord *c[4] = {NULL, NULL, NULL, NULL};
-        struct item_bin *ib = tmp_item_bin;
-
-        if (!t->c_count[0]) {
-            osm_warning("relation", t->relid, 0, "turn restriction: from member not found\n");
-        } else if (!t->c_count[1]) {
-            osm_warning("relation", t->relid, 0, "turn restriction: via member not found\n");
-        } else if (!t->c_count[2]) {
-            osm_warning("relation", t->relid, 0, "turn restriction: to member not found\n");
-        } else {
-            process_turn_restrictions_fromto(t, 0, c);
-            process_turn_restrictions_fromto(t, 2, c + 2);
-            if (!c[0] || !c[2]) {
-                osm_warning("relation", t->relid, 0, "turn restriction: via (");
-                process_turn_restrictions_dump_coord(t->c[1], t->c_count[1]);
-                fprintf(stderr, ")");
-                if (!c[0]) {
-                    fprintf(stderr, " failed to connect to from (");
-                    process_turn_restrictions_dump_coord(t->c[0], t->c_count[0]);
-                    fprintf(stderr, ")");
-                }
-                if (!c[2]) {
-                    fprintf(stderr, " failed to connect to to (");
-                    process_turn_restrictions_dump_coord(t->c[2], t->c_count[2]);
-                    fprintf(stderr, ")");
-                }
-                fprintf(stderr, "\n");
-            } else {
-                if (t->c_count[1] <= 2) {
-                    int order;
-                    char tilebuf[20] = "";
-                    item_bin_init(ib, t->type);
-                    item_bin_add_coord(ib, c[0], 1);
-                    item_bin_add_coord(ib, c[1], 1);
-                    if (t->c_count[1] > 1)
-                        item_bin_add_coord(ib, c[3], 1);
-                    item_bin_add_coord(ib, c[2], 1);
-
-                    order = tile(&t->r, "", tilebuf, sizeof(tilebuf) - 1, overlap, NULL);
-                    if (order > t->order)
-                        order = t->order;
-                    item_bin_add_attr_range(ib, attr_order, 0, order);
-
-                    item_bin_write(ib, out);
-                    tile_sizing_write_file(out, ib);
-                }
-            }
-        }
-        /* just for fun...*/
-        processed_relations++;
+        process_turn_restrictions_finish_one(t, out);
         g_free(t->c[0]);
         g_free(t->c[1]);
         g_free(t->c[2]);
@@ -3972,12 +4438,271 @@ static GList **process_turn_restrictions_setup(FILE *in, int thread_count, struc
     return turn_restrictions;
 }
 
+static void tr_sort_via_free(void *p) {
+    g_free(p);
+}
+
+/* Count valid turn restrictions (mirrors process_turn_restrictions_setup_one
+ * validation, without emitting warnings); used by the adaptive decision. */
+static void count_turn_restriction_relations(FILE *in, long long *valid) {
+    struct item_bin *ib;
+    fseek(in, 0, SEEK_SET);
+    *valid = 0;
+    while ((ib = read_item(in))) {
+        struct relation_member fromm, tom, viam, tmpm;
+        int min_count = 0;
+        if (!search_relation_member(ib, "from", &fromm, &min_count))
+            continue;
+        if (search_relation_member(ib, "from", &tmpm, &min_count))
+            continue;
+        min_count = 0;
+        if (!search_relation_member(ib, "to", &tom, &min_count))
+            continue;
+        if (search_relation_member(ib, "to", &tmpm, &min_count))
+            continue;
+        min_count = 0;
+        if (!search_relation_member(ib, "via", &viam, &min_count))
+            continue;
+        if (search_relation_member(ib, "via", &tmpm, &min_count))
+            continue;
+        if (fromm.type != rel_member_way || tom.type != rel_member_way)
+            continue;
+        if (viam.type != rel_member_node && viam.type != rel_member_way)
+            continue;
+        (*valid)++;
+    }
+}
+
+/** Per-restriction state kept in RAM for the streaming path. Tiny by design
+ *  (fixed header + via reference); the coordinate arrays are filled from the
+ *  parts stream during assembly. */
+struct tr_sort_state {
+    struct turn_restriction tr;
+    int via_is_node;
+    osmid via_id;
+};
+
+/**
+ * @brief streaming (external-sort) turn restriction processing.
+ *
+ * Uses the same sorted merge-join as process_multipolygons_streaming for the
+ * way members (from / to / via-way). Via **node** members are kept in a small
+ * in-RAM hash instead of sorting the (huge) node table.
+ */
+static void process_turn_restrictions_streaming(FILE *in, FILE *coords, FILE *ways, FILE *out) {
+    char *memb_path = rel_sort_tmp_path("tr_memb", 1);
+    char *way_path = rel_sort_tmp_path("tr_ways", 1);
+    char *part_path = rel_sort_tmp_path("tr_parts", 1);
+    struct ext_sort *memb, *way_sort, *part_sort;
+    GPtrArray *states;
+    GHashTable *via_ids = NULL;
+    GHashTable *via_coords = NULL;
+    struct item_bin *ib;
+    FILE *tmpf;
+    long long seq = 0;
+    long long ordinal = 0;
+    int i;
+
+    memb = ext_sort_new(rel_sort_budget(), rel_sort_cmp_memb, NULL);
+    way_sort = ext_sort_new(rel_sort_budget(), rel_sort_cmp_way, NULL);
+    part_sort = ext_sort_new(rel_sort_budget(), rel_sort_cmp_part, NULL);
+    states = g_ptr_array_new();
+
+    sig_alrm(0);
+    fprintf(stderr, "process_turn_restrictions:setup (streaming)\n");
+    fseek(in, 0, SEEK_SET);
+    while ((ib = read_item(in))) {
+        struct relation_member fromm, tom, viam, tmpm;
+        long long relid;
+        int min_count;
+        struct tr_sort_state *st;
+        struct rel_sort_memb_rec mrec;
+        relid = item_bin_get_relationid(ib);
+        min_count = 0;
+        if (!search_relation_member(ib, "from", &fromm, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: from member missing\n");
+            continue;
+        }
+        if (search_relation_member(ib, "from", &tmpm, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: multiple from members\n");
+            continue;
+        }
+        min_count = 0;
+        if (!search_relation_member(ib, "to", &tom, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: to member missing\n");
+            continue;
+        }
+        if (search_relation_member(ib, "to", &tmpm, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: multiple to members\n");
+            continue;
+        }
+        min_count = 0;
+        if (!search_relation_member(ib, "via", &viam, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: via member missing\n");
+            continue;
+        }
+        if (search_relation_member(ib, "via", &tmpm, &min_count)) {
+            osm_warning("relation", relid, 0, "turn restriction: multiple via member\n");
+            continue;
+        }
+        if (fromm.type != rel_member_way) {
+            osm_warning("relation", relid, 0, "turn restriction: wrong type for from member ");
+            osm_warning(osm_types[fromm.type], fromm.id, 1, "\n");
+            continue;
+        }
+        if (tom.type != rel_member_way) {
+            osm_warning("relation", relid, 0, "turn restriction: wrong type for to member ");
+            osm_warning(osm_types[tom.type], tom.id, 1, "\n");
+            continue;
+        }
+        if (viam.type != rel_member_node && viam.type != rel_member_way) {
+            osm_warning("relation", relid, 0, "turn restriction: wrong type for via member ");
+            osm_warning(osm_types[viam.type], viam.id, 1, "\n");
+            continue;
+        }
+        st = g_new0(struct tr_sort_state, 1);
+        st->tr.relid = relid;
+        st->tr.type = ib->type;
+        st->tr.r.l.x = 1 << 30;
+        st->tr.order = 255;
+        st->via_id = viam.id;
+        st->via_is_node = (viam.type == rel_member_node);
+        mrec.seq = seq;
+        mrec.id = fromm.id;
+        mrec.role = 0;
+        ext_sort_add(memb, &mrec, sizeof(mrec));
+        if (viam.type == rel_member_way) {
+            mrec.id = viam.id;
+            mrec.role = 1;
+            ext_sort_add(memb, &mrec, sizeof(mrec));
+        } else {
+            osmid *key;
+            if (!via_ids)
+                via_ids = g_hash_table_new_full(g_int64_hash, g_int64_equal, tr_sort_via_free, NULL);
+            key = g_memdup2(&viam.id, sizeof(osmid));
+            g_hash_table_insert(via_ids, key, key);
+        }
+        mrec.id = tom.id;
+        mrec.role = 2;
+        ext_sort_add(memb, &mrec, sizeof(mrec));
+        g_ptr_array_add(states, st);
+        seq++;
+    }
+
+    if (via_ids && coords) {
+        struct node_item *ni;
+        via_coords = g_hash_table_new_full(g_int64_hash, g_int64_equal, tr_sort_via_free, tr_sort_via_free);
+        fseek(coords, 0, SEEK_SET);
+        while ((ni = read_node_item(coords))) {
+            osmid id = ni->nd_id;
+            if (g_hash_table_lookup(via_ids, &id)) {
+                osmid *key = g_memdup2(&id, sizeof(osmid));
+                struct coord *c = g_memdup2(&ni->c, sizeof(struct coord));
+                g_hash_table_insert(via_coords, key, c);
+            }
+        }
+    }
+    if (via_ids)
+        g_hash_table_destroy(via_ids);
+
+    fprintf(stderr, "process_turn_restrictions:sort ways\n");
+    fseek(ways, 0, SEEK_SET);
+    while ((ib = read_item(ways))) {
+        osmid wid = item_bin_get_wayid(ib);
+        if (wid)
+            rel_sort_add_way(way_sort, wid, ordinal++, ib);
+    }
+
+    tmpf = fopen(memb_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(memb_path);
+    ext_sort_finish(memb, tmpf);
+    fclose(tmpf);
+    tmpf = fopen(way_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(way_path);
+    ext_sort_finish(way_sort, tmpf);
+    fclose(tmpf);
+    tmpf = fopen(part_path, "wb+");
+    if (!tmpf)
+        fatal_file_error(part_path);
+    rel_sort_join(memb_path, way_path, part_sort);
+    ext_sort_finish(part_sort, tmpf);
+    fclose(tmpf);
+
+    fprintf(stderr, "process_turn_restrictions:assembly (%lld restrictions)\n", seq);
+    {
+        FILE *pf = fopen(part_path, "rb");
+        void *pframe = NULL;
+        int plen = 0;
+        int pok;
+        if (!pf)
+            fatal_file_error(part_path);
+        pok = rel_sort_read_frame(pf, &pframe, &plen);
+        processed_relations = 0;
+        processed_ways = 0;
+        for (i = 0; i < states->len; i++) {
+            struct tr_sort_state *st = g_ptr_array_index(states, i);
+            struct rel_sort_part_rec *pr;
+            if (st->via_is_node) {
+                struct coord *c = via_coords ? g_hash_table_lookup(via_coords, &st->via_id) : NULL;
+                if (c) {
+                    item_bin_init(tmp_item_bin, type_point_unkn);
+                    item_bin_add_coord(tmp_item_bin, c, 1);
+                    item_bin_add_attr_longlong(tmp_item_bin, attr_osm_nodeid, st->via_id);
+                    process_turn_restrictions_member(NULL, &st->tr, tmp_item_bin, (gpointer)1);
+                }
+            }
+            while (pok) {
+                pr = pframe;
+                if (pr->seq != i)
+                    break;
+                process_turn_restrictions_member(NULL, &st->tr, (struct item_bin *)((char *)pframe + sizeof(*pr)),
+                                                 (gpointer)(long)pr->role);
+                g_free(pframe);
+                pok = rel_sort_read_frame(pf, &pframe, &plen);
+            }
+            process_turn_restrictions_finish_one(&st->tr, out);
+            g_free(st->tr.c[0]);
+            g_free(st->tr.c[1]);
+            g_free(st->tr.c[2]);
+            g_free(st);
+        }
+        g_free(pframe);
+        fclose(pf);
+    }
+    g_ptr_array_free(states, TRUE);
+    if (via_coords)
+        g_hash_table_destroy(via_coords);
+
+    ext_sort_destroy(memb);
+    ext_sort_destroy(way_sort);
+    ext_sort_destroy(part_sort);
+    unlink(memb_path);
+    unlink(way_path);
+    unlink(part_path);
+    g_free(memb_path);
+    g_free(way_path);
+    g_free(part_path);
+    sig_alrm(0);
+    sig_alrm_end();
+}
+
 void process_turn_restrictions(FILE *in, FILE *coords, FILE *ways, FILE *ways_index, FILE *out) {
     /* thread count is from maptool.c as commandline parameter */
+    long long valid;
     int i;
     struct relations **relations;
     GList **turn_restrictions = NULL;
     sig_alrm(0);
+
+    count_turn_restriction_relations(in, &valid);
+    if (rel_sort_decide(valid * 3, valid * 64)) {
+        fprintf(stderr, "process_turn_restrictions: streaming path (%lld restrictions)\n", valid);
+        process_turn_restrictions_streaming(in, coords, ways, out);
+        return;
+    }
+    fprintf(stderr, "process_turn_restrictions:setup (threads %d, %lld restrictions)\n", thread_count, valid);
 
     relations = g_malloc0(sizeof(struct relations *) * thread_count);
     for (i = 0; i < thread_count; i++)
@@ -4000,7 +4725,7 @@ void process_turn_restrictions(FILE *in, FILE *coords, FILE *ways, FILE *ways_in
         fseek(coords, 0, SEEK_SET);
     if (ways)
         fseek(ways, 0, SEEK_SET);
-    fprintf(stderr, "process_multipolygons:process (thread %d)\n", i);
+    fprintf(stderr, "process_turn_restrictions:process\n");
     relations_process_multi(relations, thread_count, coords, ways);
     for (i = 0; i < thread_count; i++) {
 
