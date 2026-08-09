@@ -218,6 +218,37 @@ Measure 2 — parallelize the phase-13 read/dispatch
 item files, computes each item's tile(s) and appends to the mmap'd tile
 buffers. The compression pool only fills during the tail of that loop.
 
+.. note:: **Profiled (2026-08, niedersachsen map, 4-core box).** The
+   premise of this measure was falsified by measurement; it was *not*
+   implemented.
+
+   - Phase 13 is **104 s at ``-T 1``** (read loop 18.7 s + compression
+     drain 85.3 s) and **53 s at ``-T 4``** (read loop 21 s + drain 32 s).
+     The read loop is ~20 s, not the ~1 min assumed below.
+   - The read loop is **I/O/memory-contention-bound, not CPU-bound**:
+     ``phase34_process_item`` (bbox, ``tile()``, hash lookup, mmap append)
+     is only 254 ms for the 10.1 M items of ``ways_split``, and a standalone
+     harness replaying ``item_bin_read``'s exact two-``fread`` pattern reads
+     the real temp files at 210-290 MB/s. Inside phase 13 it drops to
+     ~78 MB/s because the tile mmap (1.2 GB) is being written back to the
+     same nearly-full SSD while 4 compression workers run and the box is
+     under memory pressure (swap active). Parallelizing the parse would add
+     competing readers to a saturated disk and gain nothing.
+   - The compression pool fills only at the very end because **84 % of the
+     12 489 tiles have their ``completion_pos`` in the last 10 % of the
+     item stream** (the ``way2poi_result`` file, read last) — so the read
+     and the drain do not overlap at all (21 + 32 = 53 s exactly). This is
+     structural: a tile is only dispatchable once the *last* file that
+     contributes to it has been read, and the assembly read order is locked
+     to the sizing/production order by the global ``completion_pos``.
+   - Compression at ``-T 4`` scales only ~2.7× (85 → 32 s wall), typical
+     for memory-bound deflate.
+
+   Re-scoped conclusion: keep phase 13 as-is. The remaining levers are the
+   read/write contention (tile-mmap writeback policy) and compression
+   scaling, both modest; the large wins are Measure 4 (phase 1) and
+   Measure 5 (multi-binfile).
+
 **Design.** Process the seven item files concurrently while preserving
 deterministic per-tile item order (currently: file-loop order). Two options:
 
@@ -359,8 +390,8 @@ Sequencing and effort
      - smallest, safe, removes 2×900 MB I/O
    * - 2
      - Parallel phase-13 read (Measure 2)
-     - ~ 1-2 days
-     - bounded risk, removes single-core parse loop
+     - abandoned
+     - profiled as I/O-bound, not CPU-bound; no measurable gain
    * - 3
      - Overlap compression with tail (Measure 3)
      - ~ 1-2 days
