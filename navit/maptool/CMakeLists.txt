@@ -32,7 +32,7 @@ if(BUILD_MAPTOOL)
 	add_executable (maptool maptool.c)
 	add_library (maptool_core boundaries.c buffer.c ch.c coastline.c extsort.c itembin.c
 		itembin_buffer.c itembin_slicer.c misc.c osm.c osm_psql.c
-		osm_relations.c sourcesink.c tempfile.c tile.c zip.c osm_libosmium.cpp)
+		osm_relations.c sourcesink.c tempfile.c tempfile_compress.c tile.c zip.c osm_libosmium.cpp)
 	set_property(TARGET maptool_core PROPERTY CXX_STANDARD 14)
 	target_link_libraries(maptool_core ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 Threads::Threads)
 

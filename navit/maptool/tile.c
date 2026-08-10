@@ -414,7 +414,7 @@ int write_aux_tiles(struct zip_info *zip_info) {
     while (l) {
         at = l->data;
         buffer = g_malloc(at->size);
-        f = fopen(at->filename, "rb");
+        f = tf_fopen(at->filename, "rb", 1);
         assert(f != NULL);
 
         if (fread(buffer, at->size, 1, f) == 0) {

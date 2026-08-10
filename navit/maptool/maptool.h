@@ -62,6 +62,65 @@ struct tile_info {
     FILE *tilesdir_out;
 };
 
+/* tempfile_compress.c: block codecs, the compression pool and the cookie
+ * FILE* layer used to transparently compress temp files. */
+#define TF_CODEC_NONE 0
+#define TF_CODEC_ZLIB 1
+#define TF_CODEC_LZMA 2
+#define TF_CODEC_ZSTD 3
+
+/* Requested tempfile compression. method is one of TF_CODEC_* (NONE disables
+ * the whole layer). level 0 means "use the codec default". */
+extern int tf_compression_method;
+extern int tf_compression_level;
+extern long long tf_block_size;
+
+int tf_codec_from_zip(int zipmthd);
+int tf_codec_to_zipmthd(int codec);
+/* One-shot block compression/decompression, shared by the tile pool (phase
+ * 13/14) and the tempfile writer. See tempfile_compress.c for semantics. */
+char *compress_block(char *input, int input_size, int level, int method, int *out_size, int *out_method,
+                     char **reuse_buf, size_t *reuse_size, void *lzma_alloc);
+int decompress_block(char *src, int csize, char *dst, int usize, int method);
+
+/* One unit of work for a compress_pool. The worker compresses data into comp
+ * (malloc'd, or == data when the block was stored uncompressed) and pushes the
+ * job onto done_q. seq is a client ordering key; udata is opaque client
+ * context. crc_out, if non-NULL, receives the CRC32 of data. If free_data is
+ * set, the job consumer owns data and frees it once done with it. */
+struct compress_job {
+    int seq;
+    char *data;
+    int size;
+    GAsyncQueue *done_q;
+    void *udata;
+    unsigned long *crc_out;
+    int free_data;
+    char *comp;
+    int comp_size;
+    int comp_method;
+};
+
+struct compress_pool;
+struct compress_pool *compress_pool_new(int threads, int level, int method);
+void compress_pool_destroy(struct compress_pool *pool);
+void compress_pool_submit(struct compress_pool *pool, struct compress_job *job);
+
+/* Open a temp file through the compression layer. mode is one of "rb",
+ * "rb+", "wb+", "ab". On read modes the footer magic is auto-detected and a
+ * plain file is returned as-is; on write modes a compressed cookie stream is
+ * created when compressible and compression is enabled. */
+FILE *tf_fopen(char *path, char *mode, int compressible);
+/* Rewrite a compressed file once to reclaim overwrite garbage. No-op when
+ * compression is disabled. */
+void tf_compact(char *path);
+void tf_compress_fini(void);
+/* Drop the cached state for a temp file about to be deleted, and finalize the
+ * state for both sides of a rename, so cached entries never outlive their
+ * on-disk file. No-ops when compression is disabled or nothing is cached. */
+void tf_cache_drop(char *path);
+void tf_cache_rename(char *old_path, char *new_path);
+
 extern struct tile_head {
     int num_subtiles;
     int total_size;

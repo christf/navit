@@ -310,6 +310,9 @@ static void usage(void) {
     fprintf(f, "-x (--index-size)                 : set maximum country index size in bytes\n");
     fprintf(f, "-z (--compression-level) <level>  : set the compression level\n");
     fprintf(f, "-C (--compression-method) <method>: compression method (zlib or lzma, default zlib)\n");
+    fprintf(f, "-Q (--tempfile-compression) <m>    : compress maptool temp files (none, zlib, lzma or zstd, default "
+            "none)\n");
+    fprintf(f, "-q (--tempfile-level) <level>      : set the temp file compression level\n");
     fprintf(f, "Internal options (undocumented):\n");
     fprintf(f, "-b (--binfile)\n");
     fprintf(f, "-m (--map) \n");
@@ -389,6 +392,9 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         {"slice-size",         1, 0, 'S'},
         {"unknown-country",    0, 0, 'U'},
         {"index-size",         0, 0, 'x'},
+        {"tempfile-compression", 1, 0, 'Q'},
+        {"tempfile-level",       1, 0, 'q'},
+        {"tempfile-block-size",  1, 0, 0x1000},
         {0,                    0, 0, 0  }
     };
     c = getopt_long(argc, argv,
@@ -396,7 +402,7 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
 #ifdef HAVE_POSTGRESQL
                     "d:"
 #endif
-                    "e:hi:knm:p:r:s:t:T:wu:z:Ux:",
+                    "e:hi:knm:p:q:Q:r:s:t:T:wu:z:Ux:",
                     long_options, option_index);
     if (c == -1)
         return 1;
@@ -543,6 +549,56 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         p->compression_level = atoi(optarg);
         break;
 #endif
+    case 'Q':
+        if (!strcmp(optarg, "none")) {
+            tf_compression_method = TF_CODEC_NONE;
+        } else if (!strcmp(optarg, "zlib")) {
+#ifdef HAVE_ZLIB
+            tf_compression_method = TF_CODEC_ZLIB;
+#else
+            fprintf(stderr, "zlib compression not available in this build\n");
+            exit(1);
+#endif
+        } else if (!strcmp(optarg, "lzma")) {
+#ifdef HAVE_LZMA
+            tf_compression_method = TF_CODEC_LZMA;
+#else
+            fprintf(stderr, "lzma compression not available in this build\n");
+            exit(1);
+#endif
+        } else if (!strcmp(optarg, "zstd")) {
+#ifdef HAVE_ZSTD
+            tf_compression_method = TF_CODEC_ZSTD;
+#else
+            fprintf(stderr, "zstd compression not available in this build\n");
+            exit(1);
+#endif
+        } else {
+            fprintf(stderr, "Unknown tempfile compression method %s (expected none, zlib, lzma or zstd)\n", optarg);
+            exit(1);
+        }
+        if (tf_compression_level == 0) {
+            switch (tf_compression_method) {
+            case TF_CODEC_ZLIB:
+                tf_compression_level = 6;
+                break;
+            case TF_CODEC_LZMA:
+                tf_compression_level = 6;
+                break;
+            case TF_CODEC_ZSTD:
+                tf_compression_level = 3;
+                break;
+            default:
+                break;
+            }
+        }
+        break;
+    case 'q':
+        tf_compression_level = atoi(optarg);
+        break;
+    case 0x1000:
+        tf_block_size = atoll(optarg);
+        break;
     case '?':
     default:
         return 0;
@@ -569,6 +625,7 @@ static void exit_with_error(char *error_message) {
 }
 
 static void osm_read_input_data(struct maptool_params *p, char *suffix) {
+    tf_cache_drop(coord_tmp_path);
     unlink(coord_tmp_path);
     if (p->process_ways)
         p->osm.ways = tempfile(suffix, "ways", 1);
@@ -672,6 +729,7 @@ static void osm_count_references(struct maptool_params *p, char *suffix, int cle
         }
         first = 0;
     }
+    tf_compact(coord_tmp_path);
 }
 
 static void osm_resolve_coords_and_split_at_intersections(struct maptool_params *p, char *suffix) {
@@ -742,7 +800,7 @@ static void osm_process_turn_restrictions(struct maptool_params *p, char *suffix
     if (!p->osm.turn_restrictions)
         return;
     relations = tempfile(suffix, "relations", 1);
-    coords = fopen(coord_tmp_path, "rb");
+    coords = tf_fopen(coord_tmp_path, "rb", 1);
     ways_split = tempfile(suffix, "ways_split", 0);
     ways_split_index = tempfile(suffix, "ways_split_index", 0);
     tile_sizing_set_file("relations", relations);
@@ -890,6 +948,7 @@ static void maptool_assemble_map(struct maptool_params *p, char *suffix, char **
         tempfile_unlink(suffix, "way2poi_result");
         tempfile_unlink(suffix, "coastline_result");
         tempfile_unlink(suffix, "towns_poly");
+        tf_cache_drop(coord_tmp_path);
         unlink(coord_tmp_path);
     }
     if (last) {
@@ -1142,6 +1201,7 @@ int main(int argc, char **argv) {
     }
     phase += 2;
     start_phase(&p, "done");
+    tf_compress_fini();
     if (p.timestamp != NULL)
         g_free(p.timestamp);
     if (!p.keep_tmpfiles)

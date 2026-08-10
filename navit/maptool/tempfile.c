@@ -67,18 +67,27 @@ char *tempfile_name(char *suffix, char *name) {
 }
 FILE *tempfile(char *suffix, char *name, int mode) {
     char *buffer = tempfile_name(suffix, name);
+    char *fmode;
     FILE *ret = NULL;
+    int compressible = 1;
     switch (mode) {
     case 0:
-        ret = fopen(buffer, "rb");
+        fmode = "rb";
         break;
     case 1:
-        ret = fopen(buffer, "wb+");
+        fmode = "wb+";
         break;
     case 2:
-        ret = fopen(buffer, "ab");
+        fmode = "ab";
+        break;
+    default:
+        fmode = "rb";
         break;
     }
+    /* Files used through mmap need their raw bytes on disk. */
+    if (!strcmp(name, "tiles_data") || !strcmp(name, "sgr") || !strcmp(name, "ddsg_coords"))
+        compressible = 0;
+    ret = tf_fopen(buffer, fmode, compressible);
     if (!ret && mode != 0) {
         fprintf(stderr, "maptool: cannot create temp file %s: %s\n", buffer, strerror(errno));
         tempfile_cleanup();
@@ -91,6 +100,7 @@ FILE *tempfile(char *suffix, char *name, int mode) {
 void tempfile_unlink(char *suffix, char *name) {
     char buffer[4096];
     sprintf(buffer, "%s/%s_%s.tmp", tempfile_obtain_prefix(), name, suffix);
+    tf_cache_drop(buffer);
     unlink(buffer);
 }
 
@@ -98,5 +108,6 @@ void tempfile_rename(char *suffix, char *from, char *to) {
     char buffer_from[4096], buffer_to[4096];
     sprintf(buffer_from, "%s/%s_%s.tmp", tempfile_obtain_prefix(), from, suffix);
     sprintf(buffer_to, "%s/%s_%s.tmp", tempfile_obtain_prefix(), to, suffix);
+    tf_cache_rename(buffer_from, buffer_to);
     dbg_assert(rename(buffer_from, buffer_to) == 0);
 }

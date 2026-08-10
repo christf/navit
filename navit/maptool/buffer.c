@@ -33,9 +33,9 @@
  */
 void save_buffer(char *filename, struct buffer *b, long long offset) {
     FILE *f;
-    f = fopen(filename, "rb+");
+    f = tf_fopen(filename, "rb+", 1);
     if (!f)
-        f = fopen(filename, "wb+");
+        f = tf_fopen(filename, "wb+", 1);
 
     dbg_assert(f != NULL);
     dbg_assert(fseeko(f, offset, SEEK_SET) == 0);
@@ -59,7 +59,7 @@ int load_buffer(char *filename, struct buffer *b, long long offset, long long si
     dbg_assert(offset >= 0);
     g_free(b->base);
     b->malloced = 0;
-    f = fopen(filename, "rb");
+    f = tf_fopen(filename, "rb", 1);
     fseeko(f, 0, SEEK_END);
     len = ftello(f);
     dbg_assert(len >= 0);
@@ -89,7 +89,7 @@ int load_buffer(char *filename, struct buffer *b, long long offset, long long si
  */
 long long sizeof_buffer(char *filename) {
     long long ret;
-    FILE *f = fopen(filename, "rb");
+    FILE *f = tf_fopen(filename, "rb", 1);
     fseeko(f, 0, SEEK_END);
     ret = ftello(f);
     fclose(f);

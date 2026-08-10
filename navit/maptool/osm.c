@@ -5151,7 +5151,7 @@ void write_countrydir(struct zip_info *zip_info, int max_index_size) {
             tile(&co->r, "", tileco, max, overlap, NULL);
 
             snprintf(filename, sizeof(filename), "%s/country_%d.tmp", tempfile_obtain_prefix(), co->countryid);
-            in = fopen(filename, "rb");
+            in = tf_fopen(filename, "rb", 1);
 
             snprintf(countrypart, sizeof(countrypart), "country_%d_p", co->countryid);
 
