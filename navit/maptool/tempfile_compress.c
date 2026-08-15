@@ -160,8 +160,8 @@ char *compress_block(char *input, int input_size, int level, int method, int *ou
         return NULL;
     }
     int zipmthd = 0;
-    char *comp = compress_for_zip(input, input_size, level, zip_method, out_size, &zipmthd, reuse_buf, reuse_size,
-                                  lzma_alloc);
+    char *comp =
+        compress_for_zip(input, input_size, level, zip_method, out_size, &zipmthd, reuse_buf, reuse_size, lzma_alloc);
     *out_method = comp ? method : TF_CODEC_NONE;
     return comp;
 }
@@ -320,7 +320,7 @@ struct tf_file {
 
     GAsyncQueue *done_queue;
     struct compress_pool *pool;
-    int pending;   /* jobs submitted but not yet written */
+    int pending; /* jobs submitted but not yet written */
     int writer_stop;
     int io_error;
     int io_errno;
@@ -361,7 +361,7 @@ struct tf_handle {
 
 /* Maximum number of compressed blocks in flight per file before the write
  * path starts waiting for the writer thread. */
-#define TF_MAX_INFLIGHT 12
+#    define TF_MAX_INFLIGHT 12
 
 static struct compress_pool *tf_pool = NULL;
 
@@ -482,7 +482,8 @@ static gpointer tf_writer_thread_fn(gpointer data) {
         long long off = tf->phys_end;
         if (getenv("TF_DEBUG"))
             fprintf(stderr, "[writer] seq=%d off=%lld usize=%d csize=%d\n", job->seq, off, job->size, job->comp_size);
-        if (off < 0 || fseeko(tf->phys, off, SEEK_SET) || fwrite(job->comp, 1, job->comp_size, tf->phys) != (size_t)job->comp_size) {
+        if (off < 0 || fseeko(tf->phys, off, SEEK_SET)
+            || fwrite(job->comp, 1, job->comp_size, tf->phys) != (size_t)job->comp_size) {
             g_mutex_unlock(&tf->phys_lock);
             g_mutex_lock(&tf->lock);
             tf->io_error = 1;
@@ -637,8 +638,9 @@ static ssize_t tf_overwrite_one(struct tf_handle *h, const char *buf, size_t siz
     if (take == 0)
         return -1;
     if (getenv("TF_DEBUG"))
-        fprintf(stderr, "[ow] %s block=%d start=%lld usize=%u pos=%lld take=%zu %s\n", tf->dbg_path ? tf->dbg_path : "?",
-                block, start, usize, h->pos, take, (h->pos == start && take == usize) ? "full" : "merge");
+        fprintf(stderr, "[ow] %s block=%d start=%lld usize=%u pos=%lld take=%zu %s\n",
+                tf->dbg_path ? tf->dbg_path : "?", block, start, usize, h->pos, take,
+                (h->pos == start && take == usize) ? "full" : "merge");
     if (h->pos == start && take == usize) {
         char *data = g_memdup2(buf, take);
         if (tf_submit(tf, block, data, take))
