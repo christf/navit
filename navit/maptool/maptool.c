@@ -1167,9 +1167,8 @@ int main(int argc, char **argv) {
         p.osm.house_number_interpolations = tempfile(suffix, "house_number_interpolations", 0);
         if (p.osm.associated_streets && p.osm.house_number_interpolations) {
 
-            process_associated_streets_and_house_number_interpolations(p.osm.associated_streets,
-                                                                       p.osm.house_number_interpolations,
-                                                                       files_relproc);
+            process_associated_streets_and_house_number_interpolations(
+                p.osm.associated_streets, p.osm.house_number_interpolations, files_relproc);
 
             fclose(p.osm.associated_streets);
             fclose(p.osm.house_number_interpolations);
