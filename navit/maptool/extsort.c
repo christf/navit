@@ -17,8 +17,8 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#include "debug.h"
 #include "extsort.h"
+#include "debug.h"
 #include "maptool.h"
 #include <stdlib.h>
 #include <string.h>
