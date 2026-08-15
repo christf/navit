@@ -2636,8 +2636,7 @@ static void process_associated_street_member_collect(struct process_relation_mem
     struct associated_street *rel = relation_priv;
     /* Pass 1, fill associated street names in relation_priv */
     char *name;
-    if (!rel->name && item_is_street(*member)
-        && (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
+    if (!rel->name && item_is_street(*member) && (name = item_bin_get_attr(member, attr_street_name, NULL)) != NULL) {
         rel->name = g_strdup(name);
         fp->allocations = g_list_prepend(fp->allocations, rel->name);
     }
@@ -2722,8 +2721,7 @@ static void process_house_number_interpolation_member_modify(struct process_rela
     }
     if (attr_for_interpolation && rel->street_name) {
         item_bin_add_attr_string(member, attr_street_name, rel->street_name);
-        char *house_number_from_to =
-            g_strconcat(rel->house_number_first_node, "-", rel->house_number_last_node, NULL);
+        char *house_number_from_to = g_strconcat(rel->house_number_first_node, "-", rel->house_number_last_node, NULL);
         fp->allocations = g_list_prepend(fp->allocations, house_number_from_to);
         item_bin_add_attr_string(member, attr_for_interpolation, house_number_from_to);
     }
@@ -3030,8 +3028,8 @@ void process_associated_streets_and_house_number_interpolations(FILE *in_as, FIL
     fp_hni.out = files_relproc->nodes_out;
     tile_sizing_set_file("nodes", fp_as.out);
     fseek(files_relproc->nodes_in, 0, SEEK_SET);
-    relations_process_fused_write(files_relproc->nodes_in, files_relproc->nodes_out, relations_as, relations_hni, &fp_as,
-                                  &fp_hni);
+    relations_process_fused_write(files_relproc->nodes_in, files_relproc->nodes_out, relations_as, relations_hni,
+                                  &fp_as, &fp_hni);
 
     if (files_relproc->nodes2_in) {
         fp_as.out = files_relproc->nodes2_out;
