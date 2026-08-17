@@ -1065,7 +1065,7 @@ static void get_data_window(struct graphics_priv *this, unsigned int xid) {
         g_signal_connect(this->win, "close-request", G_CALLBACK(close_request), this);
     }
     gtk_window_set_child(GTK_WINDOW(this->win), this->glarea);
-    gtk_widget_set_cursor_from_name(this->glarea, "none");
+    gtk_widget_set_cursor_from_name(this->glarea, "default");
     gtk_widget_set_visible(this->win, TRUE);
     gtk_widget_set_focusable(this->glarea, TRUE);
     gtk_widget_set_sensitive(this->glarea, TRUE);
