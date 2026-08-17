@@ -73,8 +73,10 @@ static const char fragment_src[] = "precision mediump float;\n"
                                    "    }\n"
                                    "}\n";
 
-/* Maximum vertices in a single batch */
+/* Initial vertex buffer size — grows dynamically if needed */
 #define MAX_VERTICES 262144
+/* Hard cap to prevent runaway allocation (~256 MB for vertices + commands) */
+#define MAX_VERTICES_HARD (MAX_VERTICES * 16)
 
 /* Vertex: position (x,y) + texcoord (u,v) */
 typedef struct {
@@ -155,11 +157,13 @@ struct graphics_priv {
     int width, height;
     int win_w, win_h;
 
-    /* Draw command buffer */
-    Vertex vertices[MAX_VERTICES];
+    /* Draw command buffer (dynamically allocated, grows as needed) */
+    Vertex *vertices;
     int vertex_count;
-    DrawCmd commands[MAX_VERTICES / 3];
+    int vertex_capacity;
+    DrawCmd *commands;
     int cmd_count;
+    int cmd_capacity;
     int dirty;
     int draw_depth; /* guard against nested draw_mode_begin (gui_internal_highlight_do) */
 
@@ -336,6 +340,34 @@ static void compute_mvp(struct graphics_priv *gr) {
  * Submit helpers — add vertices and commands to the batch
  * ---------------------------------------------------------------- */
 
+static void ensure_vertex_capacity(struct graphics_priv *gr, int needed) {
+    if (needed <= gr->vertex_capacity)
+        return;
+    int new_cap = gr->vertex_capacity;
+    while (new_cap < needed)
+        new_cap *= 2;
+    if (new_cap > MAX_VERTICES_HARD)
+        new_cap = MAX_VERTICES_HARD;
+    if (new_cap <= gr->vertex_capacity)
+        return;
+    gr->vertices = g_realloc(gr->vertices, new_cap * sizeof(Vertex));
+    gr->vertex_capacity = new_cap;
+}
+
+static void ensure_cmd_capacity(struct graphics_priv *gr, int needed) {
+    if (needed <= gr->cmd_capacity)
+        return;
+    int new_cap = gr->cmd_capacity;
+    while (new_cap < needed)
+        new_cap *= 2;
+    if (new_cap > MAX_VERTICES_HARD / 3)
+        new_cap = MAX_VERTICES_HARD / 3;
+    if (new_cap <= gr->cmd_capacity)
+        return;
+    gr->commands = g_realloc(gr->commands, new_cap * sizeof(DrawCmd));
+    gr->cmd_capacity = new_cap;
+}
+
 static void queue_tex_delete(struct graphics_priv *gr, GLuint tex) {
     TexDelete *td = g_new(TexDelete, 1);
     td->tex = tex;
@@ -352,13 +384,16 @@ static void submit_color(struct graphics_priv *gr, struct graphics_gc_priv *gc) 
 
 static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GLuint tex, const Vertex *verts,
                            int count) {
-    if (gr->vertex_count + count > MAX_VERTICES) {
-        dbg(lvl_error, "gtkglarea: vertex buffer overflow (%d + %d > %d)", gr->vertex_count, count, MAX_VERTICES);
+    ensure_vertex_capacity(gr, gr->vertex_count + count);
+    ensure_cmd_capacity(gr, gr->cmd_count + 1);
+    if (gr->vertex_count + count > gr->vertex_capacity) {
+        dbg(lvl_error, "gtkglarea: vertex buffer limit reached (%d + %d > %d)",
+            gr->vertex_count, count, gr->vertex_capacity);
         return -1;
     }
     if (gr->cmd_count > 0) {
         DrawCmd *prev = &gr->commands[gr->cmd_count - 1];
-        if (prev->type == type && prev->tex == tex && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
+        if (prev->type == type && prev->tex == tex && prev->r == gr->cur_r && prev->g == gr->cur_g && prev->b == gr->cur_b && prev->a == gr->cur_a && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
             prev->count += count;
             memcpy(&gr->vertices[gr->vertex_count], verts, count * sizeof(Vertex));
             gr->vertex_count += count;
@@ -520,8 +555,8 @@ static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, s
         return;
     submit_color(gr, gc);
     int segments = 72;
-    if (segments > MAX_VERTICES - gr->vertex_count)
-        segments = MAX_VERTICES - gr->vertex_count;
+    if (segments > gr->vertex_capacity - gr->vertex_count)
+        segments = gr->vertex_capacity - gr->vertex_count;
     Vertex *verts = g_new(Vertex, segments);
     for (int i = 0; i < segments; i++) {
         float angle = 2.0f * G_PI * i / segments;
@@ -879,11 +914,12 @@ static void set_display_rotation(struct graphics_priv *gr, double angle_degrees,
  * ---------------------------------------------------------------- */
 
 static void set_clip(struct graphics_priv *gr, struct point *p, int w, int h) {
-    if (gr->cmd_count < MAX_VERTICES / 3) {
+    ensure_cmd_capacity(gr, gr->cmd_count + 2);
+    if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
         gr->cmd_count++;
     }
-    if (gr->cmd_count < MAX_VERTICES / 3) {
+    if (gr->cmd_count < gr->cmd_capacity) {
         /* Convert from top-left origin to GL scissor (bottom-left origin) */
         struct graphics_priv *cur;
         int off_x = 0, off_y = 0;
@@ -919,11 +955,12 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
     int y_max2 = p2->y + h2 + off_y;
     int x_max = x_max1 > x_max2 ? x_max1 : x_max2;
     int y_max = y_max1 > y_max2 ? y_max1 : y_max2;
-    if (gr->cmd_count < MAX_VERTICES / 3) {
+    ensure_cmd_capacity(gr, gr->cmd_count + 2);
+    if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
         gr->cmd_count++;
     }
-    if (gr->cmd_count < MAX_VERTICES / 3) {
+    if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
         gr->commands[gr->cmd_count].clip_x = x_min;
         gr->commands[gr->cmd_count].clip_y = win_h - y_max;
@@ -934,17 +971,20 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
 }
 
 static void clear_clip(struct graphics_priv *gr) {
-    if (gr->cmd_count < MAX_VERTICES / 3) {
+    ensure_cmd_capacity(gr, gr->cmd_count + 1);
+    if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_OFF;
         gr->cmd_count++;
     }
 }
 
 static int scroll_surface(struct graphics_priv *gr, int dx, int dy) {
-    /* GL scroll is handled by MVP translation — no pixel copy needed */
-    gr->dx += dx;
-    gr->dy += dy;
-    gr->dirty = 1;
+    (void)gr;
+    (void)dx;
+    (void)dy;
+    /* No-op: navit's scroll+clip+redraw flow already updates the map transformation
+     * and redraws the full map at the correct position via draw_mode_begin/end.
+     * Adding an MVP offset here would double-shift the geometry. */
     return 1;
 }
 
@@ -1000,6 +1040,7 @@ static void get_data_window(struct graphics_priv *this, unsigned int xid) {
         g_signal_connect(this->win, "close-request", G_CALLBACK(close_request), this);
     }
     gtk_window_set_child(GTK_WINDOW(this->win), this->glarea);
+    gtk_widget_set_cursor_from_name(this->glarea, "none");
     gtk_widget_set_visible(this->win, TRUE);
     gtk_widget_set_focusable(this->glarea, TRUE);
     gtk_widget_set_sensitive(this->glarea, TRUE);
@@ -1048,6 +1089,8 @@ static void graphics_destroy(struct graphics_priv *gr) {
         glDeleteBuffers(1, &gr->vbo);
     if (gr->white_tex)
         glDeleteTextures(1, &gr->white_tex);
+    g_free(gr->vertices);
+    g_free(gr->commands);
     g_free(gr);
 }
 
@@ -1184,7 +1227,7 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     if (gr->draw_depth > 0)
         return TRUE;
 
-    /* Clear the framebuffer so stale content from previous renders doesn't bleed through */
+    /* Clear to black — the background rectangle from the vertex buffer covers the viewport */
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1208,6 +1251,8 @@ static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer 
     gr->height = height;
 
     glViewport(0, 0, width, height);
+
+    navit_set_render_margin(gr->nav, (width > height ? width : height) / 4);
 
     callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(width), GINT_TO_POINTER(height));
 }
@@ -1438,6 +1483,10 @@ static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_metho
         return NULL;
 
     struct graphics_priv *this = g_new0(struct graphics_priv, 1);
+    this->vertex_capacity = MAX_VERTICES;
+    this->vertices = g_new(Vertex, MAX_VERTICES);
+    this->cmd_capacity = MAX_VERTICES / 3;
+    this->commands = g_new(DrawCmd, MAX_VERTICES / 3);
     font_freetype_new(&this->freetype_methods);
     *meth = graphics_methods;
     meth->font_new = (struct graphics_font_priv
