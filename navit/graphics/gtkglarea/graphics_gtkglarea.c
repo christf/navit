@@ -94,6 +94,10 @@ enum draw_cmd_type {
     CMD_CLIP_ON,   /* glEnable(GL_SCISSOR_TEST) */
     CMD_CLIP_OFF,  /* glDisable(GL_SCISSOR_TEST) */
     CMD_CLIP_RECT, /* glScissor(x, y, w, h) */
+    CMD_STENCIL_CLEAR,  /* clear stencil, enable stencil, INCR on draw */
+    CMD_STENCIL_HOLES,  /* switch to DECR on draw */
+    CMD_STENCIL_APPLY,  /* re-enable color, EQUAL(1), KEEP */
+    CMD_STENCIL_END,    /* disable stencil test */
 };
 
 /* A batched draw command — carries per-command color and clip state */
@@ -772,22 +776,43 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
     }
 }
 
+static int emit_cmd(struct graphics_priv *gr, enum draw_cmd_type type) {
+    ensure_cmd_capacity(gr, gr->cmd_count + 1);
+    if (gr->cmd_count >= gr->cmd_capacity)
+        return -1;
+    gr->commands[gr->cmd_count].type = type;
+    gr->commands[gr->cmd_count].tex = 0;
+    gr->commands[gr->cmd_count].first = 0;
+    gr->commands[gr->cmd_count].count = 0;
+    gr->cmd_count++;
+    return 0;
+}
+
 static void draw_polygon_with_holes(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count,
                                     int hole_count, int *ccount, struct point **holes) {
-    /* Draw outer polygon */
+    if (count < 3)
+        return;
+
+    /* Pass 1: stencil only — draw outer with INCR, holes with DECR.
+     * CMD_STENCIL_CLEAR sets glColorMask(false) + GL_INCR.
+     * CMD_STENCIL_HOLES switches to GL_DECR. */
+    emit_cmd(gr, CMD_STENCIL_CLEAR);
     draw_polygon(gr, gc, p, count);
-    /* TODO: draw holes with stencil buffer or shader-based approach */
-    for (int i = 0; i < hole_count; i++) {
-        /* Placeholder: clear hole area with background color */
-        if (holes[i] && ccount[i] >= 3) {
-            struct graphics_gc_priv hole_gc = *gc;
-            hole_gc.fr = 0;
-            hole_gc.fg = 0;
-            hole_gc.fb = 0;
-            hole_gc.fa = 0;
-            draw_polygon(gr, &hole_gc, holes[i], ccount[i]);
+    if (hole_count > 0) {
+        emit_cmd(gr, CMD_STENCIL_HOLES);
+        for (int i = 0; i < hole_count; i++) {
+            if (holes[i] && ccount[i] >= 3) {
+                struct graphics_gc_priv hole_gc = *gc;
+                hole_gc.fa = 0;
+                draw_polygon(gr, &hole_gc, holes[i], ccount[i]);
+            }
         }
     }
+
+    /* Pass 2: color only where stencil==1 (polygon minus holes). */
+    emit_cmd(gr, CMD_STENCIL_APPLY);
+    draw_polygon(gr, gc, p, count);
+    emit_cmd(gr, CMD_STENCIL_END);
     gr->dirty = 1;
 }
 
@@ -1117,6 +1142,8 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
                            int vertex_count, GLuint vbo, float *mvp) {
     glUseProgram(gr->program);
     glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUniformMatrix4fv(gr->mvp_loc, 1, GL_FALSE, mvp);
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -1143,6 +1170,25 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
             continue;
         case CMD_CLIP_RECT:
             glScissor(cmd->clip_x, cmd->clip_y, cmd->clip_w, cmd->clip_h);
+            continue;
+        case CMD_STENCIL_CLEAR:
+            glEnable(GL_STENCIL_TEST);
+            glClear(GL_STENCIL_BUFFER_BIT);
+            glStencilFunc(GL_ALWAYS, 0, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+            continue;
+        case CMD_STENCIL_HOLES:
+            glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
+            continue;
+        case CMD_STENCIL_APPLY:
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glStencilFunc(GL_EQUAL, 1, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+            continue;
+        case CMD_STENCIL_END:
+            glDisable(GL_STENCIL_TEST);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
             continue;
         default:
             break;
@@ -1229,7 +1275,7 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
 
     /* Clear to black — the background rectangle from the vertex buffer covers the viewport */
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     /* Render root draw commands — data persists between renders until overwritten */
     if (gr->vertex_count > 0 || gr->cmd_count > 0) {
@@ -1526,7 +1572,11 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     gtk_gl_area_set_allowed_apis(GTK_GL_AREA(this->glarea), GDK_GL_API_GLES);
     gtk_gl_area_set_required_version(GTK_GL_AREA(this->glarea), 2, 0);
     gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(this->glarea), FALSE);
-    gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(this->glarea), FALSE);
+    /* Stencil buffer needed for polygon hole cutting (even-odd fill).
+     * An alternative is a single-pass shader evaluating winding-number per fragment,
+     * but that adds texture uploads per polygon and heavier fragment work —
+     * we avoid it because it hurts performance on low-end mobile GPUs. */
+    gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(this->glarea), TRUE);
 
     g_signal_connect(this->glarea, "realize", G_CALLBACK(on_glarea_realize), this);
     g_signal_connect(this->glarea, "render", G_CALLBACK(on_glarea_render), this);

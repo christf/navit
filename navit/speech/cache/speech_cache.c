@@ -279,12 +279,22 @@ static struct speech_priv *speech_cache_new(struct speech_methods *meth,
         return NULL;
     }
 
-    struct attr *synth_attrs[2];
+    struct attr *synth_attrs[3];
     struct attr synth_type;
+    struct attr synth_data;
     synth_type.type = attr_type;
     synth_type.u.str = "cmdline";
     synth_attrs[0] = &synth_type;
-    synth_attrs[1] = NULL;
+
+    attr = attr_search(attrs, attr_data_synth);
+    if (attr) {
+        synth_data.type = attr_data;
+        synth_data.u.str = attr->u.str;
+        synth_attrs[1] = &synth_data;
+        synth_attrs[2] = NULL;
+    } else {
+        synth_attrs[1] = NULL;
+    }
     this->synth = synthesizer_new(NULL, synth_attrs);
     if (!this->synth) {
         dbg(lvl_warning, "no synthesizer available, cache misses will fail");
