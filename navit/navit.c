@@ -722,6 +722,8 @@ static void navit_map_progress(struct navit *this_) {
     mapset_close(msh);
 }
 
+static void navit_prepare_speech_route(struct navit *this_);
+
 static void navit_redraw_route(struct navit *this_, struct route *route, struct attr *attr) {
     int updated;
     if (attr->type != attr_route_status)
@@ -738,6 +740,7 @@ static void navit_redraw_route(struct navit *this_, struct route *route, struct 
             this_->vehicle->follow_curr = this_->vehicle->follow;
     }
     navit_draw(this_);
+    navit_prepare_speech_route(this_);
 }
 
 void navit_handle_resize(struct navit *this_, int w, int h) {
@@ -3089,11 +3092,6 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
             }
             transform_set_yaw(this_->trans, dir);
             if (orient_old != this_->orientation) {
-#if 0
-                if (this_->ready == 3)
-    navit_draw(this_);
-    navit_prepare_speech_route(this_);
-#endif
                 attr_updated = 1;
             }
             if (attr_updated && this_->ready == 3)

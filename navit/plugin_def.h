@@ -34,5 +34,4 @@ PLUGIN_CATEGORY(event, (struct event_methods * meth))
 PLUGIN_CATEGORY(font, (void *meth))
 PLUGIN_CATEGORY(traffic,
                 (struct navit * nav, struct traffic_methods *meth, struct attr **attrs, struct callback_list *cbl))
-PLUGIN_CATEGORY(synthesizer,
-                (struct synthesizer_methods * meth, struct attr **attrs, struct attr *parent))
+PLUGIN_CATEGORY(synthesizer, (struct synthesizer_methods * meth, struct attr **attrs, struct attr *parent))
