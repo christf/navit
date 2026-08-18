@@ -3091,7 +3091,8 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
             if (orient_old != this_->orientation) {
 #if 0
                 if (this_->ready == 3)
-                    navit_draw(this_);
+    navit_draw(this_);
+    navit_prepare_speech_route(this_);
 #endif
                 attr_updated = 1;
             }
