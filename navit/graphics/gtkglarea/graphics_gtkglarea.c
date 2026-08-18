@@ -484,11 +484,10 @@ static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
         if (mode == draw_mode_end) {
             if (gr->draw_depth <= 1) {
                 gr->draw_depth = 0;
-                /* Mark parent dirty so it redraws with our overlay */
                 struct graphics_priv *root = gr;
                 while (root->parent)
                     root = root->parent;
-                root->dirty = 1;
+                gtk_widget_queue_draw(root->glarea);
                 return;
             }
             gr->draw_depth--;
@@ -573,6 +572,17 @@ static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, s
     gr->dirty = 1;
 }
 
+static long long cross2d(int ax, int ay, int bx, int by, int cx, int cy) {
+    return (long long)(bx - ax) * (cy - ay) - (long long)(by - ay) * (cx - ax);
+}
+
+static int point_in_triangle(int ax, int ay, int bx, int by, int cx, int cy, int px, int py) {
+    long long d1 = cross2d(ax, ay, bx, by, px, py);
+    long long d2 = cross2d(bx, by, cx, cy, px, py);
+    long long d3 = cross2d(cx, cy, ax, ay, px, py);
+    return (d1 > 0 && d2 > 0 && d3 > 0) || (d1 < 0 && d2 < 0 && d3 < 0);
+}
+
 static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count) {
     if (gr->parent && !gr->overlay_enabled)
         return;
@@ -580,27 +590,104 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
         return;
     submit_color(gr, gc);
 
-    /* Ear-clipping triangulation for convex and simple concave polygons */
-    /* For now, use fan triangulation (works for convex; good enough for navit's use cases) */
-    int tri_count = (count - 2) * 3;
-    Vertex *verts = g_new(Vertex, tri_count);
-    int vi = 0;
-    for (int i = 1; i < count - 1; i++) {
-        verts[vi].x = p[0].x;
-        verts[vi].y = p[0].y;
-        verts[vi].u = verts[vi].v = 0;
-        vi++;
-        verts[vi].x = p[i].x;
-        verts[vi].y = p[i].y;
-        verts[vi].u = verts[vi].v = 0;
-        vi++;
-        verts[vi].x = p[i + 1].x;
-        verts[vi].y = p[i + 1].y;
-        verts[vi].u = verts[vi].v = 0;
-        vi++;
+    /* Copy to local buffer, strip closing point (first==last) and consecutive duplicates */
+    struct point tmp[count];
+    int n = 0;
+    for (int i = 0; i < count; i++) {
+        if (n > 0 && p[i].x == tmp[n - 1].x && p[i].y == tmp[n - 1].y)
+            continue;
+        tmp[n++] = p[i];
     }
-    submit_vertices(gr, CMD_TRIANGLES, 0, verts, tri_count);
+    if (n > 2 && tmp[0].x == tmp[n - 1].x && tmp[0].y == tmp[n - 1].y)
+        n--;
+    if (n < 3)
+        return;
+
+    int max_tris = n - 2;
+    Vertex *verts = g_new(Vertex, max_tris * 3);
+    int tri_count = 0;
+
+    int *idx = g_new(int, n);
+    for (int i = 0; i < n; i++)
+        idx[i] = i;
+    int rem = n;
+
+    /* Determine winding direction from signed area (integer, no precision loss) */
+    long long area = 0;
+    for (int i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        area += (long long)tmp[i].x * tmp[j].y - (long long)tmp[j].x * tmp[i].y;
+    }
+    int ccw = (area > 0);
+
+    /* Ear-clipping triangulation */
+    while (rem > 2) {
+        int ear_found = 0;
+        for (int i = 0; i < rem; i++) {
+            int prev = (i - 1 + rem) % rem;
+            int next = (i + 1) % rem;
+
+            long long cross = cross2d(tmp[idx[prev]].x, tmp[idx[prev]].y, tmp[idx[i]].x, tmp[idx[i]].y,
+                                      tmp[idx[next]].x, tmp[idx[next]].y);
+            int is_convex = ccw ? (cross > 0) : (cross < 0);
+            if (!is_convex)
+                continue;
+
+            int ear = 1;
+            for (int j = 0; j < rem; j++) {
+                if (j == prev || j == i || j == next)
+                    continue;
+                if (point_in_triangle(tmp[idx[prev]].x, tmp[idx[prev]].y, tmp[idx[i]].x, tmp[idx[i]].y,
+                                      tmp[idx[next]].x, tmp[idx[next]].y, tmp[idx[j]].x, tmp[idx[j]].y)) {
+                    ear = 0;
+                    break;
+                }
+            }
+            if (!ear)
+                continue;
+
+            int vi = tri_count * 3;
+            verts[vi].x = tmp[idx[prev]].x;
+            verts[vi].y = tmp[idx[prev]].y;
+            verts[vi].u = verts[vi].v = 0;
+            verts[vi + 1].x = tmp[idx[i]].x;
+            verts[vi + 1].y = tmp[idx[i]].y;
+            verts[vi + 1].u = verts[vi + 1].v = 0;
+            verts[vi + 2].x = tmp[idx[next]].x;
+            verts[vi + 2].y = tmp[idx[next]].y;
+            verts[vi + 2].u = verts[vi + 2].v = 0;
+            tri_count++;
+
+            memmove(&idx[i], &idx[i + 1], (rem - i - 1) * sizeof(int));
+            rem--;
+            ear_found = 1;
+            break;
+        }
+        if (!ear_found)
+            break;
+    }
+
+    /* Fan fallback if ear-clipping failed to triangulate fully */
+    if (tri_count < max_tris) {
+        tri_count = 0;
+        for (int i = 1; i < n - 1; i++) {
+            int vi = tri_count * 3;
+            verts[vi].x = tmp[0].x;
+            verts[vi].y = tmp[0].y;
+            verts[vi].u = verts[vi].v = 0;
+            verts[vi + 1].x = tmp[i].x;
+            verts[vi + 1].y = tmp[i].y;
+            verts[vi + 1].u = verts[vi + 1].v = 0;
+            verts[vi + 2].x = tmp[i + 1].x;
+            verts[vi + 2].y = tmp[i + 1].y;
+            verts[vi + 2].u = verts[vi + 2].v = 0;
+            tri_count++;
+        }
+    }
+
+    submit_vertices(gr, CMD_TRIANGLES, 0, verts, tri_count * 3);
     g_free(verts);
+    g_free(idx);
     gr->dirty = 1;
 }
 
