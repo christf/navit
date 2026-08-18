@@ -472,18 +472,10 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
     fprintf(stderr, "tile_collector_finish foreach done\n");
     g_hash_table_destroy(hash);
     fprintf(stderr, "tile_collector_finish destroy done\n");
-    for (i = 14; i > 0; i--) {
+    for (i = 15; i > 0; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
-        foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*");
-        foreach_tile(&data, tile_collector_add_siblings2);
-        fprintf(stderr, "*");
-        if (i == 14) {
+        if (i == 15 || i == 14 || i == 13) {
             foreach_tile(&data, tile_collector_add_siblings);
             fprintf(stderr, "*");
             foreach_tile(&data, tile_collector_add_siblings);
@@ -491,7 +483,15 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector) {
             foreach_tile(&data, tile_collector_add_siblings);
             fprintf(stderr, "*");
             foreach_tile(&data, tile_collector_add_siblings);
+            fprintf(stderr, "*");
         }
+        foreach_tile(&data, tile_collector_add_siblings2);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings2);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings2);
+        fprintf(stderr, "*");
+        foreach_tile(&data, tile_collector_add_siblings2);
         fprintf(stderr, "\n");
     }
     g_hash_table_destroy(data.tile_edges);
@@ -512,8 +512,8 @@ static struct item_bin_sink_func *coastline_processor_new(struct item_bin_sink *
     struct item_bin_sink_func *tile_collector = tile_collector_new(out);
     struct tile_parameter *param = g_new0(struct tile_parameter, 1);
 
-    param->min = 14;
-    param->max = 14;
+    param->min = 15;
+    param->max = 15;
     param->overlap = 0;
     param->attr_to_copy = attr_osm_wayid;
 
