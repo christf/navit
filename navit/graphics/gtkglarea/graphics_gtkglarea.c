@@ -603,6 +603,18 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
     if (n < 3)
         return;
 
+    /* Remove collinear vertices (cross product == 0) to help ear-clipping */
+    int w = 0;
+    for (int i = 0; i < n; i++) {
+        int prev = (i - 1 + n) % n;
+        int next = (i + 1) % n;
+        if (cross2d(tmp[prev].x, tmp[prev].y, tmp[i].x, tmp[i].y, tmp[next].x, tmp[next].y) != 0)
+            tmp[w++] = tmp[i];
+    }
+    n = w;
+    if (n < 3)
+        return;
+
     int max_tris = n - 2;
     Vertex *verts = g_new(Vertex, max_tris * 3);
     int tri_count = 0;
