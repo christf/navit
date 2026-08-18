@@ -127,8 +127,11 @@ static int synthesize_text(struct speech_priv *this, const char *text,
                 continue;
             dbg(lvl_debug, "synthesize blank: '%s'", seg->text);
             char *encoded = audio_cache_name_encode(seg->text);
+            char *filename = g_strdup_printf("%s%s", encoded,
+                                            this->sample_suffix ? this->sample_suffix : "");
             char *out_path = g_build_filename(this->cache_dir, "synthetic",
-                                              encoded, NULL);
+                                              filename, NULL);
+            g_free(filename);
             g_free(encoded);
             synthesizer_synthesize(this->synth, seg->text, out_path, batch_id);
             if (wait)
@@ -141,8 +144,11 @@ static int synthesize_text(struct speech_priv *this, const char *text,
     }
 
     char *encoded = audio_cache_name_encode(text);
-    char *out_path = g_build_filename(this->cache_dir, "synthetic", encoded,
+    char *filename = g_strdup_printf("%s%s", encoded,
+                                    this->sample_suffix ? this->sample_suffix : "");
+    char *out_path = g_build_filename(this->cache_dir, "synthetic", filename,
                                       NULL);
+    g_free(filename);
     g_free(encoded);
     synthesizer_synthesize(this->synth, text, out_path, batch_id);
     if (wait)
