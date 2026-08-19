@@ -102,7 +102,7 @@ static void playback_files(struct speech_priv *this, GList *files) {
 static int synthesis_sync(struct speech_priv *this, const char *out_path, const char *label) {
     struct stat st;
     int waited = 0;
-    while (stat(out_path, &st) == 0 && st.st_size == 0 && waited < 50) {
+    while (stat(out_path, &st) == 0 && st.st_size == 0 && waited < 600) {
         synthesizer_check_status(this->synth);
         g_usleep(100000);
         waited++;
