@@ -604,15 +604,21 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
     if (n < 3)
         return;
 
-    /* Remove collinear vertices (cross product == 0) to help ear-clipping */
-    int w = 0;
-    for (int i = 0; i < n; i++) {
-        int prev = (i - 1 + n) % n;
-        int next = (i + 1) % n;
-        if (cross2d(tmp[prev].x, tmp[prev].y, tmp[i].x, tmp[i].y, tmp[next].x, tmp[next].y) != 0)
-            tmp[w++] = tmp[i];
+    /* Remove collinear vertices (cross product == 0) to help ear-clipping.
+     * Use a separate output buffer to avoid corrupting neighbor reads. */
+    {
+        struct point reduced[count];
+        int w = 0;
+        for (int i = 0; i < n; i++) {
+            int prev = (i - 1 + n) % n;
+            int next = (i + 1) % n;
+            if (cross2d(tmp[prev].x, tmp[prev].y, tmp[i].x, tmp[i].y, tmp[next].x, tmp[next].y) != 0)
+                reduced[w++] = tmp[i];
+        }
+        for (int i = 0; i < w; i++)
+            tmp[i] = reduced[i];
+        n = w;
     }
-    n = w;
     if (n < 3)
         return;
 
