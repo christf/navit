@@ -190,6 +190,7 @@ struct navigation {
     struct callback *idle_cb;       /**< Idle callback to process the route map */
     struct event_idle *idle_ev;     /**< The pointer to the idle event */
     int nav_status;                 /**< Status of the navigation engine */
+    int force_next_speech;          /**< Force speech on next navigation_call_callbacks after route change */
 };
 
 /** @brief Set of simplified distance values that are easy to be pronounced.
@@ -3631,7 +3632,8 @@ static void navigation_call_callbacks(struct navigation *this_, int force_speech
             }
         }
     }
-    if (force_speech) {
+    if (force_speech || this_->force_next_speech) {
+        this_->force_next_speech = 0;
         this_->level_last = level;
         this_->curr_delay = 0;
         dbg(lvl_debug, "force_speech=%d distance=%d level=%d type=0x%x", force_speech, distance, level,
@@ -3792,9 +3794,11 @@ static void navigation_update(struct navigation *this_, struct route *route, str
     case route_status_destination_set:
         nav_status.u.num = status_position_wait;
         break;
+    case route_status_path_done_new:
+        this_->force_next_speech = 1;
+        /* fall through */
     case route_status_building_path:
     case route_status_building_graph:
-    case route_status_path_done_new:
     case route_status_path_done_incremental:
         nav_status.u.num = (this_->nav_status >= status_recalculating) ? status_recalculating : status_calculating;
     }

@@ -722,8 +722,6 @@ static void navit_map_progress(struct navit *this_) {
     mapset_close(msh);
 }
 
-static void navit_prepare_speech_route(struct navit *this_);
-
 static void navit_redraw_route(struct navit *this_, struct route *route, struct attr *attr) {
     int updated;
     if (attr->type != attr_route_status)
@@ -740,7 +738,6 @@ static void navit_redraw_route(struct navit *this_, struct route *route, struct 
             this_->vehicle->follow_curr = this_->vehicle->follow;
     }
     navit_draw(this_);
-    navit_prepare_speech_route(this_);
 }
 
 void navit_handle_resize(struct navit *this_, int w, int h) {
@@ -2352,6 +2349,8 @@ void navit_speak(struct navit *this_) {
     if (mr) {
         while ((item = map_rect_get_item(mr)) && (item->type == type_nav_position || item->type == type_nav_none))
             ;
+        navit_prepare_speech_route(this_);
+
         if (item && item_attr_get(item, attr_navigation_speech, &attr)) {
             if (*attr.u.str != '\0') {
                 speech_say(this_->speech, attr.u.str);
@@ -2359,8 +2358,6 @@ void navit_speak(struct navit *this_) {
             }
             navit_textfile_debug_log(this_, "type=announcement label=\"%s\"", attr.u.str);
         }
-
-        navit_prepare_speech_route(this_);
         map_rect_destroy(mr);
     }
 }
