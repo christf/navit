@@ -99,19 +99,6 @@ static void playback_files(struct speech_priv *this, GList *files) {
     g_strfreev(cmdv);
 }
 
-static int synthesis_sync(struct speech_priv *this, const char *out_path, const char *label) {
-    struct stat st;
-    int waited = 0;
-    while (stat(out_path, &st) == 0 && st.st_size == 0 && waited < 600) {
-        synthesizer_check_status(this->synth);
-        g_usleep(100000);
-        waited++;
-    }
-    if (waited)
-        dbg(lvl_debug, "waited %dms for '%s'", waited * 100, label);
-    return (stat(out_path, &st) == 0 && st.st_size > 0) ? 0 : -1;
-}
-
 static int synthesize_text(struct speech_priv *this, const char *text, int wait, unsigned long long batch_id) {
     if (!this->synth)
         return -1;
@@ -132,7 +119,7 @@ static int synthesize_text(struct speech_priv *this, const char *text, int wait,
             g_free(encoded);
             synthesizer_synthesize(this->synth, seg->text, out_path, batch_id);
             if (wait)
-                synthesis_sync(this, out_path, seg->text);
+                synthesizer_wait_done(this->synth);
             g_free(out_path);
             ok = 1;
         }
@@ -147,7 +134,7 @@ static int synthesize_text(struct speech_priv *this, const char *text, int wait,
     g_free(encoded);
     synthesizer_synthesize(this->synth, text, out_path, batch_id);
     if (wait)
-        synthesis_sync(this, out_path, text);
+        synthesizer_wait_done(this->synth);
     g_free(out_path);
     return 0;
 }

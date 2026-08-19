@@ -63,6 +63,7 @@ struct synthesizer_methods {
     int (*synthesize)(struct synthesizer_priv *this_, const char *text, const char *output_path,
                       synthesizer_batch_id batch);
     int (*check_status)(struct synthesizer_priv *this_);
+    int (*wait_done)(struct synthesizer_priv *this_);
     synthesizer_batch_id (*batch_begin)(struct synthesizer_priv *this_);
 };
 
@@ -71,6 +72,7 @@ int synthesizer_synthesize(struct synthesizer *this_, const char *text, const ch
                            synthesizer_batch_id batch);
 synthesizer_batch_id synthesizer_batch_begin(struct synthesizer *this_);
 int synthesizer_check_status(struct synthesizer *this_);
+int synthesizer_wait_done(struct synthesizer *this_);
 void synthesizer_destroy(struct synthesizer *this_);
 int synthesizer_get_attr(struct synthesizer *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 int synthesizer_set_attr(struct synthesizer *this_, struct attr *attr);
