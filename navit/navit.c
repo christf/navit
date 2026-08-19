@@ -2300,33 +2300,23 @@ static int navit_cmd_announcer_toggle(struct navit *this_, char *function, struc
 
 static void navit_prepare_speech_route(struct navit *this_) {
     struct navigation *nav = this_->navigation;
-    struct map *map = NULL;
-    struct map_rect *mr = NULL;
-    struct item *item;
-    struct attr attr;
     unsigned long long batch_id = 0;
+    GList *texts, *l;
 
     if (!nav)
-        return;
-    map = navigation_get_map(nav);
-    if (!map)
         return;
 
     if (this_->speech)
         batch_id = speech_batch_begin(this_->speech);
 
-    mr = map_rect_new(map, NULL);
-    if (!mr)
-        return;
-    while ((item = map_rect_get_item(mr))) {
-        if (item->type == type_nav_position || item->type == type_nav_none)
-            continue;
-        if (item_attr_get(item, attr_navigation_speech, &attr)) {
-            if (attr.u.str && *attr.u.str != '\0')
-                speech_prepare(this_->speech, attr.u.str, batch_id);
-        }
+    texts = navigation_prepare_all_speech(nav);
+    for (l = texts; l; l = l->next) {
+        char *text = l->data;
+        if (text && *text)
+            speech_prepare(this_->speech, text, batch_id);
+        g_free(text);
     }
-    map_rect_destroy(mr);
+    g_list_free(texts);
 }
 
 void navit_speak(struct navit *this_) {
