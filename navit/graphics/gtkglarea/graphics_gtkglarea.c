@@ -688,6 +688,8 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
 
     /* Fan fallback if ear-clipping failed to triangulate fully */
     if (tri_count < max_tris) {
+        dbg(lvl_warning, "fan fallback: ear-clipping got %d/%d triangles for %d-vertex polygon at (%d,%d)", tri_count,
+            max_tris, n, tmp[0].x, tmp[0].y);
         tri_count = 0;
         for (int i = 1; i < n - 1; i++) {
             int vi = tri_count * 3;
