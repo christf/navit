@@ -2858,6 +2858,132 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
         }
     }
     if (val1 == INT_MAX && val2 == INT_MAX) {
+        /* Diagnostic: report why no segment of the position street can be used. A per-direction
+         * value of INT_MAX from route_value_seg() means the vehicle profile refuses this street
+         * (access restriction, wrong type); a point value of INT_MAX means the flood from the
+         * destination never reached it, i.e. the graph is disconnected somewhere between. */
+        struct route_graph_segment *dbg_seg = NULL;
+        /* Flood reachability statistics: count reached vs. unreached points and report the
+         * bounding boxes of both sets (WGS84), so the location of the connectivity frontier
+         * becomes visible. */
+        int i, total = 0, reached = 0, have_r = 0, have_u = 0;
+        struct coord rmin = {0, 0}, rmax = {0, 0}, umin = {0, 0}, umax = {0, 0};
+        struct coord umin_l = {0, 0}, umax_l = {0, 0}; /* unreached points near pos */
+        for (i = 0; i < HASH_SIZE; i++) {
+            struct route_graph_point *p;
+            for (p = this->hash[i]; p; p = p->hash_next) {
+                total++;
+                if (p->value != INT_MAX) {
+                    if (!have_r) {
+                        rmin = rmax = p->c;
+                        have_r = 1;
+                    } else {
+                        if (p->c.x < rmin.x)
+                            rmin.x = p->c.x;
+                        if (p->c.x > rmax.x)
+                            rmax.x = p->c.x;
+                        if (p->c.y < rmin.y)
+                            rmin.y = p->c.y;
+                        if (p->c.y > rmax.y)
+                            rmax.y = p->c.y;
+                    }
+                    reached++;
+                } else {
+                    if (!have_u) {
+                        umin = umax = p->c;
+                        have_u = 1;
+                    } else {
+                        if (p->c.x < umin.x)
+                            umin.x = p->c.x;
+                        if (p->c.x > umax.x)
+                            umax.x = p->c.x;
+                        if (p->c.y < umin.y)
+                            umin.y = p->c.y;
+                        if (p->c.y > umax.y)
+                            umax.y = p->c.y;
+                    }
+                }
+            }
+        }
+        if (have_r && have_u) {
+            /* Frontier analysis: find unreached points adjacent to reached ones near the
+             * position and log the connecting segments with their acceptance status. These are
+             * exactly the crossings where the flood stopped. */
+            int frontier = 0, shown = 0;
+            struct coord_geo g;
+            struct coord lmin, lmax;
+            int have_lu = 0;
+            lmin.x = pos->c.x - 60000;
+            lmax.x = pos->c.x + 60000; /* ~1 degree at these latitudes */
+            lmin.y = pos->c.y - 111000;
+            lmax.y = pos->c.y + 111000;
+            for (i = 0; i < HASH_SIZE; i++) {
+                struct route_graph_point *p;
+                for (p = this->hash[i]; p; p = p->hash_next) {
+                    struct route_graph_segment *s;
+                    if (p->value != INT_MAX || !have_r)
+                        continue;
+                    if (p->c.x < lmin.x || p->c.x > lmax.x || p->c.y < lmin.y || p->c.y > lmax.y)
+                        continue;
+                    if (!have_lu) {
+                        umin_l = umax_l = p->c;
+                        have_lu = 1;
+                    } else {
+                        if (p->c.x < umin_l.x)
+                            umin_l.x = p->c.x;
+                        if (p->c.x > umax_l.x)
+                            umax_l.x = p->c.x;
+                        if (p->c.y < umin_l.y)
+                            umin_l.y = p->c.y;
+                        if (p->c.y > umax_l.y)
+                            umax_l.y = p->c.y;
+                    }
+                    for (s = p->start; s; s = s->start_next)
+                        if (s->end->value != INT_MAX)
+                            frontier++;
+                    for (s = p->end; s; s = s->end_next)
+                        if (s->start->value != INT_MAX) {
+                            frontier++;
+                            if (shown < 10) {
+                                struct coord_geo gp, go;
+                                transform_to_geo(projection_mg, &p->c, &gp);
+                                transform_to_geo(projection_mg, &s->start->c, &go);
+                                dbg(lvl_error, "frontier %d: %s fwd=%s bwd=%s at %.5f,%.5f -> %.5f,%.5f", frontier,
+                                    item_to_name(s->data.item.type),
+                                    route_value_seg(profile, NULL, s, 2) == INT_MAX ? "REFUSED" : "ok",
+                                    route_value_seg(profile, NULL, s, -2) == INT_MAX ? "REFUSED" : "ok", go.lng, go.lat,
+                                    gp.lng, gp.lat);
+                                shown++;
+                            }
+                        }
+                }
+            }
+            dbg(lvl_error, "flood: frontier crossings near pos: %d", frontier);
+            if (have_lu) {
+                struct coord_geo g;
+                transform_to_geo(projection_mg, &umin_l, &g);
+                dbg(lvl_error, "flood: unreached near pos bbox SW %.4f,%.4f", g.lng, g.lat);
+                transform_to_geo(projection_mg, &umax_l, &g);
+                dbg(lvl_error, "flood: unreached near pos bbox NE %.4f,%.4f", g.lng, g.lat);
+            }
+            transform_to_geo(projection_mg, &rmin, &g);
+            dbg(lvl_error, "flood: %d/%d points reached, reached bbox SW %.4f,%.4f", reached, total, g.lng, g.lat);
+            transform_to_geo(projection_mg, &rmax, &g);
+            dbg(lvl_error, "flood: reached bbox NE %.4f,%.4f", g.lng, g.lat);
+            transform_to_geo(projection_mg, &umin, &g);
+            dbg(lvl_error, "flood: unreached bbox SW %.4f,%.4f", g.lng, g.lat);
+            transform_to_geo(projection_mg, &umax, &g);
+            dbg(lvl_error, "flood: unreached bbox NE %.4f,%.4f", g.lng, g.lat);
+        } else
+            dbg(lvl_error, "flood: %d/%d points reached (%s set empty)", reached, total,
+                have_r ? "unreached" : "reached");
+        while ((dbg_seg = route_graph_get_segment(this, pos->street, dbg_seg))) {
+            dbg(lvl_error, "pos seg %p type=%s: seg_value fwd=%s bwd=%s, flood start=%d end=%d", dbg_seg,
+                item_to_name(dbg_seg->data.item.type),
+                route_value_seg(profile, NULL, dbg_seg, 2) == INT_MAX ? "REFUSED" : "ok",
+                route_value_seg(profile, NULL, dbg_seg, -2) == INT_MAX ? "REFUSED" : "ok", dbg_seg->start->value,
+                dbg_seg->end->value);
+        }
         dbg(lvl_error, "no route found, pos blocked");
         return NULL;
     }
