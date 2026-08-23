@@ -89,6 +89,16 @@ int synthesizer_wait_done(struct synthesizer *this_) {
     return -1;
 }
 
+void synthesizer_pause(struct synthesizer *this_) {
+    if (this_->meth.pause)
+        (this_->meth.pause)(this_->priv);
+}
+
+void synthesizer_resume(struct synthesizer *this_) {
+    if (this_->meth.resume)
+        (this_->meth.resume)(this_->priv);
+}
+
 int synthesizer_get_attr(struct synthesizer *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter) {
     return attr_generic_get_attr(this_->attrs, NULL, type, attr, iter);
 }
