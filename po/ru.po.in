@@ -29,7 +29,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2025-10-02 08:02+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Russian <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -218,9 +218,6 @@ msgstr "%s, цель - %s%s%s"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%s, цель - %s"
-
-msgid "When possible, please turn around"
-msgstr "Развернитесь, пожалуйста, если это возможно"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -412,6 +409,9 @@ msgstr "после чего вы прибудете в пункт назначе
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Вы прибыли в пункт назначения %s"
+
+msgid "When possible, please turn around"
+msgstr "Развернитесь, пожалуйста, если это возможно"
 
 msgid "Interchange"
 msgstr "Развязка"

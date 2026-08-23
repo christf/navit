@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2025-12-06 15:00+0000\n"
 "Last-Translator: deepak09A <deepak09@live.com>\n"
 "Language-Team: Hindi <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -193,9 +193,6 @@ msgstr "%ssheher mein %s%s%s"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%s से %s पर जाएँ"
-
-msgid "When possible, please turn around"
-msgstr "जब संभव हो, कृपया चारों ओर मोड़"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -387,6 +384,9 @@ msgstr "तब आप अपने गंतव्य पर पहुँच च
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "आप अपने गंतव्य पर पहुँच चुके हैं%s"
+
+msgid "When possible, please turn around"
+msgstr "जब संभव हो, कृपया चारों ओर मोड़"
 
 msgid "Interchange"
 msgstr "इंटरचेंज"

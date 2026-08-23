@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2025-10-02 08:02+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Basque <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -193,9 +193,6 @@ msgstr "%s %s%s%s-en"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%s %s-an"
-
-msgid "When possible, please turn around"
-msgstr "Ahal duzunean eman itzulia, mesedez"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -387,6 +384,9 @@ msgstr "dagoeneko helburura iritsi zara"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s helburura iritsi zara"
+
+msgid "When possible, please turn around"
+msgstr "Ahal duzunean eman itzulia, mesedez"
 
 msgid "Interchange"
 msgstr ""
