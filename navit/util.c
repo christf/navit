@@ -35,6 +35,7 @@
 #endif
 
 #ifdef _POSIX_C_SOURCE
+#    include <signal.h>
 #    include <sys/types.h>
 #    include <sys/wait.h>
 #    include <unistd.h>
@@ -1271,6 +1272,18 @@ void spawn_process_info_free(struct spawn_process_info *pi) {
     }
 #endif
     g_free(pi);
+}
+
+void spawn_process_kill(struct spawn_process_info *pi) {
+    if (pi == NULL)
+        return;
+#ifdef _POSIX_C_SOURCE
+    if (pi->pid > 0) {
+        dbg(lvl_debug, "killing process %d", pi->pid);
+        kill(pi->pid, SIGTERM);
+    }
+#endif
+    spawn_process_info_free(pi);
 }
 
 #ifdef _POSIX_C_SOURCE
