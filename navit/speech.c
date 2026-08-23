@@ -72,6 +72,16 @@ int speech_say(struct speech *this_, const char *text) {
     return (this_->meth.say)(this_->priv, text);
 }
 
+int speech_say_alternates(struct speech *this_, const char *const *texts) {
+    if (!texts || !*texts)
+        return 0;
+    if (this_->meth.say_alternates) {
+        return (this_->meth.say_alternates)(this_->priv, texts);
+    }
+    /* Plugin does not support alternatives: fall back to the primary text. */
+    return (this_->meth.say)(this_->priv, texts[0]);
+}
+
 int speech_prepare(struct speech *this_, const char *text, unsigned long long batch_id) {
     if (this_->meth.prepare)
         return (this_->meth.prepare)(this_->priv, text, batch_id);
