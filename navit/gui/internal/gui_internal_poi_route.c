@@ -573,18 +573,35 @@ static void poi_route_cmd_radius(struct gui_priv *this, struct widget *wm, void 
 }
 
 /**
+ * @brief Shows a short notice to the user in a minimal menu.
+ */
+static void poi_route_show_notice(struct gui_priv *this, const char *text) {
+    struct widget *wb, *w, *wl;
+
+    gui_internal_prune_menu(this, NULL);
+    wb = gui_internal_menu(this, _("POIs along Route"));
+    w = gui_internal_box_new(this, gravity_center | orientation_vertical | flags_expand | flags_fill);
+    gui_internal_widget_append(wb, w);
+    wl = gui_internal_label_new(this, text);
+    gui_internal_widget_append(w, wl);
+    wl = gui_internal_button_label(this, _("OK"), -1);
+    wl->func = gui_internal_back;
+    wl->state |= STATE_SENSITIVE;
+}
+
+/**
  * @brief Adds the selected POI as a waypoint at its geographic position along the route.
  *
  * Rebuilds the route polyline to obtain the {@code dist_along} key of the POI and of every
- * existing waypoint, inserts the POI before the first waypoint that lies further along the
- * route (defaulting to a position right before the final destination), and starts an
- * asynchronous route recalculation.
+ * existing waypoint, snaps the POI onto the routable road network, inserts the POI before
+ * the first waypoint that lies further along the route (defaulting to a position right
+ * before the final destination), and starts an asynchronous route recalculation.
  */
 static void poi_route_cmd_set_waypoint(struct gui_priv *this, struct widget *wm, void *data) {
     struct poi_route_item *d = data;
     struct route *route = navit_get_route(this->nav);
     struct poi_route_polyline pl;
-    struct pcoord *dst;
+    struct pcoord *dst, snappc;
     struct coord tmp;
     char *desc;
     int dstcount, insert_pos, i, wp_dist, poi_dist;
@@ -596,6 +613,18 @@ static void poi_route_cmd_set_waypoint(struct gui_priv *this, struct widget *wm,
     if (!poi_route_polyline_project(&pl, &d->c, &poi_dist, NULL)) {
         poi_route_polyline_free(&pl);
         gui_internal_prune_menu(this, NULL);
+        return;
+    }
+
+    /* Only insert the waypoint if the POI actually snaps onto the routable road network.
+       Otherwise routing cannot build a path through it and the whole route would end up
+       in the not_found state (leaving no route to follow at all). */
+    snappc.x = d->c.x;
+    snappc.y = d->c.y;
+    snappc.pro = projection_mg;
+    if (!route_snap_coord(navit_get_mapset(this->nav), navit_get_vehicleprofile(this->nav), &snappc, &snappc)) {
+        poi_route_polyline_free(&pl);
+        poi_route_show_notice(this, _("This POI cannot be reached by road and was not added as a waypoint."));
         return;
     }
 
@@ -619,8 +648,8 @@ static void poi_route_cmd_set_waypoint(struct gui_priv *this, struct widget *wm,
 
     for (i = dstcount; i > insert_pos; i--)
         dst[i] = dst[i - 1];
-    dst[insert_pos].x = d->c.x;
-    dst[insert_pos].y = d->c.y;
+    dst[insert_pos].x = snappc.x;
+    dst[insert_pos].y = snappc.y;
     dst[insert_pos].pro = projection_mg;
 
     desc = (d->label && d->label[0]) ? d->label : item_to_name(d->item.type);

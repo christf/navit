@@ -106,6 +106,7 @@ void route_set_position(struct route *this_, struct pcoord *pos);
 void route_set_position_from_tracking(struct route *this_, struct tracking *tracking, enum projection pro);
 struct map_selection *route_rect(int order, struct coord *c1, struct coord *c2, int rel, int abs);
 void route_set_destinations(struct route *this_, struct pcoord *dst, int count, int async);
+int route_snap_coord(struct mapset *ms, struct vehicleprofile *profile, struct pcoord *pc, struct pcoord *snapped);
 int route_get_destinations(struct route *this_, struct pcoord *pc, int count);
 int route_get_destination_count(struct route *this_);
 void route_get_distances(struct route *this_, struct coord *c, int count, int *distances);
