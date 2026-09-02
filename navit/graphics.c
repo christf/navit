@@ -573,6 +573,7 @@ void graphics_font_destroy(struct graphics_font *gra_font) {
  * @returns nothing
  * @author David Tegze (02/2011)
  */
+static void graphics_labels_reset(struct graphics *gra);
 
 void graphics_free(struct graphics *gra) {
     if (!gra)
