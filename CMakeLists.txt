@@ -251,11 +251,15 @@ if(PKG_CONFIG_FOUND)
 	endif(NOT LIBCURL_FOUND)
     if(ANDROID)
         # pkg_check_modules found the host libcurl, not the Android one.
-        # Require an explicit cross-compiled libcurl for the target ABI.
-        find_library(curl REQUIRED CONFIG)
+        # Require the cross-compiled libcurl provided by the curl prefab
+        # (io.github.vvb2060.ndk:curl). AGP exposes prefab packages to CMake
+        # via find_package() on CMAKE_FIND_ROOT_PATH, so the imported
+        # curl::curl_static target is used to link against the ABI-specific
+        # libcurl.a.
+        find_package(curl REQUIRED CONFIG)
         set(LIBCURL_FOUND TRUE)
-        set(LIBCURL_LIBRARIES ${LIBCURL_LIBRARY})
-        set_with_reason(traffic/traff_http "libcurl found in NDK sysroot" TRUE)
+        set(LIBCURL_LIBRARIES curl::curl_static)
+        set_with_reason(traffic/traff_http "libcurl found via prefab" TRUE)
     endif()
 else(PKG_CONFIG_FOUND)
     set_with_reason(support/glib "Glib not found" TRUE ${INTL_LIBS})
