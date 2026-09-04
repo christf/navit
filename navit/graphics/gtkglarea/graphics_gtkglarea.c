@@ -77,6 +77,7 @@ static const char fragment_src[] = "precision mediump float;\n"
 #define MAX_VERTICES 262144
 /* Hard cap to prevent runaway allocation (~256 MB for vertices + commands) */
 #define MAX_VERTICES_HARD (MAX_VERTICES * 16)
+#define CIRCLE_SEGMENTS 72
 
 /* Vertex: position (x,y) + texcoord (u,v) */
 typedef struct {
@@ -558,10 +559,10 @@ static void draw_lines(struct graphics_priv *gr, struct graphics_gc_priv *gc, st
 
 static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int r) {
     int i;
+    int segments = CIRCLE_SEGMENTS;
     if (gr->parent && !gr->overlay_enabled)
         return;
     submit_color(gr, gc);
-    int segments = 72;
     if (segments > gr->vertex_capacity - gr->vertex_count)
         segments = gr->vertex_capacity - gr->vertex_count;
     Vertex *verts = g_new(Vertex, segments);
