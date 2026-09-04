@@ -227,6 +227,16 @@ if(PKG_CONFIG_FOUND)
 		set_with_reason(support/glib "Glib not found" TRUE ${INTL_LIBS})
 	endif(GLIB2_FOUND)
 
+	# speech/cache, speech/cmdline and synthesizer/cmdline use glib >= 2.32
+	# APIs (g_mutex_init/g_cond_init/g_thread_new/g_hash_table_add ...) which
+	# neither the bundled support/glib nor the ancient glib of the old tomtom
+	# toolchain provide. Disable them unless a modern system glib is available.
+	if (NOT GLIB2_FOUND OR (GLIB2_VERSION AND GLIB2_VERSION VERSION_LESS 2.32))
+		foreach( MODULE_PATH speech/cache speech/cmdline synthesizer/cmdline)
+			set_with_reason(${MODULE_PATH} "requires glib >= 2.32" FALSE)
+		endforeach()
+	endif()
+
 	pkg_check_modules(FONTCONFIG IMPORTED_TARGET "fontconfig >= 2.2.0")
 	pkg_check_modules(DBUS IMPORTED_TARGET "dbus-1 >= 1.4")
 	pkg_check_modules(DBUSGLIB IMPORTED_TARGET dbus-glib-1)
@@ -572,14 +582,18 @@ if (HAVE_LIBSPEECHD)
 endif(HAVE_LIBSPEECHD)
 
 if (HAVE_SYSTEM)
-	set_with_reason(speech/cmdline "system() call is available" TRUE)
-	set_with_reason(synthesizer/cmdline "system() call is available" TRUE)
+	if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+		set_with_reason(speech/cmdline "system() call is available" TRUE)
+		set_with_reason(synthesizer/cmdline "system() call is available" TRUE)
+	endif()
 	add_compile_definitions(HAVE_SYSTEM)
 endif(HAVE_SYSTEM)
 
 if (HAVE_CREATEPROCESS)
-	set_with_reason(speech/cmdline "CreateProcess() call is available" TRUE)
-	set_with_reason(synthesizer/cmdline "CreateProcess() call is available" TRUE)
+	if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+		set_with_reason(speech/cmdline "CreateProcess() call is available" TRUE)
+		set_with_reason(synthesizer/cmdline "CreateProcess() call is available" TRUE)
+	endif()
 endif(HAVE_CREATEPROCESS)
 
 if (GETTEXT_FOUND)
