@@ -7,7 +7,7 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nThis F
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nOnly Devs should ever see this file" )
 
 # navit core
-set(NAVIT_SRC announcement.c atom.c attr.c audio_cache.c cache.c callback.c command.c config_.c coord.c country.c data_window.c debug.c
+set(NAVIT_SRC announcement.c atom.c attr.c cache.c callback.c command.c config_.c coord.c country.c data_window.c debug.c
 	event.c file.c geom.c graphics.c gui.c item.c layout.c log.c main.c map.c maps.c
 	linguistics.c mapset.c maptype.c menu.c messages.c bookmarks.c navit.c navit_nls.c navigation.c osd.c param.c plugin.c popup.c
 	kalman.c profile.c profile_option.c projection.c roadprofile.c route.c script.c search.c speech.c synthesizer.c start_real.c sunriset.c transform.c track.c
@@ -19,6 +19,10 @@ endif(NOT USE_PLUGINS)
 
 if (${HAVE_GLIB})
 	list(APPEND NAVIT_SRC event_glib.c)
+endif()
+
+if(HAVE_GLIB2_32)
+	list(APPEND NAVIT_SRC audio_cache.c)
 endif()
 
 if(HAVE_GLIB AND NOT HAVE_G_LIST_FREE_FULL)
