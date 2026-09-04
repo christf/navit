@@ -1,8 +1,13 @@
 target_include_directories(navit_config INTERFACE
 	"${CMAKE_CURRENT_SOURCE_DIR}"
-	"${CMAKE_CURRENT_SOURCE_DIR}/support"
 	"${CMAKE_CURRENT_BINARY_DIR}"
 )
+# the vendored support/glib provides <glib/...> headers; it must only be on the
+# include path when there is no system glib, otherwise it clashes with the
+# system glib headers and breaks the build (e.g. GLIB_AVAILABLE_IN_ALL)
+if(NOT GLIB2_FOUND)
+	target_include_directories(navit_config INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+endif()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nThis File should never appear on binary distributions\r\n" )
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nOnly Devs should ever see this file" )
 
