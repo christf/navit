@@ -3528,6 +3528,45 @@ static struct route_info *route_find_nearest_street(struct vehicleprofile *vehic
 }
 
 /**
+ * @brief Snaps a coordinate to the nearest routable street, if reachable.
+ *
+ * This performs the same nearest-street lookup used when routing sets a start position or a
+ * destination. It returns 1 and writes the point on the street (in the projection of the
+ * input coordinate) to @p snapped, if a routable street matching @p profile is found within
+ * the routing maximum distance; otherwise it returns 0 and leaves @p snapped untouched.
+ *
+ * This lets callers validate that a coordinate (for example a POI about to be added as a
+ * waypoint) is actually reachable by road before committing it to a route, so that an
+ * unroutable point does not cause the whole route to end up in the not_found state.
+ *
+ * @param ms The mapset to search for streets
+ * @param profile The vehicle profile used to match routable streets
+ * @param pc The coordinate to snap, in any projection
+ * @param snapped Receives the nearest point on the street, in @p pc's projection (may be NULL)
+ * @return 1 if a routable street was found, 0 otherwise
+ */
+int route_snap_coord(struct mapset *ms, struct vehicleprofile *profile, struct pcoord *pc, struct pcoord *snapped) {
+    struct route_info *ri;
+    struct coord_geo g;
+
+    ri = route_find_nearest_street(profile, ms, pc);
+    if (!ri)
+        return 0;
+    if (snapped) {
+        snapped->x = ri->lp.x;
+        snapped->y = ri->lp.y;
+        snapped->pro = map_projection(ri->street->item.map);
+        if (snapped->pro != pc->pro) {
+            transform_to_geo(snapped->pro, (struct coord *)snapped, &g);
+            transform_from_geo(pc->pro, &g, (struct coord *)snapped);
+            snapped->pro = pc->pro;
+        }
+    }
+    route_info_free(ri);
+    return 1;
+}
+
+/**
  * @brief Destroys a route_info
  *
  * @param info The route info to be destroyed
