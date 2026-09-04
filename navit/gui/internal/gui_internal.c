@@ -2431,15 +2431,20 @@ static void gui_internal_button(void *data, int pressed, int button, struct poin
         gui_internal_gesture_get_vector(this, 300, NULL, &dx, &dy);
         this->current.x = -1;
         this->current.y = -1;
-        graphics_draw_mode(gra, draw_mode_begin);
-        if (!gui_internal_gesture_do(this) && this->pressed != 2 && abs(dx) < this->icon_s && abs(dy) < this->icon_s)
-            gui_internal_call_highlighted(this);
-        this->pressed = 0;
-        if (!event_main_loop_has_quit()) {
-            gui_internal_highlight(this);
-            graphics_draw_mode(gra, draw_mode_end);
-            gui_internal_check_exit(this);
+        if (this->highlighted) {
+            graphics_draw_mode(gra, draw_mode_begin);
+            if (!gui_internal_gesture_do(this) && this->pressed != 2 && abs(dx) < this->icon_s && abs(dy) < this->icon_s)
+                gui_internal_call_highlighted(this);
+            this->pressed = 0;
+            if (!event_main_loop_has_quit()) {
+                gui_internal_highlight(this);
+                graphics_draw_mode(gra, draw_mode_end);
+            }
+        } else {
+            this->pressed = 0;
         }
+        if (!event_main_loop_has_quit())
+            gui_internal_check_exit(this);
     }
 }
 
