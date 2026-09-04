@@ -309,31 +309,32 @@ static void compute_mvp(struct graphics_priv *gr) {
         t2[13] = cy;
 
         /* tmp = t2 * rot */
+        int i, j, k;
         float rot_angle = gr->display_rotation * G_PI / 180.0f;
         float cr = cosf(rot_angle);
         float sr = sinf(rot_angle);
         float rot_mat[16] = {cr, sr, 0, 0, -sr, cr, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        float tmp2[16];
         /* tmp = t2 * rot * t1 * mvp */
         /* Step 1: rot * t1 */
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
+        for (i = 0; i < 4; i++)
+            for (j = 0; j < 4; j++) {
                 tmp[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
+                for (k = 0; k < 4; k++)
                     tmp[i * 4 + j] += rot_mat[i * 4 + k] * t1[k * 4 + j];
             }
         /* Step 2: t2 * (rot * t1) */
-        float tmp2[16];
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
+        for (i = 0; i < 4; i++)
+            for (j = 0; j < 4; j++) {
                 tmp2[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
+                for (k = 0; k < 4; k++)
                     tmp2[i * 4 + j] += t2[i * 4 + k] * tmp[k * 4 + j];
             }
         /* Step 3: (t2 * rot * t1) * mvp */
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
+        for (i = 0; i < 4; i++)
+            for (j = 0; j < 4; j++) {
                 tmp[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
+                for (k = 0; k < 4; k++)
                     tmp[i * 4 + j] += tmp2[i * 4 + k] * gr->mvp[k * 4 + j];
             }
         memcpy(gr->mvp, tmp, sizeof(tmp));
@@ -540,11 +541,12 @@ static void draw_rectangle(struct graphics_priv *gr, struct graphics_gc_priv *gc
 }
 
 static void draw_lines(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count) {
+    int i;
     if (gr->parent && !gr->overlay_enabled)
         return;
     submit_color(gr, gc);
     Vertex *verts = g_new(Vertex, count);
-    for (int i = 0; i < count; i++) {
+    for (i = 0; i < count; i++) {
         verts[i].x = p[i].x;
         verts[i].y = p[i].y;
         verts[i].u = verts[i].v = 0;
@@ -555,6 +557,7 @@ static void draw_lines(struct graphics_priv *gr, struct graphics_gc_priv *gc, st
 }
 
 static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int r) {
+    int i;
     if (gr->parent && !gr->overlay_enabled)
         return;
     submit_color(gr, gc);
@@ -562,7 +565,7 @@ static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, s
     if (segments > gr->vertex_capacity - gr->vertex_count)
         segments = gr->vertex_capacity - gr->vertex_count;
     Vertex *verts = g_new(Vertex, segments);
-    for (int i = 0; i < segments; i++) {
+    for (i = 0; i < segments; i++) {
         float angle = 2.0f * G_PI * i / segments;
         verts[i].x = p->x + r * cosf(angle);
         verts[i].y = p->y + r * sinf(angle);
@@ -585,6 +588,7 @@ static int point_in_triangle(int ax, int ay, int bx, int by, int cx, int cy, int
 }
 
 static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count) {
+    int i, j, n, w, rem, max_tris, tri_count, prev, next, ear, ear_found, ccw, vi, is_convex;
     if (gr->parent && !gr->overlay_enabled)
         return;
     if (count < 3)
@@ -593,8 +597,8 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
 
     /* Copy to local buffer, strip closing point (first==last) and consecutive duplicates */
     struct point tmp[count];
-    int n = 0;
-    for (int i = 0; i < count; i++) {
+    n = 0;
+    for (i = 0; i < count; i++) {
         if (n > 0 && p[i].x == tmp[n - 1].x && p[i].y == tmp[n - 1].y)
             continue;
         tmp[n++] = p[i];
@@ -608,52 +612,52 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
      * Use a separate output buffer to avoid corrupting neighbor reads. */
     {
         struct point reduced[count];
-        int w = 0;
-        for (int i = 0; i < n; i++) {
-            int prev = (i - 1 + n) % n;
-            int next = (i + 1) % n;
+        w = 0;
+        for (i = 0; i < n; i++) {
+            prev = (i - 1 + n) % n;
+            next = (i + 1) % n;
             if (cross2d(tmp[prev].x, tmp[prev].y, tmp[i].x, tmp[i].y, tmp[next].x, tmp[next].y) != 0)
                 reduced[w++] = tmp[i];
         }
-        for (int i = 0; i < w; i++)
+        for (i = 0; i < w; i++)
             tmp[i] = reduced[i];
         n = w;
     }
     if (n < 3)
         return;
 
-    int max_tris = n - 2;
+    max_tris = n - 2;
     Vertex *verts = g_new(Vertex, max_tris * 3);
-    int tri_count = 0;
+    tri_count = 0;
 
     int *idx = g_new(int, n);
-    for (int i = 0; i < n; i++)
+    for (i = 0; i < n; i++)
         idx[i] = i;
-    int rem = n;
+    rem = n;
 
     /* Determine winding direction from signed area (integer, no precision loss) */
     long long area = 0;
-    for (int i = 0; i < n; i++) {
-        int j = (i + 1) % n;
+    for (i = 0; i < n; i++) {
+        j = (i + 1) % n;
         area += (long long)tmp[i].x * tmp[j].y - (long long)tmp[j].x * tmp[i].y;
     }
-    int ccw = (area > 0);
+    ccw = (area > 0);
 
     /* Ear-clipping triangulation */
     while (rem > 2) {
-        int ear_found = 0;
-        for (int i = 0; i < rem; i++) {
-            int prev = (i - 1 + rem) % rem;
-            int next = (i + 1) % rem;
+        ear_found = 0;
+        for (i = 0; i < rem; i++) {
+            prev = (i - 1 + rem) % rem;
+            next = (i + 1) % rem;
 
             long long cross = cross2d(tmp[idx[prev]].x, tmp[idx[prev]].y, tmp[idx[i]].x, tmp[idx[i]].y,
                                       tmp[idx[next]].x, tmp[idx[next]].y);
-            int is_convex = ccw ? (cross > 0) : (cross < 0);
+            is_convex = ccw ? (cross > 0) : (cross < 0);
             if (!is_convex)
                 continue;
 
-            int ear = 1;
-            for (int j = 0; j < rem; j++) {
+            ear = 1;
+            for (j = 0; j < rem; j++) {
                 if (j == prev || j == i || j == next)
                     continue;
                 if (point_in_triangle(tmp[idx[prev]].x, tmp[idx[prev]].y, tmp[idx[i]].x, tmp[idx[i]].y,
@@ -665,7 +669,7 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
             if (!ear)
                 continue;
 
-            int vi = tri_count * 3;
+            vi = tri_count * 3;
             verts[vi].x = tmp[idx[prev]].x;
             verts[vi].y = tmp[idx[prev]].y;
             verts[vi].u = verts[vi].v = 0;
@@ -691,8 +695,8 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
         dbg(lvl_warning, "fan fallback: ear-clipping got %d/%d triangles for %d-vertex polygon at (%d,%d)", tri_count,
             max_tris, n, tmp[0].x, tmp[0].y);
         tri_count = 0;
-        for (int i = 1; i < n - 1; i++) {
-            int vi = tri_count * 3;
+        for (i = 1; i < n - 1; i++) {
+            vi = tri_count * 3;
             verts[vi].x = tmp[0].x;
             verts[vi].y = tmp[0].y;
             verts[vi].u = verts[vi].v = 0;
@@ -898,6 +902,7 @@ static int emit_cmd(struct graphics_priv *gr, enum draw_cmd_type type) {
 
 static void draw_polygon_with_holes(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count,
                                     int hole_count, int *ccount, struct point **holes) {
+    int i;
     if (count < 3)
         return;
 
@@ -908,7 +913,7 @@ static void draw_polygon_with_holes(struct graphics_priv *gr, struct graphics_gc
     draw_polygon(gr, gc, p, count);
     if (hole_count > 0) {
         emit_cmd(gr, CMD_STENCIL_HOLES);
-        for (int i = 0; i < hole_count; i++) {
+        for (i = 0; i < hole_count; i++) {
             if (holes[i] && ccount[i] >= 3) {
                 struct graphics_gc_priv hole_gc = *gc;
                 hole_gc.fa = 0;
@@ -1265,8 +1270,8 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
     }
 
     float last_r = -1, last_g = -1, last_b = -1, last_a = -1;
-
-    for (int i = 0; i < cmd_count; i++) {
+    int i;
+    for (i = 0; i < cmd_count; i++) {
         DrawCmd *cmd = &commands[i];
 
         switch (cmd->type) {
@@ -1654,6 +1659,7 @@ static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_metho
 static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct graphics_methods *meth,
                                                     struct attr **attrs, struct callback_list *cbl) {
     struct attr *attr;
+    int i;
 
     if (!event_request_system("glib", "graphics_gtkglarea_new"))
         return NULL;
@@ -1711,7 +1717,7 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     gtk_widget_add_controller(this->glarea, key);
 
     this->timeout = 100;
-    for (int i = 0; i < 8; i++) {
+    for (i = 0; i < 8; i++) {
         this->button_press[i].tv_sec = 0;
         this->button_press[i].tv_usec = 0;
         this->button_release[i].tv_sec = 0;
