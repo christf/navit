@@ -3732,8 +3732,7 @@ static void navigation_announcements_check_profile(struct navigation *this_) {
  * @return The text to speak. Empty string if there is nothing to say for this level.
  */
 static char *navigation_get_speech_text(struct navigation *nav, struct navigation_itm *itm,
-                                        struct navigation_command *cmd, enum announcement_level level,
-                                        GPtrArray *alts) {
+                                        struct navigation_command *cmd, enum announcement_level level, GList **alts) {
     struct navigation_announcements *ann = &cmd->announcements;
     const char *src = NULL;
 
@@ -3775,7 +3774,7 @@ static char *navigation_get_speech_text(struct navigation *nav, struct navigatio
             /* Fallback: the same instruction without the street name (used when the street name
              * was already announced in the preceding "in X meters" announcement). */
             if (alts && ann->now[1] && strcmp(ann->now[0], ann->now[1]))
-                g_ptr_array_add(alts, g_strdup(ann->now[1]));
+                *alts = g_list_append(*alts, g_strdup(ann->now[1]));
         }
         break;
     case level_connect:
@@ -3827,7 +3826,7 @@ static char *navigation_get_speech_text(struct navigation *nav, struct navigatio
  * @return An announcement that should be made
  */
 static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *itm, struct navigation_command *cmd,
-                                 enum attr_type type, GPtrArray *alts) {
+                                 enum attr_type type, GList **alts) {
     int distance =
         itm->dest_length
         - cmd->itm->dest_length; /* distance from e.g. current GPS position to next announced turn position */
@@ -3881,8 +3880,8 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
                 buf = ret;
                 /* Fallbacks for the combined text: speak the parts separately. */
                 if (alts) {
-                    g_ptr_array_add(alts, g_strdup(buf));
-                    g_ptr_array_add(alts, g_strdup(next));
+                    *alts = g_list_append(*alts, g_strdup(buf));
+                    *alts = g_list_append(*alts, g_strdup(next));
                 }
                 ret = g_strdup_printf("%s, %s", buf, next); /* concatenate both announcements */
                 g_free(buf);
@@ -4453,25 +4452,29 @@ static int navigation_map_item_attr_get(void *priv_data, enum attr_type attr_typ
         }
         return 0;
     case attr_navigation_speech: {
-        GPtrArray *alts = g_ptr_array_new();
+        GList *alts = NULL;
         struct navigation *nav = this_->nav;
         char *text;
         this_->attr_next = attr_length;
-        if (!cmd) {
-            g_ptr_array_free(alts, TRUE);
+        if (!cmd)
             return 0;
-        }
-        text = show_next_maneuvers(nav, this_->cmd_itm, cmd, attr_type, alts);
+        text = show_next_maneuvers(nav, this_->cmd_itm, cmd, attr_type, &alts);
         /* Remember the text and its fallbacks for navigation_get_speech_alternatives(). */
         g_free(nav->speech_text);
         nav->speech_text = g_strdup(text);
         g_strfreev(nav->speech_alt);
         nav->speech_alt = NULL;
-        if (alts->len) {
-            g_ptr_array_add(alts, NULL);
-            nav->speech_alt = (char **)g_ptr_array_free(alts, FALSE);
-        } else
-            g_ptr_array_free(alts, TRUE);
+        if (alts) {
+            int n = g_list_length(alts), i;
+            char **arr = g_new(char *, n + 1);
+            for (i = 0; i < n; i++) {
+                arr[i] = (char *)alts->data;
+                alts = alts->next;
+            }
+            arr[i] = NULL;
+            nav->speech_alt = arr;
+            g_list_free(alts);
+        }
         this_->str = attr->u.str = text;
         return 1;
     }
