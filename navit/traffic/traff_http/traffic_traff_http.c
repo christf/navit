@@ -108,7 +108,9 @@ struct traffic_message **traffic_traff_http_get_messages(struct traffic_priv *th
  */
 void traffic_traff_http_destroy(struct traffic_priv *this_) {
     /* tell the worker thread to clean up and exit */
+    thread_lock_acquire_write(this_->queue_lock);
     this_->exiting = 1;
+    thread_lock_release_write(this_->queue_lock);
     thread_event_signal(this_->queue_event);
     if (this_->position_rect)
         g_free(this_->position_rect);
@@ -294,7 +296,7 @@ static int traffic_traff_http_process_response(struct traffic_priv *this_, struc
  *
  * @param this_gpointer Pointer to the `struct traffic_priv` for the plugin instance
  */
-static int traffic_traff_http_worker_thread_main(gpointer this_gpointer) {
+static int traffic_traff_http_worker_thread_main(void *this_gpointer) {
     struct traffic_priv *this_ = (struct traffic_priv *)this_gpointer;
 
     /* Whether the current run of the loop should poll the source */
@@ -367,7 +369,7 @@ static int traffic_traff_http_worker_thread_main(gpointer this_gpointer) {
                 response = traffic_get_response_from_xml_string(this_->traffic, chunk->data);
                 g_free(chunk->data);
                 g_free(chunk);
-                // TODO repeat if subscription unknown
+                /* TODO repeat if subscription unknown */
                 poll &= !traffic_traff_http_process_response(this_, response);
             }
             g_free(request);
@@ -388,7 +390,7 @@ static int traffic_traff_http_worker_thread_main(gpointer this_gpointer) {
                 response = traffic_get_response_from_xml_string(this_->traffic, chunk->data);
                 g_free(chunk->data);
                 g_free(chunk);
-                // TODO handle unknown subscription
+                /* TODO handle unknown subscription */
                 traffic_traff_http_process_response(this_, response);
             }
             g_free(request);
