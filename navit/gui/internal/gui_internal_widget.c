@@ -290,7 +290,15 @@ void gui_internal_highlight_do(struct gui_priv *this, struct widget *found) {
     if (found == this->highlighted)
         return;
 
-    graphics_draw_mode(this->gra, draw_mode_begin);
+    if (!this->highlighted && !found && this->root.children)
+        return;
+
+    if (!this->highlighted && found && this->root.children) {
+        graphics_draw_mode(this->gra, draw_mode_begin);
+        gui_internal_widget_render(this, g_list_last(this->root.children)->data);
+    } else {
+        graphics_draw_mode(this->gra, draw_mode_begin);
+    }
     if (this->highlighted) {
         this->highlighted->state &= ~STATE_HIGHLIGHTED;
         if (this->root.children && this->highlighted_menu == g_list_last(this->root.children)->data)
