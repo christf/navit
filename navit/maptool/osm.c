@@ -1065,22 +1065,18 @@ static int access_value(char *v) {
     return 3;
 }
 
-/**
- * @brief Returns the default access flags for a barrier node, or -1 if the type is not a barrier
- *
- * A barrier without any access restrictions restricts traffic as follows:
- * \li Bollards and cycle barriers narrow the way, so pedestrians, bicycles and horses can usually pass
- * \li A lift gate blocks motorized traffic, but pedestrians and bicycles usually bypass it
- *
- * @param type The item type to check
- * @return the default access flags, or -1 if the type is not a barrier
+/*
+ * Default access flags for a barrier node without any access tags, or -1
+ * if the type is not a barrier. Cycle barriers are designed to stop bikes,
+ * while bollards and lift gates let cyclists and pedestrians pass.
  */
 static int osm_node_barrier_default_flags(enum item_type type) {
     switch (type) {
     case type_barrier_bollard:
-    case type_barrier_cycle:
     case type_barrier_lift_gate:
         return AF_PBH;
+    case type_barrier_cycle:
+        return AF_PEDESTRIAN | AF_HORSE;
     default:
         return -1;
     }
