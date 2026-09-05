@@ -551,11 +551,12 @@ size_t numdigits(long long l) {
 
 char *floattostr(char *ret, size_t size, navit_float f, char sep) {
     long long i = (long long)f;
-
-    snprintf(ret, size, "%.*f", size - numdigits(i) - (f < 0 ? 1 : 0) - 1, f);
-
     int separator_pos = numdigits(i) + (f < 0 ? 1 : 0);
-    ret[separator_pos] = sep;
+    int precision = size - separator_pos - 1;
+
+    snprintf(ret, size, "%.*f", precision < 0 ? 0 : precision, f);
+    if (separator_pos < size)
+        ret[separator_pos] = sep;
 
     return ret;
 }
