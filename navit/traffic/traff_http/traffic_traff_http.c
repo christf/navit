@@ -199,44 +199,39 @@ static size_t curl_result_callback(void *contents, size_t size, size_t nmemb, vo
  * for freeing up both the struct and the memory pointed to by its `data` member.
  */
 static struct curl_result *curl_post(char *url, char *data) {
-    struct curl_result *ret;
-    CURL *curl_handle;
-    CURLcode curl_res;
-
-    curl_handle = curl_easy_init();
-    if (curl_handle) {
-        ret = g_new0(struct curl_result, 1);
-        ret->data = g_malloc0(1);
-        ret->size = 0;
-
-        curl_easy_setopt(curl_handle, CURLOPT_URL, url);
-
-        curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data);
-
-        /* provide a callback and buffer for result data */
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, curl_result_callback);
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)ret);
-
-        char useragent[256];
-        snprintf(useragent, 256, "Navit/%s (TraffXML)", NAVIT_VERSION);
-        curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, useragent);
-
-        /* follow redirects */
-        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
-
-        curl_res = curl_easy_perform(curl_handle);
-        curl_easy_cleanup(curl_handle);
-        if (curl_res == CURLE_OK) {
-            return ret;
-        } else {
-            dbg(lvl_error, "curl status: %s", curl_easy_strerror(curl_res));
-            g_free(ret->data);
-            g_free(ret);
-        }
-    } else {
+    CURL *curl_handle = curl_easy_init();
+    if (!curl_handle) {
         dbg(lvl_error, "curl initialization failed");
+        return NULL;
     }
-    return NULL;
+
+    struct curl_result *ret = g_new0(struct curl_result, 1);
+    ret->data = g_malloc0(1);
+    ret->size = 0;
+
+    curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+    curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data);
+
+    /* provide a callback and buffer for result data */
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, curl_result_callback);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)ret);
+
+    char useragent[256];
+    snprintf(useragent, sizeof(useragent), "Navit/%s (TraffXML)", NAVIT_VERSION);
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, useragent);
+
+    /* follow redirects */
+    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
+
+    CURLcode curl_res = curl_easy_perform(curl_handle);
+    curl_easy_cleanup(curl_handle);
+    if (curl_res != CURLE_OK) {
+        dbg(lvl_error, "curl status: %s", curl_easy_strerror(curl_res));
+        g_free(ret->data);
+        g_free(ret);
+        return NULL;
+    }
+    return ret;
 }
 
 /**
@@ -272,39 +267,36 @@ static void traffic_traff_http_on_feed_received(struct traffic *traffic, struct 
  * @return True if messages were received, false if not
  */
 static int traffic_traff_http_process_response(struct traffic_priv *this_, struct traffic_response *response) {
-    int ret = 0;
     struct callback **cb;
-    if (!strcmp(response->status, "OK") || !strcmp(response->status, "PARTIALLY_COVERED")) {
+    struct traffic_message **messages = response->messages;
+    int ok = !strcmp(response->status, "OK") || !strcmp(response->status, "PARTIALLY_COVERED");
+    if (ok) {
         if (response->subscription_id) {
             g_free(this_->subscription_id);
             this_->subscription_id = response->subscription_id;
             response->subscription_id = NULL;
         }
         /* TODO subscription timeout */
-        if (response->messages && *(response->messages)) {
+        if (messages && *messages) {
             dbg(lvl_debug, "response contains messages, posting traffic feed");
             cb = g_new0(struct callback *, 1);
-            *cb = callback_new_3(callback_cast(traffic_traff_http_on_feed_received), this_->traffic, response->messages,
-                                 cb);
+            *cb = callback_new_3(callback_cast(traffic_traff_http_on_feed_received), this_->traffic, messages, cb);
             event_add_timeout(1, 0, *cb);
+            response->messages = NULL;
         }
-        ret = !!(response->messages);
-        response->messages = NULL;
-        g_free(response->status);
-        g_free(response);
     } else {
         dbg(lvl_error, "TraFF request failed with status %s", response->status);
-        if (response->messages) {
-            int i;
-            for (i = 0; response->messages[i]; i++)
-                traffic_message_destroy(response->messages[i]);
-            g_free(response->messages);
-        }
-        g_free(response->status);
-        g_free(response->subscription_id);
-        g_free(response);
     }
-    return ret;
+    if (!ok && messages) {
+        int i;
+        for (i = 0; messages[i]; i++)
+            traffic_message_destroy(messages[i]);
+    }
+    g_free(response->messages);
+    g_free(response->subscription_id);
+    g_free(response->status);
+    g_free(response);
+    return ok && messages;
 }
 
 /**
@@ -357,7 +349,7 @@ static int traffic_traff_http_worker_thread_main(void *this_gpointer) {
             /* no need for the lock as the main thread is no longer placing requests at this point */
             while (this_->queue) {
                 request = this_->queue->data;
-                dbg(lvl_error, "discarding request: \n%s", request);
+                dbg(lvl_debug, "discarding request: \n%s", request);
                 this_->queue = g_list_remove(this_->queue, request);
                 g_free(request);
             }
@@ -399,7 +391,7 @@ static int traffic_traff_http_worker_thread_main(void *this_gpointer) {
                                           this_->subscription_id, rdata);
             else
                 request = g_strdup_printf("<request operation='SUBSCRIBE'>\n%s\n</request>", rdata);
-            dbg(lvl_error, "sending request: \n%s", request);
+            dbg(lvl_debug, "sending request: \n%s", request);
             chunk = curl_post(this_->source, request);
             if (chunk) {
                 response = traffic_get_response_from_xml_string(this_->traffic, chunk->data);
@@ -447,22 +439,41 @@ static int traffic_traff_http_worker_thread_main(void *this_gpointer) {
 
 static void coordtostr(char *dst, size_t dstsize, navit_float a, navit_float b, navit_float c, navit_float d) {
 #define COORDTOSTR_NUMSIZE 14
+    navit_float nums[4] = {a, b, c, d};
     char e[4][COORDTOSTR_NUMSIZE];
 
     if (a > c) {
         dbg(lvl_error, "rl.lat > lu.lat, this should never happen");
     }
 
-    memset(e, '\0', sizeof(e));
-    floattostr(e[0], COORDTOSTR_NUMSIZE, a, '.');
-    floattostr(e[1], COORDTOSTR_NUMSIZE, b, '.');
-    floattostr(e[2], COORDTOSTR_NUMSIZE, c, '.');
-    floattostr(e[3], COORDTOSTR_NUMSIZE, d, '.');
     dst[0] = '\0';
-    strncat(dst, (e[0]), dstsize - 1);
-    for (int i = 1; i < 4; i++) {
-        strncat(dst, " ", dstsize - strlen(dst) - 1);
-        strncat(dst, (e[i]), dstsize - strlen(dst) - 1);
+    for (int i = 0; i < 4; i++) {
+        floattostr(e[i], COORDTOSTR_NUMSIZE, nums[i], '.');
+        if (i) {
+            strncat(dst, " ", dstsize - strlen(dst) - 1);
+        }
+        strncat(dst, e[i], dstsize - strlen(dst) - 1);
+    }
+}
+
+/**
+ * @brief Appends a filter for the given rectangle to the filter list.
+ *
+ * @param filter_list The filter list to append to
+ * @param rect The rectangle to describe, in `projection_mg` coordinates
+ * @param min_road_class Minimum road class for the filter, or NULL for none
+ */
+static void add_filter(gchar **filter_list, struct coord_rect *rect, gchar *min_road_class) {
+    struct coord_geo lu, rl;
+    char coordbuf[80] = "";
+    transform_to_geo(projection_mg, &rect->lu, &lu);
+    transform_to_geo(projection_mg, &rect->rl, &rl);
+    coordtostr(coordbuf, sizeof(coordbuf), rl.lat, lu.lng, lu.lat, rl.lng);
+    if (min_road_class) {
+        *filter_list = g_strconcat_printf(*filter_list, "    <filter min_road_class=\"%s\" bbox=\"%s\"/>\n",
+                                          min_road_class, coordbuf);
+    } else {
+        *filter_list = g_strconcat_printf(*filter_list, "    <filter bbox=\"%s\"/>\n", coordbuf);
     }
 }
 
@@ -473,11 +484,9 @@ static void coordtostr(char *dst, size_t dstsize, navit_float a, navit_float b, 
  */
 static void traffic_traff_http_set_selection(struct traffic_priv *this_) {
     struct route *route;
-    struct coord_geo lu, rl;
     gchar *filter_list;
     struct map_selection *sel;
     gchar *min_road_class;
-    char coordbuf[80] = "";
 
     if (this_->route_map_sel)
         route_free_selection(this_->route_map_sel);
@@ -488,22 +497,11 @@ static void traffic_traff_http_set_selection(struct traffic_priv *this_) {
     /* start building the filter list */
     filter_list = g_strconcat_printf(NULL, "<filter_list>\n");
     if (this_->position_rect) {
-        transform_to_geo(projection_mg, &this_->position_rect->lu, &lu);
-        transform_to_geo(projection_mg, &this_->position_rect->rl, &rl);
-        coordtostr(coordbuf, 80, rl.lat, lu.lng, lu.lat, rl.lng);
-        filter_list = g_strconcat_printf(filter_list, "    <filter bbox=\"%s\"/>\n", coordbuf);
+        add_filter(&filter_list, this_->position_rect, NULL);
     }
     for (sel = this_->route_map_sel; sel; sel = sel->next) {
-        transform_to_geo(projection_mg, &sel->u.c_rect.lu, &lu);
-        transform_to_geo(projection_mg, &sel->u.c_rect.rl, &rl);
         min_road_class = order_to_min_road_class(sel->order);
-        coordtostr(coordbuf, 80, rl.lat, lu.lng, lu.lat, rl.lng);
-        if (!min_road_class) {
-            filter_list = g_strconcat_printf(filter_list, "    <filter bbox=\"%s\"/>\n", coordbuf);
-        } else {
-            filter_list = g_strconcat_printf(filter_list, "    <filter min_road_class=\"%s\" bbox=\"%s\"/>\n",
-                                             min_road_class, coordbuf);
-        }
+        add_filter(&filter_list, &sel->u.c_rect, min_road_class);
     }
     filter_list = g_strconcat_printf(filter_list, "</filter_list>");
     thread_lock_acquire_write(this_->queue_lock);
@@ -559,12 +557,32 @@ static void traffic_traff_http_destination_callback(struct traffic_priv *this_) 
  * @param status The status of the navigation engine (the value of the {@code nav_status} attribute)
  */
 static void traffic_traff_http_status_callback(struct traffic_priv *this_, int status) {
-    int new_position_valid = (status != 1);
-    if (new_position_valid && !this_->position_valid) {
-        this_->position_valid = new_position_valid;
+    int valid = (status != status_position_wait);
+    if (valid == this_->position_valid)
+        return;
+    this_->position_valid = valid;
+    if (valid) {
         traffic_traff_http_set_selection(this_);
-    } else if (new_position_valid != this_->position_valid)
-        this_->position_valid = new_position_valid;
+    }
+}
+
+/**
+ * @brief Returns a rectangle of the given size around the given center point.
+ *
+ * @param c The center point
+ * @param pad Padding on each side, in `projection_mg` units
+ *
+ * @return The rectangle
+ */
+static struct coord_rect padded_rect(struct coord c, int pad) {
+    struct coord_rect cr;
+    cr.lu = c;
+    cr.rl = c;
+    cr.lu.x -= pad;
+    cr.rl.x += pad;
+    cr.lu.y += pad;
+    cr.rl.y -= pad;
+    return cr;
 }
 
 /**
@@ -587,20 +605,11 @@ static void traffic_traff_http_position_callback(struct traffic_priv *this_, str
     if (!vehicle_get_attr(vehicle, attr_position_coord_geo, &attr, NULL))
         return;
     transform_from_geo(projection_mg, attr.u.coord_geo, &c);
-    cr.lu = c;
-    cr.rl = c;
-    cr.lu.x -= POSITION_RECT_SIZE;
-    cr.rl.x += POSITION_RECT_SIZE;
-    cr.lu.y += POSITION_RECT_SIZE;
-    cr.rl.y -= POSITION_RECT_SIZE;
     if (!this_->position_rect)
         this_->position_rect = g_new0(struct coord_rect, 1);
+    cr = padded_rect(c, POSITION_RECT_SIZE);
     if (!coord_rect_contains(this_->position_rect, &cr.lu) || !coord_rect_contains(this_->position_rect, &cr.rl)) {
-        cr.lu.x -= POSITION_RECT_SIZE;
-        cr.rl.x += POSITION_RECT_SIZE;
-        cr.lu.y += POSITION_RECT_SIZE;
-        cr.rl.y -= POSITION_RECT_SIZE;
-        *(this_->position_rect) = cr;
+        *(this_->position_rect) = padded_rect(c, 2 * POSITION_RECT_SIZE);
         traffic_traff_http_set_selection(this_);
     }
 }
@@ -672,16 +681,9 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
 
     ret = g_new0(struct traffic_priv, 1);
     ret->nav = nav;
-    ret->traffic = NULL;
-    ret->position_valid = 0;
-    ret->position_rect = NULL;
-    ret->route_map_sel = NULL;
     /* worker_thread will be set when we initialize */
     attr = attr_search(attrs, attr_interval);
-    if (attr)
-        ret->interval = attr->u.num;
-    else
-        ret->interval = DEFAULT_INTERVAL;
+    ret->interval = attr ? attr->u.num : DEFAULT_INTERVAL;
     attr = attr_search(attrs, attr_source);
     if (!attr) {
         dbg(lvl_error, "traffic source unset. Unable to use traff-http plugin");
@@ -694,11 +696,8 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
         return NULL;
     }
     ret->source = attr->u.str;
-    ret->queue = NULL;
     ret->queue_lock = thread_lock_new();
     ret->queue_event = thread_event_new();
-    ret->subscription_id = NULL;
-    ret->exiting = 0;
     *meth = traffic_traff_http_meth;
 
     if (!traffic_traff_http_init(ret)) {
