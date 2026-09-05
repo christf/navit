@@ -297,7 +297,7 @@ void thread_event_wait(thread_event *this_, long msec) {
 #elif HAVE_API_WIN32
     DWORD res;
     DWORD err;
-    res = WaitForSingleObject(*this_, INFINITE);
+    res = WaitForSingleObject(*this_, msec < 0 ? INFINITE : (DWORD)msec);
     if (res == WAIT_FAILED) {
         err = GetLastError();
         dbg(lvl_error, "error %d, event=%p", err, this_);
@@ -356,110 +356,89 @@ void thread_lock_destroy(thread_lock *this_) {
 #endif
 }
 
-void thread_lock_acquire_read(thread_lock *this_) {
+/**
+ * @brief Acquires a lock for reading or writing.
+ *
+ * Blocks until the lock is available.
+ *
+ * @param this_ The lock to acquire
+ * @param write Whether to acquire the lock for writing
+ */
+static void thread_lock_do(thread_lock *this_, int write) {
 #ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_rdlock(this_);
+    int err = write ? pthread_rwlock_wrlock(this_) : pthread_rwlock_rdlock(this_);
     if (err) {
         dbg(lvl_error, "error %d %s, lock=%p", err, thread_format_error(err), this_);
         abort();
     }
 #elif HAVE_API_WIN32
-    DWORD res;
-    DWORD err;
-    res = WaitForSingleObject(*this_, INFINITE);
-    if (res == WAIT_FAILED) {
-        err = GetLastError();
-        dbg(lvl_error, "error %d, lock=%p", err, this_);
+    if (WaitForSingleObject(*this_, INFINITE) == WAIT_FAILED) {
+        dbg(lvl_error, "error %lu, lock=%p", GetLastError(), this_);
         abort();
     }
 #endif
+}
+
+/**
+ * @brief Tries to acquire a lock for reading or writing without blocking.
+ *
+ * @param this_ The lock to acquire
+ * @param write Whether to acquire the lock for writing
+ *
+ * @return Whether the lock was acquired
+ */
+static int thread_lock_try_do(thread_lock *this_, int write) {
+#ifdef HAVE_POSIX_THREADS
+    return !(write ? pthread_rwlock_trywrlock(this_) : pthread_rwlock_tryrdlock(this_));
+#elif HAVE_API_WIN32
+    DWORD res = WaitForSingleObject(*this_, 0);
+    if (res == WAIT_FAILED) {
+        dbg(lvl_error, "error %lu, lock=%p", GetLastError(), this_);
+        return 0;
+    }
+    return res == WAIT_OBJECT_0;
+#else
+    return 1;
+#endif
+}
+
+/**
+ * @brief Releases a lock acquired for reading or writing.
+ *
+ * @param this_ The lock to release
+ */
+static void thread_lock_done(thread_lock *this_) {
+#ifdef HAVE_POSIX_THREADS
+    int err = pthread_rwlock_unlock(this_);
+    if (err) {
+        dbg(lvl_error, "error %d %s, lock=%p", err, thread_format_error(err), this_);
+        abort();
+    }
+#elif HAVE_API_WIN32
+    ReleaseMutex(*this_);
+#endif
+}
+
+void thread_lock_acquire_read(thread_lock *this_) {
+    thread_lock_do(this_, 0);
 }
 
 int thread_lock_try_read(thread_lock *this_) {
-#ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_tryrdlock(this_);
-    if (err) {
-        dbg(lvl_debug, "error %d %s, lock=%p", err, thread_format_error(err), this_);
-        return 0;
-    }
-    return 1;
-#elif HAVE_API_WIN32
-    DWORD res;
-    DWORD err;
-    res = WaitForSingleObject(*this_, INFINITE);
-    if (res == WAIT_FAILED) {
-        err = GetLastError();
-        dbg(lvl_error, "error %d, lock=%p", err, this_);
-        return 0;
-    }
-    return 1;
-#else
-    return 1;
-#endif
+    return thread_lock_try_do(this_, 0);
 }
 
 void thread_lock_release_read(thread_lock *this_) {
-#ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_unlock(this_);
-    if (err) {
-        dbg(lvl_error, "error %d %s, lock=%p", err, thread_format_error(err), this_);
-        abort();
-    }
-#elif HAVE_API_WIN32
-    ReleaseMutex(*this_);
-#endif
+    thread_lock_done(this_);
 }
 
 void thread_lock_acquire_write(thread_lock *this_) {
-#ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_wrlock(this_);
-    if (err) {
-        dbg(lvl_error, "error %d %s, lock=%p", err, thread_format_error(err), this_);
-        abort();
-    }
-#elif HAVE_API_WIN32
-    DWORD res;
-    DWORD err;
-    res = WaitForSingleObject(*this_, INFINITE);
-    if (res == WAIT_FAILED) {
-        err = GetLastError();
-        dbg(lvl_error, "error %d, lock=%p", err, this_);
-        abort();
-    }
-#endif
+    thread_lock_do(this_, 1);
 }
 
 int thread_lock_try_write(thread_lock *this_) {
-#ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_trywrlock(this_);
-    if (err) {
-        dbg(lvl_debug, "error %d %s, lock=%p", err, thread_format_error(err), this_);
-        return 0;
-    }
-    return 1;
-#elif HAVE_API_WIN32
-    DWORD res;
-    DWORD err;
-    res = WaitForSingleObject(*this_, INFINITE);
-    if (res == WAIT_FAILED) {
-        err = GetLastError();
-        dbg(lvl_error, "error %d, lock=%p", err, this_);
-        return 0;
-    }
-    return 1;
-#else
-    return 1;
-#endif
+    return thread_lock_try_do(this_, 1);
 }
 
 void thread_lock_release_write(thread_lock *this_) {
-#ifdef HAVE_POSIX_THREADS
-    int err = pthread_rwlock_unlock(this_);
-    if (err) {
-        dbg(lvl_error, "error %d %s, lock=%p", err, thread_format_error(err), this_);
-        abort();
-    }
-#elif HAVE_API_WIN32
-    ReleaseMutex(*this_);
-#endif
+    thread_lock_done(this_);
 }
