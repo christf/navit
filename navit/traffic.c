@@ -6000,55 +6000,48 @@ static struct traffic_response *traffic_get_response_from_parsed_xml(struct xml_
     return ret;
 }
 
-struct traffic_message **traffic_get_messages_from_xml_file(struct traffic *this_, char *filename) {
-    struct traffic_message **ret = NULL;
-    struct xml_state state;
-    int read_success = 0;
+/**
+ * @brief Parses XML data into parser state.
+ *
+ * @param xml The XML data to parse
+ * @param state The parser state
+ *
+ * @return Whether parsing succeeded
+ */
+static int traffic_xml_parse_text(const char *xml, struct xml_state *state) {
+    memset(state, 0, sizeof(struct xml_state));
+    return xml_parse_text(xml, state, traffic_xml_start, traffic_xml_end, traffic_xml_text);
+}
 
+struct traffic_message **traffic_get_messages_from_xml_file(struct traffic *this_, char *filename) {
+    struct xml_state state;
     if (filename && file_exists(filename)) {
         memset(&state, 0, sizeof(struct xml_state));
-        read_success = xml_parse_file(filename, &state, traffic_xml_start, traffic_xml_end, traffic_xml_text);
-        if (read_success) {
-            ret = traffic_get_messages_from_parsed_xml(&state);
-        } else {
-            dbg(lvl_error, "could not retrieve stored traffic messages");
-        }
-    } /* if (traffic_filename) */
-    return ret;
+        if (xml_parse_file(filename, &state, traffic_xml_start, traffic_xml_end, traffic_xml_text))
+            return traffic_get_messages_from_parsed_xml(&state);
+        dbg(lvl_error, "could not retrieve stored traffic messages");
+    }
+    return NULL;
 }
 
 struct traffic_response *traffic_get_response_from_xml_string(struct traffic *this_, char *xml) {
-    struct traffic_response *ret = NULL;
     struct xml_state state;
-    int read_success = 0;
-
     if (xml) {
-        memset(&state, 0, sizeof(struct xml_state));
-        read_success = xml_parse_text(xml, &state, traffic_xml_start, traffic_xml_end, traffic_xml_text);
-        if (read_success) {
-            ret = traffic_get_response_from_parsed_xml(&state);
-        } else {
-            dbg(lvl_error, "no data supplied");
-        }
-    } /* if (xml) */
-    return ret;
+        if (traffic_xml_parse_text(xml, &state))
+            return traffic_get_response_from_parsed_xml(&state);
+        dbg(lvl_error, "no data supplied");
+    }
+    return NULL;
 }
 
 struct traffic_message **traffic_get_messages_from_xml_string(struct traffic *this_, char *xml) {
-    struct traffic_message **ret = NULL;
     struct xml_state state;
-    int read_success = 0;
-
     if (xml) {
-        memset(&state, 0, sizeof(struct xml_state));
-        read_success = xml_parse_text(xml, &state, traffic_xml_start, traffic_xml_end, traffic_xml_text);
-        if (read_success) {
-            ret = traffic_get_messages_from_parsed_xml(&state);
-        } else {
-            dbg(lvl_error, "no data supplied");
-        }
-    } /* if (xml) */
-    return ret;
+        if (traffic_xml_parse_text(xml, &state))
+            return traffic_get_messages_from_parsed_xml(&state);
+        dbg(lvl_error, "no data supplied");
+    }
+    return NULL;
 }
 
 struct traffic_message **traffic_get_stored_messages(struct traffic *this_) {
