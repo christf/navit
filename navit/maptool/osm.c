@@ -1989,7 +1989,7 @@ void osm_end_node(struct maptool_osm *osm) {
         if (item_is_town(*item_bin) && attr_strings[attr_string_population])
             item_bin_set_type_by_population(item_bin, atoi(attr_strings[attr_string_population]));
         item_bin_add_coord(item_bin, &current_node->c, 1);
-        if (barrier_flags >= 0) {
+        if (barrier_flags != -1) {
             if (current_node)
                 current_node->is_barrier = 1;
             item_bin_add_attr_int(item_bin, attr_flags,
