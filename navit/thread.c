@@ -82,7 +82,7 @@ char *thread_format_error(int error) {
  *
  * @param data Pointer to a `struct thread_main_data` encapsulating the main function and its argument.
  */
-static DWORD WINAPI *thread_main_wrapper(_In_ LPVOID data) {
+static DWORD WINAPI thread_main_wrapper(LPVOID data) {
     struct thread_main_data *main_data = (struct thread_main_data *)data;
     DWORD ret = (DWORD)(main_data->main(main_data->data));
     g_free(main_data);
@@ -106,6 +106,7 @@ thread *thread_new(int (*main)(void *), void *data, char *name) {
     err = pthread_create(ret, NULL, thread_main_wrapper, (void *)main_data);
     if (err) {
         dbg(lvl_error, "error %d %s, thread=%p", err, thread_format_error(err), ret);
+        g_free(main_data);
         g_free(ret);
         return NULL;
     }
@@ -127,6 +128,7 @@ thread *thread_new(int (*main)(void *), void *data, char *name) {
     if (!*ret) {
         err = GetLastError();
         dbg(lvl_error, "error %d, thread=%p", err, ret);
+        g_free(main_data);
         g_free(ret);
         return NULL;
     }
