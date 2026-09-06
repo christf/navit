@@ -96,6 +96,11 @@ struct traffic_priv {
     thread_event *queue_event;           /**< Event that is signaled when a request is posted to the queue */
     char *subscription_id;               /**< Subscription ID */
     int exiting;                         /**< Whether the plugin is shutting down */
+    struct callback *traffic_cb;         /**< Callback registered with the navit instance */
+    struct callback *position_cb;        /**< Callback registered with the navit instance */
+    struct callback *destination_cb;     /**< Callback registered with the navit instance */
+    struct callback *status_cb;          /**< Callback registered with the navigation instance */
+    struct navigation *navigation;       /**< The navigation instance, registered callbacks on */
 };
 
 /**
@@ -136,6 +141,26 @@ void traffic_traff_http_destroy(struct traffic_priv *this_) {
         this_->queue_event = NULL;
         thread_lock_destroy(this_->queue_lock);
         this_->queue_lock = NULL;
+    }
+    if (this_->traffic_cb) {
+        navit_remove_callback(this_->nav, this_->traffic_cb);
+        callback_destroy(this_->traffic_cb);
+        this_->traffic_cb = NULL;
+    }
+    if (this_->position_cb) {
+        navit_remove_callback(this_->nav, this_->position_cb);
+        callback_destroy(this_->position_cb);
+        this_->position_cb = NULL;
+    }
+    if (this_->destination_cb) {
+        navit_remove_callback(this_->nav, this_->destination_cb);
+        callback_destroy(this_->destination_cb);
+        this_->destination_cb = NULL;
+    }
+    if (this_->status_cb) {
+        navigation_unregister_callback(this_->navigation, attr_nav_status, this_->status_cb);
+        callback_destroy(this_->status_cb);
+        this_->status_cb = NULL;
     }
     g_free(this_->subscription_id);
     this_->subscription_id = NULL;
@@ -622,18 +647,21 @@ static int traffic_traff_http_init(struct traffic_priv *this_) {
     /* TODO anything else to do here? */
 
     /* register callback for traffic module so we can finish setting up */
-    navit_add_callback(this_->nav,
-                       callback_new_attr_1(callback_cast(traffic_traff_http_traffic_callback), attr_traffic, this_));
+    this_->traffic_cb = callback_new_attr_1(callback_cast(traffic_traff_http_traffic_callback), attr_traffic, this_);
+    navit_add_callback(this_->nav, this_->traffic_cb);
 
     /* register callbacks for position and destination changes */
-    navit_add_callback(this_->nav, callback_new_attr_1(callback_cast(traffic_traff_http_position_callback),
-                                                       attr_position_coord_geo, this_));
-    navit_add_callback(this_->nav, callback_new_attr_1(callback_cast(traffic_traff_http_destination_callback),
-                                                       attr_destination, this_));
-    if ((navigation = navit_get_navigation(this_->nav)))
-        navigation_register_callback(
-            navigation, attr_nav_status,
-            callback_new_attr_1(callback_cast(traffic_traff_http_status_callback), attr_nav_status, this_));
+    this_->position_cb =
+        callback_new_attr_1(callback_cast(traffic_traff_http_position_callback), attr_position_coord_geo, this_);
+    navit_add_callback(this_->nav, this_->position_cb);
+    this_->destination_cb =
+        callback_new_attr_1(callback_cast(traffic_traff_http_destination_callback), attr_destination, this_);
+    navit_add_callback(this_->nav, this_->destination_cb);
+    if ((this_->navigation = navit_get_navigation(this_->nav))) {
+        this_->status_cb =
+            callback_new_attr_1(callback_cast(traffic_traff_http_status_callback), attr_nav_status, this_);
+        navigation_register_callback(this_->navigation, attr_nav_status, this_->status_cb);
+    }
 
     return 1;
 }
