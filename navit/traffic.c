@@ -4546,6 +4546,8 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                                     break;
                                 }
                             }
+                        g_free(loc_ms);
+                        route_free_selection(rt_ms);
                     }
                     ret |= MESSAGE_UPDATE_SEGMENTS;
                 }
