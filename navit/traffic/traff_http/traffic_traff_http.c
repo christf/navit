@@ -76,6 +76,9 @@
 /** How often the worker thread re-checks for shutdown while waiting for the next poll due, in msec */
 #define EXIT_RECHECK_INTERVAL 1000
 
+/** Delay before dispatching a traffic feed to the main loop, in msec */
+#define FEED_DISPATCH_DELAY 1
+
 /**
  * @brief Stores information about the plugin instance.
  */
@@ -281,7 +284,7 @@ static int traffic_traff_http_process_response(struct traffic_priv *this_, struc
             dbg(lvl_debug, "response contains messages, posting traffic feed");
             cb = g_new0(struct callback *, 1);
             *cb = callback_new_3(callback_cast(traffic_traff_http_on_feed_received), this_->traffic, messages, cb);
-            event_add_timeout(1, 0, *cb);
+            event_add_timeout(FEED_DISPATCH_DELAY, 0, *cb);
             response->messages = NULL;
         }
     } else {
