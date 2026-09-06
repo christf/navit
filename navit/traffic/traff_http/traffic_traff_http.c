@@ -271,8 +271,14 @@ static void traffic_traff_http_on_feed_received(struct traffic *traffic, struct 
  */
 static int traffic_traff_http_process_response(struct traffic_priv *this_, struct traffic_response *response) {
     struct callback **cb;
-    struct traffic_message **messages = response->messages;
-    int ok = !strcmp(response->status, "OK") || !strcmp(response->status, "PARTIALLY_COVERED");
+    struct traffic_message **messages;
+    int ok;
+
+    if (!response)
+        return 0;
+    messages = response->messages;
+    ok = response->status != NULL
+         && (!strcmp(response->status, "OK") || !strcmp(response->status, "PARTIALLY_COVERED"));
     if (ok) {
         if (response->subscription_id) {
             g_free(this_->subscription_id);
