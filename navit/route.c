@@ -2440,17 +2440,11 @@ static void route_graph_change_traffic_distortion(struct route_graph *this, stru
     route_graph_add_traffic_distortion(this, profile, item, 1);
 }
 
-/**
- * @brief Adds a barrier (e.g. a bollard or a lift gate) to the route graph
- *
- * The barrier is added as a point at its location. If the barrier restricts access for the given
- * vehicle profile, the point is marked as blocked, so that no route can cross it. Note that the
- * barrier only blocks traffic if the streets are split at its location, which is done by the maptool
- * for barrier nodes.
- *
- * @param this The route graph to add to
- * @param profile The vehicle profile to use for access checks
- * @param item The item to add, must be of a barrier type (e.g. type_barrier_bollard)
+/*
+ * Add a barrier as a blocked point unless the profile can pass it. Unlike a
+ * street segment a point has no direction, so passing in either direction
+ * makes it no obstacle; the point only takes effect if maptool split the
+ * street at the barrier node.
  */
 static void route_graph_add_barrier(struct route_graph *this, struct vehicleprofile *profile, struct item *item) {
     struct coord c;
@@ -2465,7 +2459,6 @@ static void route_graph_add_barrier(struct route_graph *this, struct vehicleprof
     if (item_attr_get(item, attr_flags, &attr))
         barrier_flags = attr.u.num;
 
-    /* If the barrier permits this type of vehicle to pass, it is no obstacle */
     if (((barrier_flags & profile->flags_forward_mask) == profile->flags)
         || ((barrier_flags & profile->flags_reverse_mask) == profile->flags))
         return;
