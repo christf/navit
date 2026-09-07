@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Korean <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -187,9 +187,6 @@ msgstr ""
 #, c-format
 msgid "%sinto the %s"
 msgstr "%s %s 방향으로"
-
-msgid "When possible, please turn around"
-msgstr "가능하면 유턴하세요"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -381,6 +378,9 @@ msgstr "목적지에 도착하였습니다."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s 목적지에 도착합니다"
+
+msgid "When possible, please turn around"
+msgstr "가능하면 유턴하세요"
 
 msgid "Interchange"
 msgstr ""
