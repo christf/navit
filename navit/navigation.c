@@ -1680,7 +1680,9 @@ static struct navigation_itm *navigation_itm_new(struct navigation *this_, struc
  *
  * This function counts how many times the driver theoretically could
  * turn right/left between two navigation items, not counting the final
- * turn itself.
+ * turn itself. Only side streets on the same side as the maneuver are
+ * counted, so the count matches the number of streets the driver will
+ * actually pass before the turn.
  *
  * @param from The navigation item which should form the start
  * @param to The navigation item which should form the end
@@ -3435,8 +3437,7 @@ static char *show_maneuver(struct navigation *nav, struct navigation_itm *itm, s
                                                           get_count_str(skip_roads + 1), direction);
                         /*and preserve skip_roads to signal that we already have an instruction*/
                     } else {
-                        g_free(d);
-                        d = g_strdup_printf(_("after %i roads"), skip_roads);
+                        /* counting that far (>=6) is not meaningful: fall back to the plain distance announcement */
                         skip_roads = 0; /*signal an instruction still has to be created*/
                     }
                 }
