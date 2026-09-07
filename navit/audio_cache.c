@@ -173,6 +173,7 @@ static GList *find_longest_match(GList *files, const char *text, const char *suf
     char *best_decoded = NULL;
     int best_len = 0;
     int suffix_len = suffix ? strlen(suffix) : 0;
+    int text_len = strlen(text);
 
     for (f = files; f; f = g_list_next(f)) {
         char *path = (char *)f->data;
@@ -186,6 +187,11 @@ static GList *find_longest_match(GList *files, const char *text, const char *suf
             }
         }
         decoded = audio_cache_name_decode(basename);
+        if (strlen(decoded) > text_len) {
+            g_free(decoded);
+            g_free(basename);
+            continue;
+        }
         int match_len = longest_prefix_match(text, decoded);
         if (match_len > best_len) {
             best_len = match_len;
