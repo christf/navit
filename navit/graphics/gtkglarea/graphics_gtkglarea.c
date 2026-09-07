@@ -91,13 +91,13 @@ enum draw_cmd_type {
     CMD_LINE_STRIP,
     CMD_LINE_LOOP,
     CMD_TEXTURED_QUADS,
-    CMD_CLIP_ON,   /* glEnable(GL_SCISSOR_TEST) */
-    CMD_CLIP_OFF,  /* glDisable(GL_SCISSOR_TEST) */
-    CMD_CLIP_RECT, /* glScissor(x, y, w, h) */
-    CMD_STENCIL_CLEAR,  /* clear stencil, enable stencil, INCR on draw */
-    CMD_STENCIL_HOLES,  /* switch to DECR on draw */
-    CMD_STENCIL_APPLY,  /* re-enable color, EQUAL(1), KEEP */
-    CMD_STENCIL_END,    /* disable stencil test */
+    CMD_CLIP_ON,       /* glEnable(GL_SCISSOR_TEST) */
+    CMD_CLIP_OFF,      /* glDisable(GL_SCISSOR_TEST) */
+    CMD_CLIP_RECT,     /* glScissor(x, y, w, h) */
+    CMD_STENCIL_CLEAR, /* clear stencil, enable stencil, INCR on draw */
+    CMD_STENCIL_HOLES, /* switch to DECR on draw */
+    CMD_STENCIL_APPLY, /* re-enable color, EQUAL(1), KEEP */
+    CMD_STENCIL_END,   /* disable stencil test */
 };
 
 /* A batched draw command — carries per-command color and clip state */
@@ -391,13 +391,14 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
     ensure_vertex_capacity(gr, gr->vertex_count + count);
     ensure_cmd_capacity(gr, gr->cmd_count + 1);
     if (gr->vertex_count + count > gr->vertex_capacity) {
-        dbg(lvl_error, "gtkglarea: vertex buffer limit reached (%d + %d > %d)",
-            gr->vertex_count, count, gr->vertex_capacity);
+        dbg(lvl_error, "gtkglarea: vertex buffer limit reached (%d + %d > %d)", gr->vertex_count, count,
+            gr->vertex_capacity);
         return -1;
     }
     if (gr->cmd_count > 0) {
         DrawCmd *prev = &gr->commands[gr->cmd_count - 1];
-        if (prev->type == type && prev->tex == tex && prev->r == gr->cur_r && prev->g == gr->cur_g && prev->b == gr->cur_b && prev->a == gr->cur_a && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
+        if (prev->type == type && prev->tex == tex && prev->r == gr->cur_r && prev->g == gr->cur_g
+            && prev->b == gr->cur_b && prev->a == gr->cur_a && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
             prev->count += count;
             memcpy(&gr->vertices[gr->vertex_count], verts, count * sizeof(Vertex));
             gr->vertex_count += count;

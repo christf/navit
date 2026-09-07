@@ -65,7 +65,8 @@ void synthesizer_destroy(struct synthesizer *this_) {
     navit_object_destroy((struct navit_object *)this_);
 }
 
-int synthesizer_synthesize(struct synthesizer *this_, const char *text, const char *output_path, synthesizer_batch_id batch) {
+int synthesizer_synthesize(struct synthesizer *this_, const char *text, const char *output_path,
+                           synthesizer_batch_id batch) {
     dbg(lvl_debug, "this_=%p text='%s' output='%s' batch=%llu", this_, text, output_path, batch);
     return (this_->meth.synthesize)(this_->priv, text, output_path, batch);
 }
