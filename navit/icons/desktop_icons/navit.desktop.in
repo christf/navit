@@ -9,6 +9,7 @@ Comment[de]=Ein vektorbasiertes Navigationsprogramm
 Comment[fr]=Le logiciel opensource de navigation vectorielle
 Exec=@NAVIT_BINARY@
 Icon=@PACKAGE@
+StartupWMClass=navit
 StartupNotify=true
 Terminal=false
 Type=Application
