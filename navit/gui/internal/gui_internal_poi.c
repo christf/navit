@@ -3,6 +3,7 @@
 #include "color.h"
 #include "coord.h"
 #include "debug.h"
+#include "event.h"
 #include "fib.h"
 #include "glib_slice.h"
 #include "graphics.h"
@@ -622,40 +623,310 @@ void gui_internal_cmd_pois_filter(struct gui_priv *this, struct widget *wm, void
     gui_internal_menu_render(this);
 }
 
-/**
- * @brief Do POI search specified by poi_param and display POIs found
- *
- * @param this The graphics context.
- * @param wm called widget.
- * @param data event data, reference to poi_param or NULL.
- */
-void gui_internal_cmd_pois(struct gui_priv *this, struct widget *wm, void *data) {
-    struct map_selection *sel, *selm;
-    struct coord c, center;
+#define POI_BATCH_SIZE 2000
+
+struct poi_search_state {
+    struct gui_priv *this;
+    struct widget *wm;
+    struct poi_param *param;
+    int param_free;
+    struct coord center;
+    enum projection pro;
+    int dist, prevdist;
+    int maxitem, it, cnt;
+    struct item_data *items;
+    struct fibheap *fh;
+    struct selector *isel;
+    int pagenb;
+    struct widget *w2, *searching_label, *cancel_button, *menu, *topbox;
+    struct attr route;
     struct mapset_handle *h;
     struct map *m;
     struct map_rect *mr;
-    struct item *item;
-    struct widget *wi, *w, *w2, *wb, *wtable, *row;
-    enum projection pro = wm->c.pro;
-    struct poi_param *param;
-    int param_free = 0;
-    int idist, dist;
-    struct selector *isel;
-    int pagenb;
-    int prevdist;
-    // Starting value and increment of count of items to be extracted
-    const int pagesize = 50;
-    int maxitem, it = 0, i;
-    struct item_data *items;
-    struct fibheap *fh = fh_makekeyheap();
-    int cnt = 0;
+    struct map_selection *sel, *selm;
+    struct callback *idle_cb;
+    struct event_idle *idle_ev;
+    int cancel;
+    int spin_frame;
+};
+
+static void gui_internal_pois_cleanup(struct poi_search_state *state) {
+    if (state->idle_ev) {
+        event_remove_idle(state->idle_ev);
+        state->idle_ev = NULL;
+    }
+    if (state->idle_cb) {
+        callback_destroy(state->idle_cb);
+        state->idle_cb = NULL;
+    }
+    if (state->mr) {
+        map_rect_destroy(state->mr);
+        state->mr = NULL;
+    }
+    if (state->selm) {
+        map_selection_destroy(state->selm);
+        state->selm = NULL;
+    }
+    if (state->sel) {
+        map_selection_destroy(state->sel);
+        state->sel = NULL;
+    }
+    if (state->h) {
+        mapset_close(state->h);
+        state->h = NULL;
+    }
+    state->this->search_active = 0;
+}
+
+static void gui_internal_pois_display_results(struct poi_search_state *state) {
+    struct gui_priv *this = state->this;
+    struct widget *wtable, *wi, *row, *wl, *wt;
     struct table_data *td;
-    struct widget *wl, *wt;
     char buffer[32];
     struct poi_param *paramnew;
+    const int pagesize = 50;
+    int i, key, firstrow, currow;
+    struct item_data *data;
+
+    gui_internal_pois_cleanup(state);
+
+    state->w2->children = g_list_remove(state->w2->children, state->searching_label);
+    g_free(state->searching_label->text);
+    if (state->cancel_button) {
+        struct widget *button_bar = gui_internal_menu_data(this)->button_bar;
+        if (button_bar)
+            button_bar->children = g_list_remove(button_bar->children, state->cancel_button);
+    }
+
+    wtable =
+        gui_internal_widget_table_new(this, gravity_left_top | flags_fill | flags_expand | orientation_vertical, 1);
+    td = wtable->data;
+
+    gui_internal_widget_append(state->w2, wtable);
+
+    for (i = 0;; i++) {
+        key = fh_minkey(state->fh);
+        data = fh_extractmin(state->fh);
+        if (data == NULL) {
+            dbg(lvl_debug, "Empty heap: maxitem = %i, it = %i, dist = %i", state->maxitem, state->it, state->dist);
+            break;
+        }
+        dbg(lvl_debug, "dist1: %i, dist2: %i", data->dist, (-key) >> 10);
+        if (i == (state->it - pagesize * state->pagenb) && data->dist > state->prevdist)
+            state->prevdist = data->dist;
+        wi = gui_internal_cmd_pois_item(this, &state->center, &data->item, &data->c, state->route.u.route, data->dist,
+                                        data->label);
+        wi->c.x = data->c.x;
+        wi->c.y = data->c.y;
+        wi->c.pro = state->pro;
+        wi->background = this->background;
+        row = gui_internal_widget_table_row_new(this, gravity_left | flags_fill | orientation_horizontal);
+        gui_internal_widget_append(row, wi);
+        row->datai = data->dist;
+        gui_internal_widget_prepend(wtable, row);
+        g_free(data->label);
+    }
+
+    fh_deleteheap(state->fh);
+    free(state->items);
+    state->fh = NULL;
+    state->items = NULL;
+
+    row = gui_internal_widget_table_row_new(this, gravity_left | flags_fill | orientation_horizontal);
+    row->datai = 100000000;
+    gui_internal_widget_append(wtable, row);
+    wl = gui_internal_box_new(this, gravity_left_center | orientation_horizontal | flags_fill);
+    gui_internal_widget_append(row, wl);
+    if (state->it == state->maxitem) {
+        paramnew = gui_internal_poi_param_clone(state->param);
+        paramnew->pagenb++;
+        paramnew->count = state->it;
+        snprintf(buffer, sizeof(buffer), "Get more (up to %d items)...", (paramnew->pagenb + 1) * pagesize);
+        wt = gui_internal_label_new(this, buffer);
+        gui_internal_widget_append(wl, wt);
+        wt->func = gui_internal_cmd_pois_more;
+        wt->data = paramnew;
+        wt->data_free = gui_internal_poi_param_free;
+        wt->state |= STATE_SENSITIVE;
+        wt->c = state->wm->c;
+    } else {
+        static int dist[] = {1, 5, 10, 0};
+        wt = gui_internal_label_new(this, "Set distance to");
+        gui_internal_widget_append(wl, wt);
+        for (i = 0; dist[i]; i++) {
+            paramnew = gui_internal_poi_param_clone(state->param);
+            paramnew->dist += dist[i];
+            paramnew->count = state->it;
+            snprintf(buffer, sizeof(buffer), " %i ", 10 * (paramnew->dist + 1));
+            wt = gui_internal_label_new(this, buffer);
+            gui_internal_widget_append(wl, wt);
+            wt->func = gui_internal_cmd_pois_more;
+            wt->data = paramnew;
+            wt->data_free = gui_internal_poi_param_free;
+            wt->state |= STATE_SENSITIVE;
+            wt->c = state->wm->c;
+        }
+        wt = gui_internal_label_new(this, "km.");
+        gui_internal_widget_append(wl, wt);
+    }
+    graphics_draw_mode(this->gra, draw_mode_begin);
+    gui_internal_menu_render(this);
+    graphics_draw_mode(this->gra, draw_mode_end);
+    td = wtable->data;
+    if (td->bottom_row != NULL) {
+        firstrow = g_list_index(wtable->children, td->top_row->data);
+        while (firstrow >= 0) {
+            currow = g_list_index(wtable->children, td->bottom_row->data) - firstrow;
+            if (currow < 0) {
+                dbg(lvl_debug, "Can't find bottom row in children list. Stop paging.");
+                break;
+            }
+            if (currow >= state->param->count)
+                break;
+            if (!(td->scroll_buttons.next_button->state & STATE_SENSITIVE)) {
+                dbg(lvl_debug, "Reached last page but item %i not found. Stop paging.", state->param->count);
+                break;
+            }
+            gui_internal_table_button_next(this, td->scroll_buttons.next_button, NULL);
+        }
+    }
+    graphics_draw_mode(this->gra, draw_mode_begin);
+    gui_internal_menu_render(this);
+    graphics_draw_mode(this->gra, draw_mode_end);
+    if (state->param_free)
+        g_free(state->param);
+    g_free(state);
+}
+
+static void gui_internal_pois_idle_process(struct poi_search_state *state) {
+    struct gui_priv *this = state->this;
+    struct item *item;
+    struct coord c;
+    int idist, batch = POI_BATCH_SIZE;
+    struct attr attr;
+    struct item_data *data;
+    char *label;
+
+    if (state->cancel)
+        goto cancel;
+    if (!g_list_find(this->root.children, state->topbox)) {
+        state->cancel = 1;
+        goto cancel;
+    }
+    while (batch--) {
+        while (1) {
+            if (state->mr) {
+                item = map_rect_get_item(state->mr);
+                if (item)
+                    break;
+                map_rect_destroy(state->mr);
+                state->mr = NULL;
+            }
+            if (state->selm) {
+                map_selection_destroy(state->selm);
+                state->selm = NULL;
+            }
+            state->m = mapset_next(state->h, 1);
+            if (!state->m)
+                goto done;
+            state->selm = map_selection_dup_pro(state->sel, state->pro, map_projection(state->m));
+            state->mr = map_rect_new(state->m, state->selm);
+        }
+        if (gui_internal_cmd_pois_item_selected(state->param, item) && item_coord_get_pro(item, &c, 1, state->pro)
+            && coord_rect_contains(&state->sel->u.c_rect, &c)
+            && (idist = transform_distance(state->pro, &state->center, &c)) < state->dist) {
+            item_attr_rewind(item);
+            if (item->type == type_house_number) {
+                label = gui_internal_compose_item_address_string(item, 1);
+            } else if (item_attr_get(item, attr_label, &attr)) {
+                label = map_convert_string(item->map, attr.u.str);
+                if (item->type == type_poly_building && item_attr_get(item, attr_house_number, &attr)) {
+                    if (strcmp(label, map_convert_string_tmp(item->map, attr.u.str)) == 0) {
+                        g_free(label);
+                        continue;
+                    }
+                }
+            } else {
+                label = g_strdup("");
+            }
+            if (state->it >= state->maxitem) {
+                data = fh_extractmin(state->fh);
+                g_free(data->label);
+                data->label = NULL;
+            } else {
+                data = &state->items[state->it++];
+            }
+            data->label = label;
+            data->item = *item;
+            data->c = c;
+            data->dist = idist;
+            fh_insertkey(state->fh, -((idist << 10) + state->cnt++), data);
+            if (state->it == state->maxitem)
+                state->dist = (-fh_minkey(state->fh)) >> 10;
+        }
+    }
+    state->spin_frame++;
+    {
+        static const short dx[12] = {0, 6, 10, 12, 10, 6, 0, -6, -10, -12, -10, -6};
+        static const short dy[12] = {-12, -10, -6, 0, 6, 10, 12, 10, 6, 0, -6, -10};
+        struct point center;
+        struct point clear_area;
+        struct point runner;
+        int idx;
+        center.x = state->searching_label->p.x - 30;
+        center.y = state->searching_label->p.y + state->searching_label->h / 2;
+        idx = state->spin_frame % 12;
+        runner.x = center.x + dx[idx];
+        runner.y = center.y + dy[idx];
+        clear_area.x = center.x - 14;
+        clear_area.y = center.y - 14;
+        graphics_draw_mode(this->gra, draw_mode_begin);
+        gui_internal_widget_render(this, state->searching_label);
+        graphics_draw_rectangle(this->gra, this->background, &clear_area, 29, 29);
+        graphics_draw_circle(this->gra, this->foreground, &center, 24);
+        runner.x -= 3;
+        runner.y -= 3;
+        graphics_draw_rectangle(this->gra, this->foreground, &runner, 7, 7);
+        graphics_draw_mode(this->gra, draw_mode_end);
+    }
+    return;
+
+done:
+    gui_internal_pois_display_results(state);
+    return;
+
+cancel:
+    gui_internal_pois_cleanup(state);
+    if (state->items)
+        free(state->items);
+    if (state->fh)
+        fh_deleteheap(state->fh);
+    if (state->param_free)
+        g_free(state->param);
+    g_free(state);
+}
+
+static void gui_internal_pois_idle_cb(struct poi_search_state *state) {
+    gui_internal_pois_idle_process(state);
+}
+
+static void gui_internal_cmd_pois_cancel(struct gui_priv *this, struct widget *w, void *data) {
+    struct poi_search_state *state = data;
+    state->cancel = 1;
+}
+
+void gui_internal_cmd_pois(struct gui_priv *this, struct widget *wm, void *data) {
+    struct widget *w, *wb, *w2;
+    struct poi_param *param;
+    int param_free = 0;
     struct attr route;
+    struct selector *isel;
+    int pagenb, dist, prevdist, maxitem;
+    const int pagesize = 50;
+    struct poi_search_state *state;
     dbg(lvl_debug, "POIs...");
+    if (this->search_active)
+        return;
     if (data) {
         param = data;
     } else {
@@ -675,11 +946,8 @@ void gui_internal_cmd_pois(struct gui_priv *this, struct widget *wm, void *data)
     pagenb = param->pagenb;
     prevdist = param->dist * 10000;
     maxitem = pagesize * (pagenb + 1);
-    items = g_new0(struct item_data, maxitem);
-
     dbg(lvl_debug, "Params: sel = %i, selnb = %i, pagenb = %i, dist = %i, filterstr = %s, AddressFilterType= %d",
         param->sel, param->selnb, param->pagenb, param->dist, param->filterstr, param->AddressFilterType);
-
     wb = gui_internal_menu(this, isel ? isel->name : _("POIs"));
     w = gui_internal_box_new(this, gravity_top_center | orientation_vertical | flags_expand | flags_fill);
     gui_internal_widget_append(wb, w);
@@ -687,170 +955,51 @@ void gui_internal_cmd_pois(struct gui_priv *this, struct widget *wm, void *data)
         gui_internal_widget_append(w, gui_internal_cmd_pois_selector(this, &wm->c, pagenb));
     w2 = gui_internal_box_new(this, gravity_top_center | orientation_vertical | flags_expand | flags_fill);
     gui_internal_widget_append(w, w2);
-
-    sel = map_selection_rect_new(&wm->c, dist * transform_scale(abs(wm->c.y) + dist * 1.5), 18);
-    center.x = wm->c.x;
-    center.y = wm->c.y;
-    h = mapset_open(navit_get_mapset(this->nav));
-    while ((m = mapset_next(h, 1))) {
-        selm = map_selection_dup_pro(sel, pro, map_projection(m));
-        mr = map_rect_new(m, selm);
-        dbg(lvl_debug, "mr=%p", mr);
-        if (mr) {
-            while ((item = map_rect_get_item(mr))) {
-                if (gui_internal_cmd_pois_item_selected(param, item) && item_coord_get_pro(item, &c, 1, pro)
-                    && coord_rect_contains(&sel->u.c_rect, &c)
-                    && (idist = transform_distance(pro, &center, &c)) < dist) {
-                    struct item_data *data;
-                    struct attr attr;
-                    char *label;
-                    item_attr_rewind(item);
-                    if (item->type == type_house_number) {
-                        label = gui_internal_compose_item_address_string(item, 1);
-                    } else if (item_attr_get(item, attr_label, &attr)) {
-                        label = map_convert_string(item->map, attr.u.str);
-                        // Buildings which label is equal to addr:housenumber value
-                        // are duplicated by item_house_number. Don't include such
-                        // buildings into the list. This is true for OSM maps created with
-                        // maptool patched with #859 latest patch.
-                        // FIXME: For non-OSM maps, we probably would better don't skip these items.
-                        if (item->type == type_poly_building && item_attr_get(item, attr_house_number, &attr)) {
-                            if (strcmp(label, map_convert_string_tmp(item->map, attr.u.str)) == 0) {
-                                g_free(label);
-                                continue;
-                            }
-                        }
-
-                    } else {
-                        label = g_strdup("");
-                    }
-
-                    if (it >= maxitem) {
-                        data = fh_extractmin(fh);
-                        g_free(data->label);
-                        data->label = NULL;
-                    } else {
-                        data = &items[it++];
-                    }
-                    data->label = label;
-                    data->item = *item;
-                    data->c = c;
-                    data->dist = idist;
-                    // Key expression is a workaround to fight
-                    // probable heap collisions when two objects
-                    // are at the same distance. But it destroys
-                    // right order of POIs 2048 km away from cener
-                    // and if table grows more than 1024 rows.
-                    fh_insertkey(fh, -((idist << 10) + cnt++), data);
-                    if (it == maxitem)
-                        dist = (-fh_minkey(fh)) >> 10;
-                }
-            }
-            map_rect_destroy(mr);
+    if (param->sel || param->filter || param->dist || param->pagenb) {
+        state = g_new0(struct poi_search_state, 1);
+        state->this = this;
+        state->wm = wm;
+        state->param = gui_internal_poi_param_clone(param);
+        state->param_free = 1;
+        state->center.x = wm->c.x;
+        state->center.y = wm->c.y;
+        state->pro = wm->c.pro;
+        state->dist = dist;
+        state->prevdist = prevdist;
+        state->maxitem = maxitem;
+        state->it = 0;
+        state->cnt = 0;
+        state->items = g_new0(struct item_data, maxitem);
+        state->fh = fh_makekeyheap();
+        state->isel = isel;
+        state->pagenb = pagenb;
+        state->w2 = w2;
+        state->menu = wb;
+        state->topbox = g_list_last(this->root.children)->data;
+        state->route = route;
+        state->cancel = 0;
+        state->spin_frame = 0;
+        state->searching_label = gui_internal_label_new(this, _("Searching ..."));
+        gui_internal_widget_append(w2, state->searching_label);
+        if (gui_internal_menu_data(this)->button_bar) {
+            state->cancel_button = gui_internal_button_label(this, _("Cancel"), 1);
+            state->cancel_button->func = gui_internal_cmd_pois_cancel;
+            state->cancel_button->data = state;
+            state->cancel_button->state |= STATE_SENSITIVE;
         }
-        map_selection_destroy(selm);
+        state->sel = map_selection_rect_new(&wm->c, dist * transform_scale(abs(wm->c.y) + dist * 1.5), 18);
+        state->h = mapset_open(navit_get_mapset(this->nav));
+        state->m = NULL;
+        state->mr = NULL;
+        state->selm = NULL;
+        state->idle_cb = callback_new_1(callback_cast(gui_internal_pois_idle_cb), state);
+        state->idle_ev = event_add_idle(100, state->idle_cb);
+        this->search_active = 1;
+        this->search_frame = 0;
     }
-    map_selection_destroy(sel);
-    mapset_close(h);
-
-    wtable =
-        gui_internal_widget_table_new(this, gravity_left_top | flags_fill | flags_expand | orientation_vertical, 1);
-    td = wtable->data;
-
-    gui_internal_widget_append(w2, wtable);
-
-    // Move items from heap to the table
-    for (i = 0;; i++) {
-        int key = fh_minkey(fh);
-        struct item_data *data = fh_extractmin(fh);
-        if (data == NULL) {
-            dbg(lvl_debug, "Empty heap: maxitem = %i, it = %i, dist = %i", maxitem, it, dist);
-            break;
-        }
-        dbg(lvl_debug, "dist1: %i, dist2: %i", data->dist, (-key) >> 10);
-        if (i == (it - pagesize * pagenb) && data->dist > prevdist)
-            prevdist = data->dist;
-        wi = gui_internal_cmd_pois_item(this, &center, &data->item, &data->c, route.u.route, data->dist, data->label);
-        wi->c.x = data->c.x;
-        wi->c.y = data->c.y;
-        wi->c.pro = pro;
-        wi->background = this->background;
-        row = gui_internal_widget_table_row_new(this, gravity_left | flags_fill | orientation_horizontal);
-        gui_internal_widget_append(row, wi);
-        row->datai = data->dist;
-        gui_internal_widget_prepend(wtable, row);
-        g_free(data->label);
-    }
-
-    fh_deleteheap(fh);
-    free(items);
-
-    // Add an entry for more POI
-    row = gui_internal_widget_table_row_new(this, gravity_left | flags_fill | orientation_horizontal);
-    row->datai = 100000000;  // Really far away for Earth, but won't work for bigger planets.
-    gui_internal_widget_append(wtable, row);
-    wl = gui_internal_box_new(this, gravity_left_center | orientation_horizontal | flags_fill);
-    gui_internal_widget_append(row, wl);
-    if (it == maxitem) {
-        paramnew = gui_internal_poi_param_clone(param);
-        paramnew->pagenb++;
-        paramnew->count = it;
-        snprintf(buffer, sizeof(buffer), "Get more (up to %d items)...", (paramnew->pagenb + 1) * pagesize);
-        wt = gui_internal_label_new(this, buffer);
-        gui_internal_widget_append(wl, wt);
-        wt->func = gui_internal_cmd_pois_more;
-        wt->data = paramnew;
-        wt->data_free = gui_internal_poi_param_free;
-        wt->state |= STATE_SENSITIVE;
-        wt->c = wm->c;
-    } else {
-        static int dist[] = {1, 5, 10, 0};
-        wt = gui_internal_label_new(this, "Set distance to");
-        gui_internal_widget_append(wl, wt);
-        for (i = 0; dist[i]; i++) {
-            paramnew = gui_internal_poi_param_clone(param);
-            paramnew->dist += dist[i];
-            paramnew->count = it;
-            snprintf(buffer, sizeof(buffer), " %i ", 10 * (paramnew->dist + 1));
-            wt = gui_internal_label_new(this, buffer);
-            gui_internal_widget_append(wl, wt);
-            wt->func = gui_internal_cmd_pois_more;
-            wt->data = paramnew;
-            wt->data_free = gui_internal_poi_param_free;
-            wt->state |= STATE_SENSITIVE;
-            wt->c = wm->c;
-        }
-        wt = gui_internal_label_new(this, "km.");
-        gui_internal_widget_append(wl, wt);
-    }
-    // Rendering now is needed to have table_data->bottomrow filled in.
-    gui_internal_menu_render(this);
-    td = wtable->data;
-    if (td->bottom_row != NULL) {
-#if 0
-        while(((struct widget*)td->bottom_row->data)->datai<=prevdist
-                && (td->next_button->state & STATE_SENSITIVE)) {
-            gui_internal_table_button_next(this, td->next_button, NULL);
-        }
-#else
-        int firstrow = g_list_index(wtable->children, td->top_row->data);
-        while (firstrow >= 0) {
-            int currow = g_list_index(wtable->children, td->bottom_row->data) - firstrow;
-            if (currow < 0) {
-                dbg(lvl_debug, "Can't find bottom row in children list. Stop paging.");
-                break;
-            }
-            if (currow >= param->count)
-                break;
-            if (!(td->scroll_buttons.next_button->state & STATE_SENSITIVE)) {
-                dbg(lvl_debug, "Reached last page but item %i not found. Stop paging.", param->count);
-                break;
-            }
-            gui_internal_table_button_next(this, td->scroll_buttons.next_button, NULL);
-        }
-#endif
-    }
-    gui_internal_menu_render(this);
     if (param_free)
         g_free(param);
+    graphics_draw_mode(this->gra, draw_mode_begin);
+    gui_internal_menu_render(this);
+    graphics_draw_mode(this->gra, draw_mode_end);
 }
