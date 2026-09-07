@@ -12,15 +12,24 @@ if [ -z "$file" ] || [ ! -f "$file" ]; then
     exit 1
 fi
 
+tmp=""
+cleanup() { kill -- "$child" 2>/dev/null; wait "$child" 2>/dev/null; rm -f "$tmp"; }
+trap cleanup TERM INT
+
 if command -v paplay >/dev/null 2>&1; then
-    exec paplay "$file"
+    paplay "$file" &
 elif command -v ffplay >/dev/null 2>&1; then
-    exec ffplay -nodisp -autoexit "$file" 2>/dev/null
+    ffplay -nodisp -autoexit "$file" 2>/dev/null &
 elif command -v aplay >/dev/null 2>&1 && command -v opusdec >/dev/null 2>&1; then
     tmp=$(mktemp /tmp/navit-cache-XXXXXX.wav)
-    opusdec "$file" "$tmp" 2>/dev/null && aplay "$tmp"
-    rm -f "$tmp"
+    opusdec "$file" "$tmp" 2>/dev/null && aplay "$tmp" &
 else
     echo "navit-speech-cache-play: no suitable player found" >&2
     exit 1
 fi
+
+child=$!
+wait "$child"
+ret=$?
+rm -f "$tmp"
+exit "$ret"
