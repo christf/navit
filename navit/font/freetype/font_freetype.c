@@ -503,47 +503,47 @@ static struct font_freetype_font *font_freetype_font_new(struct graphics_priv *g
 
 /** Implementation of font_freetype_methods.get_shadow. */
 static int font_freetype_glyph_get_shadow(struct font_freetype_glyph *g, unsigned char *data, int stride,
-                                          struct color *foreground, struct color *background) {
-    int x, y, w = g->w, h = g->h;
+                                          struct color *foreground, struct color *background, int radius) {
+    int x, y, dx, dy, w = g->w, h = g->h;
+    int ow = w + 2 * radius, oh = h + 2 * radius;
     unsigned int bg, fg;
-    unsigned char *pm, *psp, *ps, *psn;
+    unsigned char *pm, *ps, *row;
     fg = ((foreground->a >> COL_SHIFT) << 24) | ((foreground->r >> COL_SHIFT) << 16)
          | ((foreground->g >> COL_SHIFT) << 8) | ((foreground->b >> COL_SHIFT) << 0);
     bg = ((background->a >> COL_SHIFT) << 24) | ((background->r >> COL_SHIFT) << 16)
          | ((background->g >> COL_SHIFT) << 8) | ((background->b >> COL_SHIFT) << 0);
-    for (y = 0; y < h + 2; y++) {
+    for (y = 0; y < oh; y++) {
         if (stride) {
             ps = data + stride * y;
         } else {
             unsigned char **dataptr = (unsigned char **)data;
             ps = dataptr[y];
         }
-        for (x = 0; x < w + 2; x++)
+        for (x = 0; x < ow; x++)
             ((unsigned int *)ps)[x] = bg;
     }
     for (y = 0; y < h; y++) {
         pm = g->pixmap + y * w;
-        if (stride) {
-            psp = data + stride * y;
-            ps = psp + stride;
-            psn = ps + stride;
-        } else {
-            unsigned char **dataptr = (unsigned char **)data;
-            psp = dataptr[y];
-            ps = dataptr[y + 1];
-            psn = dataptr[y + 2];
-        }
         for (x = 0; x < w; x++) {
             if (*pm) {
-                ((unsigned int *)psp)[1] = fg;
-                ((unsigned int *)ps)[0] = fg;
-                ((unsigned int *)ps)[1] = fg;
-                ((unsigned int *)ps)[2] = fg;
-                ((unsigned int *)psn)[1] = fg;
+                if (stride) {
+                    row = data + stride * (y + radius);
+                } else {
+                    unsigned char **dataptr = (unsigned char **)data;
+                    row = dataptr[y + radius];
+                }
+                for (dx = -radius; dx <= radius; dx++)
+                    ((unsigned int *)row)[x + radius + dx] = fg;
+                for (dy = -radius; dy <= radius; dy++) {
+                    if (stride) {
+                        row = data + stride * (y + radius + dy);
+                    } else {
+                        unsigned char **dataptr = (unsigned char **)data;
+                        row = dataptr[y + radius + dy];
+                    }
+                    ((unsigned int *)row)[x + radius] = fg;
+                }
             }
-            psp += 4;
-            ps += 4;
-            psn += 4;
             pm++;
         }
     }
