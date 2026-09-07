@@ -57,6 +57,7 @@
 
 #define NMEA_GPGGA_FMT "$GPGGA,%02d%02d%02d,%s%s,%c,%s%s,%c,1,08,2.5,%s,M,,,,0000*  \n"
 #define NMEA_GPRMC_FMT "$GPRMC,%02d%02d%02d,A,%s%s,%c,%s%s,%c,%s,%s,%02d%02d%02d,,*  \n"
+#define SCROLL_MIN_DIST 2
 #define SCROLL_DURATION_BASE_MS 150
 #define SCROLL_DURATION_PER_PIXEL_MS 2
 #define SCROLL_DURATION_MAX_MS 500
@@ -462,8 +463,6 @@ void vehicle_start_map_scroll(struct vehicle *this_, struct point *from, struct 
 
 void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     int dx, dy, dist, duration;
-    if (!this_->interpolating)
-        return;
     dx = target->x - this_->drag_pnt.x;
     dy = target->y - this_->drag_pnt.y;
     if (dx < 0)
@@ -471,6 +470,8 @@ void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     if (dy < 0)
         dy = -dy;
     dist = dx + dy;
+    if (dist < SCROLL_MIN_DIST && this_->interpolating)
+        return;
     duration = SCROLL_DURATION_BASE_MS + dist * SCROLL_DURATION_PER_PIXEL_MS;
     if (duration > SCROLL_DURATION_MAX_MS)
         duration = SCROLL_DURATION_MAX_MS;
@@ -478,6 +479,7 @@ void vehicle_update_scroll_target(struct vehicle *this_, struct point *target) {
     this_->interp_target = *target;
     gettimeofday(&this_->interp_t0, NULL);
     this_->interp_duration = duration;
+    this_->interpolating = 1;
 }
 
 void vehicle_get_mapdrag_offset(struct vehicle *this_, struct point *offset) {
