@@ -21,7 +21,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 23:53+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2025-02-04 00:01+0000\n"
 "Last-Translator: Bruno Fragoso <darth_signa@hotmail.com>\n"
 "Language-Team: Portuguese <https://hosted.weblate.org/projects/navit/navit-"
@@ -344,10 +344,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Apanhe a %1$s estrada para a %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "depois de %i estradas"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -3053,6 +3049,10 @@ msgstr "América Central e América do Sul"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Guiana Francesa"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "depois de %i estradas"
 
 #~ msgid "Searching..."
 #~ msgstr "A procurar..."
