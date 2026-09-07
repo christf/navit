@@ -4144,3 +4144,27 @@ navit_float graphics_get_dpi(struct graphics *gra) {
         return 0;
     return gra->meth.get_dpi(gra->priv);
 }
+
+void graphics_set_clip_rect(struct graphics *gra, struct point *p, int w, int h) {
+    if (!gra->meth.set_clip)
+        return;
+    gra->meth.set_clip(gra->priv, p, w, h);
+}
+
+void graphics_set_clip_rects(struct graphics *gra, struct point *p1, int w1, int h1, struct point *p2, int w2, int h2) {
+    if (!gra->meth.set_clip_rects)
+        return;
+    gra->meth.set_clip_rects(gra->priv, p1, w1, h1, p2, w2, h2);
+}
+
+void graphics_clear_clip(struct graphics *gra) {
+    if (!gra->meth.clear_clip)
+        return;
+    gra->meth.clear_clip(gra->priv);
+}
+
+int graphics_scroll(struct graphics *gra, int dx, int dy) {
+    if (!gra->meth.scroll)
+        return 0;
+    return gra->meth.scroll(gra->priv, dx, dy);
+}
