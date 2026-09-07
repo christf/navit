@@ -2055,6 +2055,7 @@ void gui_internal_enter(struct gui_priv *this, int ignore) {
     navit_block(this->nav, 1);
     graphics_overlay_disable(gra, 1);
     graphics_draw_drag(gra, NULL);
+    graphics_set_display_rotation(gra, 0.0, navit_get_width(this->nav) / 2, navit_get_height(this->nav) / 2);
     this->root.p.x = 0;
     this->root.p.y = 0;
     this->root.background = this->background;
