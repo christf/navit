@@ -29,7 +29,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2025-10-02 08:02+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Russian <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -219,9 +219,6 @@ msgstr "%s, цель - %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s, цель - %s"
 
-msgid "When possible, please turn around"
-msgstr "Развернитесь, пожалуйста, если это возможно"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -361,10 +358,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Выезжайте на %1$s дорогу в направлении %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "после %i дорог"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -412,6 +405,9 @@ msgstr "после чего вы прибудете в пункт назначе
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Вы прибыли в пункт назначения %s"
+
+msgid "When possible, please turn around"
+msgstr "Развернитесь, пожалуйста, если это возможно"
 
 msgid "Interchange"
 msgstr "Развязка"
@@ -3053,6 +3049,10 @@ msgstr "Южная и центральная Америка"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Французская Гвиана"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "после %i дорог"
 
 #~ msgid "Searching..."
 #~ msgstr "Ищем..."

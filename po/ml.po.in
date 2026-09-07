@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Malayalam <https://hosted.weblate.org/projects/navit/navit-"
@@ -193,9 +193,6 @@ msgstr "%sകഴിഞ്ഞു %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s-ല്‍  %s -ലേക്ക് തിരിയുക"
 
-msgid "When possible, please turn around"
-msgstr "സാധിക്കുന്നിടത്ത് വച്ച്,തിരിച്ചു പോവുക"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -335,10 +332,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "%2$s   %1$s-മത്തെ പാത  എടുക്കുക"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%i വഴികൾക്കു ശേഷം"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -386,6 +379,9 @@ msgstr "അപ്പോള്‍ നിങ്ങള്‍ ലക്ഷ്യത�
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "നിങ്ങള്‍ %s ലക്ഷ്യത്തിലെത്തിയിരിക്കുന്നു"
+
+msgid "When possible, please turn around"
+msgstr "സാധിക്കുന്നിടത്ത് വച്ച്,തിരിച്ചു പോവുക"
 
 msgid "Interchange"
 msgstr ""
@@ -3019,6 +3015,10 @@ msgstr "തെക്ക്-മധ്യ അമേരിക്ക"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "ഫ്രെന്ജ് ഗയാന"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%i വഴികൾക്കു ശേഷം"
 
 #~ msgid "Searching..."
 #~ msgstr "തെരഞ്ഞുകൊണ്ടിരിക്കുന്നു..."

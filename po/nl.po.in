@@ -25,7 +25,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2026-04-28 08:10+0000\n"
 "Last-Translator: adevoss <arnobugs@hotmail.com>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -210,9 +210,6 @@ msgstr "%sde %s%s%s in"
 msgid "%sinto the %s"
 msgstr "%snaar de %s"
 
-msgid "When possible, please turn around"
-msgstr "Indien mogelijk omkeren"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -352,10 +349,6 @@ msgstr "neem daarna de %1$s straat %2$s"
 msgid "Take the %1$s road to the %2$s"
 msgstr "Neem de %1$s straat naar %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "na %i wegen"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -403,6 +396,9 @@ msgstr "daarna heeft u uw bestemming bereikt."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Bestemming %s bereikt"
+
+msgid "When possible, please turn around"
+msgstr "Indien mogelijk omkeren"
 
 msgid "Interchange"
 msgstr "Knooppunt"
@@ -3057,6 +3053,10 @@ msgstr "Zuid- en Midden-Amerika"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Frans Guyana"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "na %i wegen"
 
 #~ msgid "Searching..."
 #~ msgstr "Zoeken..."

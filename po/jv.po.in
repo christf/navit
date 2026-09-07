@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Javanese <https://hosted.weblate.org/projects/navit/navit-"
@@ -193,9 +193,6 @@ msgstr "%s ing dalan %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sing dalan %s"
 
-msgid "When possible, please turn around"
-msgstr "Yen biso, mutero"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -335,10 +332,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Jupuk dalan kaping %1$s ing %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "sakwise %i dalan"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -386,6 +379,9 @@ msgstr "terus panjenengan tekan tujuan"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr ""
+
+msgid "When possible, please turn around"
+msgstr "Yen biso, mutero"
 
 msgid "Interchange"
 msgstr ""
@@ -3013,3 +3009,7 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "sakwise %i dalan"
