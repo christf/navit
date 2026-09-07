@@ -3712,15 +3712,15 @@ void graphics_displaylist_draw(struct graphics *gra, struct displaylist *display
     display_context_free(&displaylist->dc);
 }
 
-static void graphics_load_mapset(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
-                                 struct transformation *trans, struct layout *l, int async, struct callback *cb,
-                                 int flags) {
+static int graphics_load_mapset(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
+                                struct transformation *trans, struct layout *l, int async, struct callback *cb,
+                                int flags) {
     int order = transform_get_order(trans);
 
     dbg(lvl_debug, "enter");
     if (displaylist->busy) {
         if (async == 1)
-            return;
+            return 0;
         do_draw(displaylist, 1, flags);
     }
     xdisplay_free(displaylist);
@@ -3746,6 +3746,7 @@ static void graphics_load_mapset(struct graphics *gra, struct displaylist *displ
         displaylist->idle_ev = event_add_idle(50, displaylist->idle_cb);
     } else
         do_draw(displaylist, 0, flags);
+    return 1;
 }
 /**
  * FIXME
@@ -3753,9 +3754,9 @@ static void graphics_load_mapset(struct graphics *gra, struct displaylist *displ
  * @returns <>
  * @author Martin Schaller (04/2008)
  */
-void graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
-                   struct transformation *trans, struct layout *l, int async, struct callback *cb, int flags) {
-    graphics_load_mapset(gra, displaylist, mapset, trans, l, async, cb, flags);
+int graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
+                  struct transformation *trans, struct layout *l, int async, struct callback *cb, int flags) {
+    return graphics_load_mapset(gra, displaylist, mapset, trans, l, async, cb, flags);
 }
 
 int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist) {
@@ -3763,6 +3764,10 @@ int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist) 
         return 0;
     do_draw(displaylist, 1, 0);
     return 1;
+}
+
+int graphics_displaylist_busy(struct displaylist *displaylist) {
+    return displaylist && displaylist->busy;
 }
 
 /**
