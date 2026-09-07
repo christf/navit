@@ -1612,6 +1612,7 @@ static struct graphics_methods graphics_methods = {
     NULL, /* hide_native_keyboard */
     NULL, /* get dpi */
     draw_polygon_with_holes,
+    NULL, /* set_display_rotation */
 };
 
 static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *meth) {
