@@ -2433,7 +2433,8 @@ static void gui_internal_button(void *data, int pressed, int button, struct poin
         this->current.y = -1;
         if (this->highlighted) {
             graphics_draw_mode(gra, draw_mode_begin);
-            if (!gui_internal_gesture_do(this) && this->pressed != 2 && abs(dx) < this->icon_s && abs(dy) < this->icon_s)
+            if (!gui_internal_gesture_do(this) && this->pressed != 2 && abs(dx) < this->icon_s
+                && abs(dy) < this->icon_s)
                 gui_internal_call_highlighted(this);
             this->pressed = 0;
             if (!event_main_loop_has_quit()) {
