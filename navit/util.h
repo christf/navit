@@ -85,6 +85,7 @@ struct spawn_process_info *spawn_process(char **argv);
 int spawn_process_check_status(struct spawn_process_info *pi, int block);
 
 void spawn_process_info_free(struct spawn_process_info *pi);
+void spawn_process_kill(struct spawn_process_info *pi);
 void spawn_process_init(void);
 
 void get_compass_direction(char *buffer, int angle, int mode);
