@@ -156,6 +156,8 @@ struct gui_priv {
     int hide_keys;  // Flag to set the keyboard mode 1: hide impossible keys on search; 0: highlight them.
     int results_map_population;
     int town_use_postal;
+    int search_active;
+    int search_frame;
     struct callback *deferred_exec_at_init; /*!< A callback to be run when internal GUI has finished initializing */
 };
 
