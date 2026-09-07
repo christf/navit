@@ -13,6 +13,8 @@ cd $SCRIPTPATH
 
 mkdir $HOME/rpmbuild
 
+
+
 #arm devices
 sb2 -t SailfishOS-${VERSION_ID}-armv7hl -m sdk-install -R zypper --non-interactive in $(grep "^BuildRequires: " navit-sailfish.spec | sed -e "s/BuildRequires: //")
 sb2 -t SailfishOS-${VERSION_ID}-armv7hl -m sdk-build rpmbuild --define "_topdir /home/nemo/rpmbuild" --define "navit_source ${SCRIPTPATH}/../.." -bb navit-sailfish.spec
