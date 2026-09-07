@@ -766,6 +766,7 @@ static struct graphics_methods graphics_methods = {
     NULL, /* hide_native_keyboard */
     NULL, /* get_dpi */
     draw_polygon_with_holes,
+    NULL, /* set_display_rotation */
 };
 
 static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphics_methods *meth, struct point *p,
