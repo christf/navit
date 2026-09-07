@@ -96,7 +96,7 @@ jobs:
         run: apt-get update && apt-get -y install doxygen ca-certificates git rsync
       - name: Run doxygen
         run: cd navit && doxygen
-      - name: Prepare webroot
+- name: Prepare webroot
         run: |
           echo "doxygen.navit-project.org" > doc/html/CNAME
           touch doc/html/.nojekyll
@@ -146,7 +146,7 @@ jobs:
           -v ${{ runner.temp }}/rpmbuild:/home/nemo/rpmbuild:rw
           -v ${{ github.workspace }}:/home/nemo/navit
           coderus/sailfishos-platform-sdk:5.0.0.43
-          /bin/bash -lxc "git config --global --add safe.directory /home/nemo/navit; /home/nemo/navit/contrib/sailfish/build_sailfish_ci.sh"
+/bin/bash -lxc "git config --global --add safe.directory /home/nemo/navit; /home/nemo/navit/contrib/sailfish/build_sailfish_ci.sh"
       - uses: actions/upload-artifact@v7
         with:
           name: Sailfish RPMs
