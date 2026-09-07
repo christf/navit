@@ -1,6 +1,5 @@
 add_executable(gentypes gentypes.c)
-
-include_directories( ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(gentypes PRIVATE navit_config navit_compile_options)
 
 # add the command to generate the source code
 add_custom_command (
@@ -10,3 +9,4 @@ add_custom_command (
 	)
 
 module_add_library(map_garmin garmin.c gar2navit.c g2nbuiltin.h)
+target_include_directories(map_garmin PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
