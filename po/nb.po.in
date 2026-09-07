@@ -16,7 +16,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Allan Nordhøy <epost@anotheragency.no>\n"
 "Language-Team: Norwegian Bokmål <https://hosted.weblate.org/projects/navit/"
@@ -200,9 +200,6 @@ msgstr "%sin på %s%s%set"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%sinn på %s"
-
-msgid "When possible, please turn around"
-msgstr "Snu når det er mulig"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -394,6 +391,9 @@ msgstr "så har du nådd ditt reisemål."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Du har nådd ditt reisemål %s"
+
+msgid "When possible, please turn around"
+msgstr "Snu når det er mulig"
 
 msgid "Interchange"
 msgstr ""

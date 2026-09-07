@@ -11,7 +11,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2026-03-02 06:09+0000\n"
 "Last-Translator: தமிழ்நேரம் <tamilneram247@gmail.com>\n"
 "Language-Team: Tamil <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -195,9 +195,6 @@ msgstr "%s உள் %s%s%s"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%sசிண்டோ %s"
-
-msgid "When possible, please turn around"
-msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -389,6 +386,9 @@ msgstr "நீங்கள் உங்கள் இலக்கை அடைந
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "நீங்கள் உங்கள் இலக்கை அடைந்துவிட்டீர்கள் %s"
+
+msgid "When possible, please turn around"
+msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
 
 msgid "Interchange"
 msgstr "பரிமாற்றம்"

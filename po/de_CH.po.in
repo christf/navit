@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: German (Switzerland) <https://hosted.weblate.org/projects/"
@@ -189,9 +189,6 @@ msgstr ""
 #. TRANSLATORS: gives the name of the next road to turn into (into the E17)
 #, c-format
 msgid "%sinto the %s"
-msgstr ""
-
-msgid "When possible, please turn around"
 msgstr ""
 
 #. TRANSLATORS: the argument is the destination to follow
@@ -383,6 +380,9 @@ msgstr ""
 #. TRANSLATORS: the arg. is distance
 #, c-format
 msgid "You have reached your destination %s"
+msgstr ""
+
+msgid "When possible, please turn around"
 msgstr ""
 
 msgid "Interchange"
