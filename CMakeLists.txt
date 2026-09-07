@@ -154,6 +154,7 @@ add_module(binding/dbus "dbus-glib-1 not found" FALSE)
 add_module(binding/python "python libraries not found" FALSE)
 add_module(speech/dbus "dbus-glib-1 not found" FALSE)
 add_module(speech/cmdline "neither system() nor CreateProcess() found" FALSE)
+add_module(synthesizer/cmdline "neither system() nor CreateProcess() found" FALSE)
 add_module(speech/qt5_espeak "Qt5 multimedia not found" FALSE)
 add_module(vehicle/gpsd_dbus "dbus-glib-1 not found" FALSE)
 add_module(vehicle/qt5 "Qt5 libraries not found" FALSE)
@@ -274,6 +275,24 @@ else(PKG_CONFIG_FOUND)
     set_with_reason(support/glib "Glib not found" TRUE ${INTL_LIBS})
     set_with_reason(traffic/traff_http "libcurl not found" FALSE)
 endif(PKG_CONFIG_FOUND)
+
+# speech/cache, speech/cmdline, synthesizer/cmdline and audio_cache.c use
+# glib >= 2.32 APIs (g_mutex_init/g_cond_init/g_thread_new/g_hash_table_add,
+# gstdio/gstring ...) which neither the bundled support/glib nor the
+# ancient glib of the old tomtom toolchain provide. Disable/omit them
+# unless a modern system glib is available. Note: must run outside the
+# if(PKG_CONFIG_FOUND) block above, because targets without pkg-config
+# (android, win32, wince) rely on the vendored support/glib and would
+# otherwise leave these modules enabled but compile them against the
+# incompatible stub glib.
+if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+	set(HAVE_GLIB2_32 TRUE)
+else()
+	set(HAVE_GLIB2_32 FALSE)
+	foreach( MODULE_PATH speech/cache speech/cmdline synthesizer/cmdline)
+		set_with_reason(${MODULE_PATH} "requires glib >= 2.32" FALSE)
+	endforeach()
+endif()
 
 #find_package(Iconv)
 #find_package(Gmodule)
@@ -564,12 +583,18 @@ if (HAVE_LIBSPEECHD)
 endif(HAVE_LIBSPEECHD)
 
 if (HAVE_SYSTEM)
-	set_with_reason(speech/cmdline "system() call is available" TRUE)
-	target_compile_definitions(navit_config INTERFACE HAVE_SYSTEM)
+	if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+		set_with_reason(speech/cmdline "system() call is available" TRUE)
+		set_with_reason(synthesizer/cmdline "system() call is available" TRUE)
+	endif()
+	add_compile_definitions(HAVE_SYSTEM)
 endif(HAVE_SYSTEM)
 
 if (HAVE_CREATEPROCESS)
-	set_with_reason(speech/cmdline "CreateProcess() call is available" TRUE)
+	if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+		set_with_reason(speech/cmdline "CreateProcess() call is available" TRUE)
+		set_with_reason(synthesizer/cmdline "CreateProcess() call is available" TRUE)
+	endif()
 endif(HAVE_CREATEPROCESS)
 
 if (GETTEXT_FOUND)
