@@ -1564,8 +1564,9 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
     entry->di = di;
 }
 
-/* A label placed in the current frame, used to suppress duplicate labels. x/y
- * is the anchor, text_size the font size, xmin..ymax the rotated bounding box. */
+/**
+ * @brief A label placed in the current frame, used to suppress duplicate labels.
+ */
 struct label_pos {
     int x, y;
     int xmin, ymin, xmax, ymax;
@@ -1581,9 +1582,15 @@ static void label_list_free(gpointer list) {
     g_list_free(list);
 }
 
-/* Reset the per-frame registry of placed labels. Called at the start of each
- * frame (graphics_draw_mode) and from graphics_free(). Drawing is
- * single-threaded by design, so no locking is needed. */
+/**
+ * @brief Reset the per-frame registry of placed labels.
+ *
+ * Called at the start of each frame (graphics_draw_mode) and from
+ * graphics_free(). Drawing is single-threaded by design, so no locking is
+ * needed.
+ *
+ * @param gra The graphics instance
+ */
 static void graphics_labels_reset(struct graphics *gra) {
     if (gra->placed_labels) {
         g_hash_table_destroy(gra->placed_labels);
@@ -1591,10 +1598,20 @@ static void graphics_labels_reset(struct graphics *gra) {
     }
 }
 
-/* Compute the axis-aligned bounding box of a rotated label drawn from its
- * anchor along the direction (dirx, diry). The four text corners are
- * anchor + along * {0, tl} + perpendicular * {+-th/2}. Fills in the anchor and
- * the bounding box; text_size is set by the caller. */
+/**
+ * @brief Compute the axis-aligned bounding box of a rotated label.
+ *
+ * The label is drawn from its anchor along the direction (dirx, diry), so its
+ * four text corners are anchor + along * {0, tl} + perpendicular * {+-th/2}.
+ *
+ * @param lp The label position to fill in
+ * @param x The screen x coordinate of the label anchor
+ * @param y The screen y coordinate of the label anchor
+ * @param tl The label width in screen coordinates
+ * @param th The label height in screen coordinates
+ * @param dirx The x component of the direction the label is drawn in
+ * @param diry The y component of the direction the label is drawn in
+ */
 static void label_get_bbox(struct label_pos *lp, int x, int y, int tl, int th, float dirx, float diry) {
     float ax = dirx * tl;
     float ay = diry * tl;
@@ -1614,19 +1631,18 @@ static void label_get_bbox(struct label_pos *lp, int x, int y, int tl, int th, f
         if (cy[i] > ymax)
             ymax = cy[i];
     }
-    lp->x = x;
-    lp->y = y;
     lp->xmin = (int)xmin;
     lp->ymin = (int)ymin;
     lp->xmax = (int)xmax;
     lp->ymax = (int)ymax;
 }
 
-/* Fallback character cell size in screen units, used when no text bbox lookup is available. */
+/* Fallback character width in screen units, used when no bbox lookup is available. */
 #define LABEL_CHAR_W 4
-#define LABEL_CHAR_H 8
 
-/* Compute the on-screen width of a single line of text. */
+/**
+ * @brief Compute the on-screen width of a single line of text.
+ */
 static int label_text_width(struct graphics *gra, struct graphics_font *font, char *text) {
     struct point pb[5];
     if (gra->meth.get_text_bbox) {
@@ -1637,12 +1653,19 @@ static int label_text_width(struct graphics *gra, struct graphics_font *font, ch
     return strlen(text) * LABEL_CHAR_W;
 }
 
+/**
+ * @brief Check whether two label bounding boxes intersect on screen.
+ */
 static int labels_intersect(struct label_pos *a, struct label_pos *b) {
     return a->xmin <= b->xmax && b->xmin <= a->xmax && a->ymin <= b->ymax && b->ymin <= a->ymax;
 }
 
-/* Same label footprint as label_is_duplicate() uses, so culling and dedup
- * agree on what a label covers. */
+/**
+ * @brief Check whether a label bounding box overlaps the visible area at all.
+ *
+ * This is the same label footprint that label_is_duplicate() uses, so culling
+ * and dedup agree on what a label covers.
+ */
 static int label_bbox_onscreen(struct label_pos *lp, struct point_rect *r) {
     return lp->xmin < r->rl.x && lp->xmax > r->lu.x && lp->ymin < r->rl.y && lp->ymax > r->lu.y;
 }
@@ -1656,18 +1679,32 @@ static int label_bbox_onscreen(struct label_pos *lp, struct point_rect *r) {
  * close to each other are still treated as a collision. */
 #define LABEL_GUTTER_HEIGHTS 1
 
-/* Check whether a label duplicates one already placed in this frame. Only the
- * first of several identical labels that are close together on screen is
- * drawn, so e.g. a street name also carried by its mapped sidewalks, cycleways
- * and footways is only rendered once. A label is a duplicate if its bounding
- * box, inflated by a spacing gutter, overlaps one already placed (this also
- * catches labels on perpendicular arms of a street that cross at a corner), or
- * if its anchor is within half a label width (at least two line heights) of
- * one already placed. Repetition of a name along a long street is unaffected,
- * since those anchors are at least a full label width apart. A label with a
- * larger text size is never suppressed by a smaller duplicate; label_record()
- * replaces the smaller duplicates a larger label covers. Returns 1 if the
- * label should be skipped, 0 if it should be drawn. */
+/**
+ * @brief Check whether a label duplicates one already placed in this frame.
+ *
+ * Only the first of several identical labels that are close together on
+ * screen is drawn, so e.g. a street name that is also carried by its mapped
+ * sidewalks, cycleways and footways is only rendered once. A label is
+ * considered a duplicate if its bounding box, inflated by a spacing gutter,
+ * overlaps one already placed (which also catches labels on perpendicular
+ * arms of a street that cross at a corner), or if its anchor is within half
+ * a label width (at least two line heights) of one already placed.
+ * Repetition of a street name along a long street is unaffected, since those
+ * anchors are at least a full label width apart. A label with a larger text
+ * size replaces smaller duplicates of the same text: it is drawn and
+ * suppresses smaller duplicates that come later.
+ *
+ * @param gra The graphics instance
+ * @param label The label text
+ * @param x The screen x coordinate of the label anchor
+ * @param y The screen y coordinate of the label anchor
+ * @param tl The label width in screen coordinates
+ * @param th The label height in screen coordinates
+ * @param text_size The font size of the label
+ * @param dirx The x component of the direction the label is drawn in
+ * @param diry The y component of the direction the label is drawn in
+ * @returns 1 if the label should be skipped, 0 if it should be drawn
+ */
 static int label_is_duplicate(struct graphics *gra, const char *label, int x, int y, int tl, int th, int text_size,
                               float dirx, float diry) {
     GList *l;
@@ -1699,26 +1736,22 @@ static int label_is_duplicate(struct graphics *gra, const char *label, int x, in
     return 0;
 }
 
-/* Record a label that has been placed, so later duplicates can be suppressed.
- * A larger label replaces smaller duplicates of the same text that it covers,
- * so the registry keeps the largest placement for a text. */
+/**
+ * @brief Record a label that has been placed, so later duplicates can be suppressed.
+ */
 static void label_record(struct graphics *gra, const char *label, struct label_pos pos) {
-    GList *l = NULL, *old, *n;
+    GList *l;
     struct label_pos *lp = g_new(struct label_pos, 1);
     *lp = pos;
     if (!gra->placed_labels)
         gra->placed_labels = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, label_list_free);
-    old = g_hash_table_lookup(gra->placed_labels, label);
-    for (n = old; n; n = n->next) {
-        struct label_pos *p = n->data;
-        if (!(p->text_size < pos.text_size && labels_intersect(p, lp))) {
-            struct label_pos *keep = g_new(struct label_pos, 1);
-            *keep = *p;
-            l = g_list_prepend(l, keep);
-        }
+    l = g_hash_table_lookup(gra->placed_labels, label);
+    if (!l) {
+        l = g_list_append(NULL, lp);
+        g_hash_table_insert(gra->placed_labels, g_strdup(label), l);
+    } else {
+        g_list_append(l, lp);
     }
-    /* insert() frees the old key-value pair, dropping the smaller duplicates */
-    g_hash_table_insert(gra->placed_labels, g_strdup(label), g_list_prepend(l, lp));
 }
 
 /**
@@ -1742,7 +1775,7 @@ static void label_line(struct graphics *gra, struct graphics_gc *fg, struct grap
         th = (pb[0].y - pb[1].y);
     } else {
         tl = strlen(label) * LABEL_CHAR_W;
-        th = LABEL_CHAR_H;
+        th = 8;
     }
     tlm = tl * 32;
     thm = th * 36;
@@ -1772,7 +1805,6 @@ static void label_line(struct graphics *gra, struct graphics_gc *fg, struct grap
             dirx = dx / l;
             diry = dy / l;
             label_get_bbox(&bbox, x, y, tl, th, dirx, diry);
-            bbox.text_size = text_size;
             if (label_bbox_onscreen(&bbox, &gra->r)) {
                 if (label_is_duplicate(gra, label, x, y, tl, th, text_size, dirx, diry))
                     continue;
@@ -2865,7 +2897,6 @@ static void multiline_label_draw(struct graphics *gra, struct graphics_gc *fg, s
     int label_width = 0;
     int line_width;
     struct point anchor;
-    struct label_pos lp;
     char *startline = input_label;
     char *endline = startline;
     while (endline && *endline != '\0') {
@@ -2897,10 +2928,13 @@ static void multiline_label_draw(struct graphics *gra, struct graphics_gc *fg, s
     /* Vertically, we center the text with respect to specified point */
     pref.y -= (label_nblines * line_spacing) / 2;
     anchor = pref;
-    label_get_bbox(&lp, anchor.x, anchor.y, label_width, label_nblines * line_spacing, 1, 0);
-    lp.text_size = text_size;
-    if (!label_is_duplicate(gra, label, anchor.x, anchor.y, label_width, label_nblines * line_spacing, text_size, 1,
-                            0)) {
+    {
+        struct label_pos lp;
+        label_get_bbox(&lp, anchor.x, anchor.y, label_width, label_nblines * line_spacing, 1, 0);
+        lp.text_size = text_size;
+        if (label_is_duplicate(gra, label, anchor.x, anchor.y, label_width, label_nblines * line_spacing, text_size, 1,
+                               0))
+            goto out;
         /* Parse all stored lines, and display them */
         for (label_linepos = 0; label_linepos < label_nblines; label_linepos++) {
             graphics_draw_text(gra, fg, bg, font, label_lines[label_linepos], &pref, 0x10000, 0);
@@ -2908,6 +2942,7 @@ static void multiline_label_draw(struct graphics *gra, struct graphics_gc *fg, s
         }
         label_record(gra, label, lp);
     }
+out:
     g_free(input_label);
 }
 
