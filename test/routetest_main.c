@@ -22,6 +22,14 @@
 
 struct attr *pk_attrs;
 
+/* Vehicle profiles matching navit_shipped.xml */
+#define CAR_FLAGS (AF_CAR)
+#define CAR_FORWARD_MASK (AF_CAR | AF_HIGH_OCCUPANCY_CAR_ONLY | AF_ONEWAYREV)
+#define CAR_REVERSE_MASK (AF_CAR | AF_HIGH_OCCUPANCY_CAR_ONLY | AF_ONEWAY)
+#define BIKE_FLAGS (AF_BIKE)
+#define BIKE_FORWARD_MASK (AF_BIKE | AF_ONEWAYREV)
+#define BIKE_REVERSE_MASK (AF_BIKE | AF_ONEWAY)
+
 static enum item_type profile_item_types[] = {type_street_0,
                                               type_street_1_city,
                                               type_street_2_city,
@@ -236,8 +244,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vp_car = make_profile("car", 0x4000000, 0x4040002, 0x4040001);
-  vp_bike = make_profile("bike", 0x40000000, 0x40000002, 0x40000001);
+  vp_car = make_profile("car", CAR_FLAGS, CAR_FORWARD_MASK, CAR_REVERSE_MASK);
+  vp_bike =
+      make_profile("bike", BIKE_FLAGS, BIKE_FORWARD_MASK, BIKE_REVERSE_MASK);
   if (!vp_car || !vp_bike) {
     printf("FAIL: could not create vehicle profiles\n");
     return 1;
@@ -246,8 +255,6 @@ int main(int argc, char **argv) {
   printf("== corridor map: car BEFORE bollard -> BEYOND bollard (expect not "
          "found) ==\n");
   rc |= run_case(argv[1], projection_mg, &a1, &b2, vp_car, 0);
-  if (getenv("ONLY_CORRIDOR"))
-    return rc;
   printf("== corridor map: car -> bollard point itself (expect not found: "
          "blocked point as dest) ==\n");
   rc |= run_case(argv[1], projection_mg, &a1, &p1, vp_car, 0);
