@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Korean <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -188,9 +188,6 @@ msgstr ""
 msgid "%sinto the %s"
 msgstr "%s %s 방향으로"
 
-msgid "When possible, please turn around"
-msgstr "가능하면 유턴하세요"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -330,10 +327,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "%1$s 번째 출구에서 %2$s 로 나가세요"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%i 도로 이후에"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -381,6 +374,9 @@ msgstr "목적지에 도착하였습니다."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s 목적지에 도착합니다"
+
+msgid "When possible, please turn around"
+msgstr "가능하면 유턴하세요"
 
 msgid "Interchange"
 msgstr ""
@@ -3008,3 +3004,7 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%i 도로 이후에"

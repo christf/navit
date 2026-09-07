@@ -24,7 +24,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2025-06-21 13:01+0000\n"
 "Last-Translator: Helder Santana <helder.santana@systemsbr.com.br>\n"
 "Language-Team: Portuguese (Brazil) <https://hosted.weblate.org/projects/"
@@ -209,9 +209,6 @@ msgstr "%sem %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sna %s"
 
-msgid "When possible, please turn around"
-msgstr "Quando possível, favor retornar"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -351,10 +348,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Pegue a %1$s via para a %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "após %i vias"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -402,6 +395,9 @@ msgstr "então você chegará ao destino."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Você chegará ao destino %s"
+
+msgid "When possible, please turn around"
+msgstr "Quando possível, favor retornar"
 
 msgid "Interchange"
 msgstr "Trevo"
@@ -3053,6 +3049,10 @@ msgstr "Sul + América Central"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Guiana Francesa"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "após %i vias"
 
 #~ msgid "Searching..."
 #~ msgstr "Procurando..."

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2024-04-13 17:26+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Chinese (Traditional) <https://hosted.weblate.org/projects/"
@@ -187,9 +187,6 @@ msgstr "%s 往 %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s 往 %s"
 
-msgid "When possible, please turn around"
-msgstr "請盡可能迴轉"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -329,10 +326,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "進入 %1$s 往 %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "經過 %i 路"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -380,6 +373,9 @@ msgstr "然後你將抵達目的地"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s 你將抵達目的地"
+
+msgid "When possible, please turn around"
+msgstr "請盡可能迴轉"
 
 msgid "Interchange"
 msgstr "交流道"
@@ -3024,6 +3020,10 @@ msgstr "中南美洲"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "法屬圭亞那"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "經過 %i 路"
 
 #~ msgid "Searching..."
 #~ msgstr "搜尋中…"

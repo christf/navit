@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2025-10-02 08:02+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Basque <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -194,9 +194,6 @@ msgstr "%s %s%s%s-en"
 msgid "%sinto the %s"
 msgstr "%s %s-an"
 
-msgid "When possible, please turn around"
-msgstr "Ahal duzunean eman itzulia, mesedez"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -336,10 +333,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Hartu %1$s bidea %2$s-ean"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%i bideen ondoren"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -387,6 +380,9 @@ msgstr "dagoeneko helburura iritsi zara"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s helburura iritsi zara"
+
+msgid "When possible, please turn around"
+msgstr "Ahal duzunean eman itzulia, mesedez"
 
 msgid "Interchange"
 msgstr ""
@@ -3018,6 +3014,10 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%i bideen ondoren"
 
 #, c-format
 #~ msgid "Route %4.0fkm    %02d:%02d ETA"
