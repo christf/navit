@@ -204,9 +204,6 @@ msgstr "%sna %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sna %s"
 
-msgid "When possible, please turn around"
-msgstr "Obrnite čim bo to mogoče"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -397,6 +394,9 @@ msgstr "in ste na cilju."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s ste na cilju"
+
+msgid "When possible, please turn around"
+msgstr "Obrnite čim bo to mogoče"
 
 msgid "Interchange"
 msgstr "Razcep"

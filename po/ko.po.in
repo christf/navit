@@ -188,9 +188,6 @@ msgstr ""
 msgid "%sinto the %s"
 msgstr "%s %s 방향으로"
 
-msgid "When possible, please turn around"
-msgstr "가능하면 유턴하세요"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -381,6 +378,9 @@ msgstr "목적지에 도착하였습니다."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s 목적지에 도착합니다"
+
+msgid "When possible, please turn around"
+msgstr "가능하면 유턴하세요"
 
 msgid "Interchange"
 msgstr ""

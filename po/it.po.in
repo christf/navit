@@ -210,9 +210,6 @@ msgstr "%sin %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sin %s"
 
-msgid "When possible, please turn around"
-msgstr "Appena possibile, invertire il senso di marcia"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -403,6 +400,9 @@ msgstr "poi sarai arrivato a destinazione."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Sei arrivato a destinazione %s"
+
+msgid "When possible, please turn around"
+msgstr "Appena possibile, invertire il senso di marcia"
 
 msgid "Interchange"
 msgstr "Intersezione"

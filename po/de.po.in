@@ -232,10 +232,6 @@ msgstr "%sauf das %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sauf die %s"
 
-#
-msgid "When possible, please turn around"
-msgstr "Wenn möglich, bitte wenden"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -426,6 +422,10 @@ msgstr "dann haben Sie Ihr Ziel erreicht."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s haben Sie Ihr Ziel erreicht"
+
+#
+msgid "When possible, please turn around"
+msgstr "Wenn möglich, bitte wenden"
 
 msgid "Interchange"
 msgstr "Autobahnknoten"

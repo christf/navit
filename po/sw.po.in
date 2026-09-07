@@ -193,9 +193,6 @@ msgstr "%skufuata %s%s%s"
 msgid "%sinto the %s"
 msgstr "%skufuata %s"
 
-msgid "When possible, please turn around"
-msgstr "Geuka na kurudi nyuma inapowezekana"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -386,6 +383,9 @@ msgstr "halafu utakuwa umefika"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "umelifikia lengo lako %s"
+
+msgid "When possible, please turn around"
+msgstr "Geuka na kurudi nyuma inapowezekana"
 
 msgid "Interchange"
 msgstr ""

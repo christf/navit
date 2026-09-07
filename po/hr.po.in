@@ -200,9 +200,6 @@ msgstr "%su %s%s%s"
 msgid "%sinto the %s"
 msgstr "%su %s"
 
-msgid "When possible, please turn around"
-msgstr "Ako je moguće okrenite se"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -393,6 +390,9 @@ msgstr "nakon toga ste stigli do cilja"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Stigli ste na cilj %s"
+
+msgid "When possible, please turn around"
+msgstr "Ako je moguće okrenite se"
 
 msgid "Interchange"
 msgstr ""

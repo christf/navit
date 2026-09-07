@@ -197,9 +197,6 @@ msgstr "%sпо улица %s%s%s"
 msgid "%sinto the %s"
 msgstr ""
 
-msgid "When possible, please turn around"
-msgstr "Когато е възможно обърнете"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -390,6 +387,9 @@ msgstr "след това пристигате на местоназначени
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Достигнахте до целта %s"
+
+msgid "When possible, please turn around"
+msgstr "Когато е възможно обърнете"
 
 msgid "Interchange"
 msgstr "обмен"

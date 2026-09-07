@@ -214,9 +214,6 @@ msgstr "%sإلى داخل %s%s%s|غير محدد الجنس"
 msgid "%sinto the %s"
 msgstr "%s إلى داخل %s"
 
-msgid "When possible, please turn around"
-msgstr "عند الإمكانية , انعطف رجاء"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -407,6 +404,9 @@ msgstr "و بعدها تكون قد وصلت إلى هدفك"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "لقد وصلت إلى هدفك %s"
+
+msgid "When possible, please turn around"
+msgstr "عند الإمكانية , انعطف رجاء"
 
 msgid "Interchange"
 msgstr ""

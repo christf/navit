@@ -189,9 +189,6 @@ msgstr ""
 msgid "%sinto the %s"
 msgstr ""
 
-msgid "When possible, please turn around"
-msgstr ""
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -382,6 +379,9 @@ msgstr ""
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "目的地の%sにつきました"
+
+msgid "When possible, please turn around"
+msgstr ""
 
 msgid "Interchange"
 msgstr ""

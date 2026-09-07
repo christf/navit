@@ -196,9 +196,6 @@ msgstr "%s אל רחוב %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sאל תוך ה%s"
 
-msgid "When possible, please turn around"
-msgstr "כשיתאפשר לך, פנה חזרה"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -389,6 +386,9 @@ msgstr "ואז הגעת ליעד."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "הגעת ליעדך %s"
+
+msgid "When possible, please turn around"
+msgstr "כשיתאפשר לך, פנה חזרה"
 
 msgid "Interchange"
 msgstr ""

@@ -196,9 +196,6 @@ msgstr "%s உள் %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sசிண்டோ %s"
 
-msgid "When possible, please turn around"
-msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -389,6 +386,9 @@ msgstr "நீங்கள் உங்கள் இலக்கை அடைந
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "நீங்கள் உங்கள் இலக்கை அடைந்துவிட்டீர்கள் %s"
+
+msgid "When possible, please turn around"
+msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
 
 msgid "Interchange"
 msgstr "பரிமாற்றம்"

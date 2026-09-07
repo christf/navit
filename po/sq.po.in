@@ -191,9 +191,6 @@ msgstr "%snë %s%s%s"
 msgid "%sinto the %s"
 msgstr "%snë %s"
 
-msgid "When possible, please turn around"
-msgstr "Nqs është e mundur, ju lutem kthehuni mbrapsht"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -384,6 +381,9 @@ msgstr "pastaj ju keni arritur pikëmbërritjen"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Ju e keni arritur pikëmbërritjen tuaj %s"
+
+msgid "When possible, please turn around"
+msgstr "Nqs është e mundur, ju lutem kthehuni mbrapsht"
 
 msgid "Interchange"
 msgstr ""
