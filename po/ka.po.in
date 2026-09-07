@@ -2124,6 +2124,13 @@ msgstr "რუკაზე დაბრუნება"
 msgid "Main Menu"
 msgstr "მთავარი მენიუ"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "გაუქმება"
+
 msgid "House number"
 msgstr "სახლის ნომერი"
 
@@ -2245,10 +2252,6 @@ msgstr "სატვირთო"
 #. Android resource: @strings/yes
 msgid "Yes"
 msgstr "დიახ"
-
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "გაუქმება"
 
 #. Android resource: @strings/channel_name
 msgid "Navit"
