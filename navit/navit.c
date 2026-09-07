@@ -78,6 +78,13 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
+/* Maximum render margin as a percentage of the larger screen dimension. The margin is used
+ * both for the offscreen render surface and as the prefetch fan-out for panning.
+ */
+#define PAN_MARGIN_MAX_PERCENT 50
+/* Prefetch source-rect room for a rebuild during a pan gesture: at least this divisor
+ * of the larger screen dimension, so a fast drag does not immediately uncover the list. */
+#define PAN_PREFETCH_SCREEN_DIVISOR 2
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
 /* Fraction of the render margin beyond which the map is re-centered. */
@@ -144,6 +151,10 @@ struct navit {
     struct datawindow *roadbook_window;
     struct map *former_destination;
     struct point pressed, last, current;
+    struct point pan_drift;
+    struct callback *pan_rebuild_cb;
+    int pan_rebuild;
+    int redraw_pending;
     int button_pressed, moved, popped, zoomed;
     int center_timeout;
     int autozoom_secs;
@@ -165,6 +176,7 @@ struct navit {
                     unblocked */
     int w, h;
     int render_margin;
+    int pan_margin;
     int drag_bitmap;
     int use_mousewheel;
     struct messagelist *messages;
@@ -406,17 +418,47 @@ char *navit_get_user_data_directory(int create) {
     return dir;
 }
 
-void navit_draw_async(struct navit *this_, int async) {
+/* Prefetch margin for display lists that must survive a pan gesture: at least half the
+ * larger screen dimension, so a fast drag does not immediately uncover the list. */
+static int navit_pan_prefetch_margin(struct navit *this_) {
+    int half_screen = (this_->w > this_->h ? this_->w : this_->h) / PAN_PREFETCH_SCREEN_DIVISOR;
+    return this_->render_margin > half_screen ? this_->render_margin : half_screen;
+}
 
+/* cb is non-NULL while a mid-drag rebuild is in flight. The drag offset has to stay applied in
+ * that case: the surface still holds the frame drawn before the recenter, so presenting it at
+ * offset zero would show it displaced until the rebuilt frame lands. cb releases the offset once
+ * the rebuilt frame is available. */
+static int navit_draw_async_margin(struct navit *this_, int async, int margin, struct callback *cb) {
     if (this_->blocked) {
         this_->blocked |= 2;
         dbg(lvl_debug, "draw_async: blocked=%d, deferred", this_->blocked);
-        return;
+        return 0;
     }
-    graphics_draw_drag(this_->gra, NULL);
-    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, this_->render_margin);
-    graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
-                  NULL, this_->graphics_flags | 1);
+    /* Deprioritise rebuilds requested from outside the pan gesture (traffic updates, cursor
+     * recenters) while the user is dragging. Starting one mid-gesture would clobber the offset
+     * state below, strip the prefetch margin and fight the gesture's own rebuild, and a
+     * synchronous one would block the shared main thread. The request is remembered and
+     * flushed once the gesture ends. */
+    if (!cb && this_->button_pressed && this_->moved) {
+        this_->redraw_pending = 1;
+        dbg(lvl_debug, "draw_async: deferred, gesture active");
+        return 0;
+    }
+    if (!cb) {
+        this_->redraw_pending = 0;
+        graphics_draw_drag(this_->gra, NULL);
+        this_->pan_drift.x = 0;
+        this_->pan_drift.y = 0;
+        this_->pan_rebuild = 0;
+    }
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
+    return graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current,
+                         async, cb, this_->graphics_flags | 1);
+}
+
+void navit_draw_async(struct navit *this_, int async) {
+    navit_draw_async_margin(this_, async, this_->render_margin, NULL);
 }
 
 void navit_draw(struct navit *this_) {
@@ -705,6 +747,12 @@ void navit_draw_displaylist(struct navit *this_) {
  * display list was built from. When covered, the existing list can be re-used for a redraw
  * instead of rebuilding it (which is expensive). */
 static int navit_displaylist_covers(struct navit *this_) {
+    /* While a rebuild is in flight the selection has already been re-inflated around the new
+     * centre, but the items it describes have not been fetched yet: the list is empty until
+     * do_draw() completes. Reporting coverage here would make every caller repaint an empty
+     * list, which is what leaves a blank map behind a pan. */
+    if (graphics_displaylist_busy(this_->displaylist))
+        return 0;
     return transform_covers_screen(this_->trans, this_->w, this_->h);
 }
 
@@ -768,6 +816,11 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
 
     this_->w = w;
     this_->h = h;
+
+    if (this_->pan_margin >= 0) {
+        int pct = this_->pan_margin > PAN_MARGIN_MAX_PERCENT ? PAN_MARGIN_MAX_PERCENT : this_->pan_margin;
+        this_->render_margin = pct * (w > h ? w : h) / 100;
+    }
 
     /* Fix for #1135: Now w and h are set initially, we can set pitch value again
      *
@@ -949,16 +1002,28 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             dbg(lvl_debug, "mouse drag (%d, %d)->(%d, %d)", this_->pressed.x, this_->pressed.y, p->x, p->y);
             update_transformation(this_->trans, &this_->pressed, p);
             graphics_draw_drag(this_->gra, NULL);
+            this_->pan_drift.x = 0;
+            this_->pan_drift.y = 0;
+            this_->pan_rebuild = 0;
             transform_copy(this_->trans, this_->trans_cursor);
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
             if (!this_->zoomed) {
                 navit_set_timeout(this_);
-                if (navit_displaylist_covers(this_))
+                /* A rebuild requested during the gesture was deferred; release flushes it by
+                 * taking the full rebuild branch even when the (once prefetched) selection would
+                 * still cover the view. The plain redraw below cannot pick it up: it only
+                 * re-projects items already in the list. The flush runs chunked on idle rather
+                 * than synchronously, so the release does not stall. If a rebuild is already in
+                 * flight, it was paused for the gesture and resumes with the map the moment the
+                 * release turns the gesture off, picking up the change itself. */
+                int deferred_rebuild = this_->redraw_pending;
+                this_->redraw_pending = 0;
+                if (navit_displaylist_covers(this_) && !deferred_rebuild)
                     navit_draw_displaylist(this_);
-                else
-                    navit_draw(this_);
+                else if (!graphics_displaylist_busy(this_->displaylist))
+                    navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
             } else
                 navit_draw(this_);
         } else
@@ -977,31 +1042,66 @@ static void navit_button(void *data, int pressed, int button, struct point *p) {
     }
 }
 
+static void navit_pan_rebuild_done(struct navit *this_, int cancel) {
+    struct point point;
+    /* pan_rebuild is cleared by any draw that already released the offset, which leaves nothing
+     * to do here. It also keeps a late completion from displacing a frame drawn in the meantime. */
+    if (!this_->pan_rebuild)
+        return;
+    this_->pan_rebuild = 0;
+    this_->pan_drift.x = 0;
+    this_->pan_drift.y = 0;
+    if (cancel)
+        return;
+    point.x = this_->current.x - this_->pressed.x;
+    point.y = this_->current.y - this_->pressed.y;
+    graphics_draw_drag(this_->gra, &point);
+    graphics_draw_mode(this_->gra, draw_mode_end);
+}
+
 static void navit_motion_timeout(struct navit *this_) {
     int dx, dy;
 
     if (this_->drag_bitmap) {
         struct point point;
-        point.x = (this_->current.x - this_->pressed.x);
-        point.y = (this_->current.y - this_->pressed.y);
+        point.x = (this_->current.x - this_->pressed.x) + this_->pan_drift.x;
+        point.y = (this_->current.y - this_->pressed.y) + this_->pan_drift.y;
         if (graphics_draw_drag(this_->gra, &point)) {
             int abs_x = point.x < 0 ? -point.x : point.x;
             int abs_y = point.y < 0 ? -point.y : point.y;
             int margin_threshold = this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
-            if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
+            /* While a rebuild is in flight the surface holds the frame drawn before the last
+             * recenter, so it must keep tracking the pointer as-is. Recentering again would fold
+             * the same drag into the transformation twice and request a rebuild that the busy
+             * display list silently drops. A foreign build (e.g. triggered by a traffic update
+             * just before the gesture) would be rejected the same way, so recenter only against
+             * a settled display list. */
+            if (!this_->pan_rebuild && !graphics_displaylist_busy(this_->displaylist) && margin_threshold > 0
+                && (abs_x > margin_threshold || abs_y > margin_threshold)) {
                 int drag_dx = this_->current.x - this_->pressed.x;
                 int drag_dy = this_->current.y - this_->pressed.y;
                 int sw = this_->render_margin * 2 + navit_get_width(this_);
                 int sh = this_->render_margin * 2 + navit_get_height(this_);
                 update_transformation(this_->trans, &this_->pressed, &this_->current);
-                graphics_draw_drag(this_->gra, NULL);
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
                 if (this_->zoomed || !navit_displaylist_covers(this_)) {
-                    navit_draw_async(this_, 1);
+                    if (!this_->pan_rebuild_cb)
+                        this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
+                    this_->pan_rebuild =
+                        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
+                    if (this_->pan_rebuild) {
+                        /* Hold the offset until the rebuilt frame arrives, otherwise the stale
+                         * frame is shown at the wrong position in the meantime. */
+                        this_->pan_drift.x = drag_dx;
+                        this_->pan_drift.y = drag_dy;
+                    } else {
+                        graphics_draw_drag(this_->gra, NULL);
+                    }
                 } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
+                    graphics_draw_drag(this_->gra, NULL);
                     if (drag_dx != 0) {
                         clip_p1.x = drag_dx > 0 ? 0 : sw + drag_dx;
                         clip_p1.y = 0;
@@ -1028,6 +1128,7 @@ static void navit_motion_timeout(struct navit *this_) {
                         graphics_clear_clip(this_->gra);
                     }
                 } else {
+                    graphics_draw_drag(this_->gra, NULL);
                     navit_draw_displaylist(this_);
                 }
             }
@@ -1870,6 +1971,7 @@ struct navit *navit_new(struct attr *parent, struct attr **attrs) {
     this_->follow_cursor = 1;
     this_->radius = 30;
     this_->border = 16;
+    this_->pan_margin = -1;
     this_->auto_switch = TRUE;
     this_->tunnel_nightlayout = FALSE;
     this_->layout_before_tunnel = "";
@@ -3008,6 +3110,16 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
         attr_updated = (this_->drag_bitmap != !!attr->u.num);
         this_->drag_bitmap = !!attr->u.num;
         break;
+    case attr_pan_margin:
+        if (attr->u.num < 0)
+            this_->pan_margin = 0;
+        else if (attr->u.num > PAN_MARGIN_MAX_PERCENT)
+            this_->pan_margin = PAN_MARGIN_MAX_PERCENT;
+        else
+            this_->pan_margin = attr->u.num;
+        if (this_->w > 0 && this_->h > 0)
+            this_->render_margin = this_->pan_margin * (this_->w > this_->h ? this_->w : this_->h) / 100;
+        break;
     case attr_flags:
         attr_updated = (this_->flags != attr->u.num);
         this_->flags = attr->u.num;
@@ -3273,6 +3385,9 @@ int navit_get_attr(struct navit *this_, enum attr_type type, struct attr *attr, 
         break;
     case attr_imperial:
         attr->u.num = this_->imperial;
+        break;
+    case attr_pan_margin:
+        attr->u.num = this_->pan_margin;
         break;
     case attr_bookmark_map:
         attr->u.map = bookmarks_get_map(this_->bookmarks);
@@ -4527,6 +4642,10 @@ void navit_destroy(struct navit *this_) {
 
     callback_destroy(this_->popup_callback);
     callback_destroy(this_->motion_timeout_callback);
+    /* Cancel before freeing: a pending rebuild holds pan_rebuild_cb in displaylist->cb, and
+     * graphics_displaylist_destroy() does not drain the in-flight draw. */
+    graphics_draw_cancel(this_->gra, this_->displaylist);
+    callback_destroy(this_->pan_rebuild_cb);
     callback_destroy(this_->progress_cb);
     if (this_->animation_timer) {
         event_remove_timeout(this_->animation_timer);
