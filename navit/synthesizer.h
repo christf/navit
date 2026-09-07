@@ -60,13 +60,15 @@ typedef unsigned long long synthesizer_batch_id;
 
 struct synthesizer_methods {
     void (*destroy)(struct synthesizer_priv *this_);
-    int (*synthesize)(struct synthesizer_priv *this_, const char *text, const char *output_path, synthesizer_batch_id batch);
+    int (*synthesize)(struct synthesizer_priv *this_, const char *text, const char *output_path,
+                      synthesizer_batch_id batch);
     int (*check_status)(struct synthesizer_priv *this_);
     synthesizer_batch_id (*batch_begin)(struct synthesizer_priv *this_);
 };
 
 struct synthesizer *synthesizer_new(struct attr *parent, struct attr **attrs);
-int synthesizer_synthesize(struct synthesizer *this_, const char *text, const char *output_path, synthesizer_batch_id batch);
+int synthesizer_synthesize(struct synthesizer *this_, const char *text, const char *output_path,
+                           synthesizer_batch_id batch);
 synthesizer_batch_id synthesizer_batch_begin(struct synthesizer *this_);
 int synthesizer_check_status(struct synthesizer *this_);
 void synthesizer_destroy(struct synthesizer *this_);

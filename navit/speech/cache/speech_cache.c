@@ -17,8 +17,8 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#include "config.h"
 #include "audio_cache.h"
+#include "config.h"
 #include "debug.h"
 #include "file.h"
 #include "navit.h"
@@ -27,9 +27,9 @@
 #include "synthesizer.h"
 #include "util.h"
 #include <glib.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <sys/stat.h>
 
 enum cache_mode {
@@ -99,11 +99,11 @@ static void playback_files(struct speech_priv *this, GList *files) {
     g_strfreev(cmdv);
 }
 
-static int synthesis_sync(struct speech_priv *this, const char *out_path,
-                          const char *label) {
+static int synthesis_sync(struct speech_priv *this, const char *out_path, const char *label) {
     struct stat st;
     int waited = 0;
     while (stat(out_path, &st) == 0 && st.st_size == 0 && waited < 50) {
+        synthesizer_check_status(this->synth);
         g_usleep(100000);
         waited++;
     }
@@ -112,8 +112,7 @@ static int synthesis_sync(struct speech_priv *this, const char *out_path,
     return (stat(out_path, &st) == 0 && st.st_size > 0) ? 0 : -1;
 }
 
-static int synthesize_text(struct speech_priv *this, const char *text,
-                           int wait, unsigned long long batch_id) {
+static int synthesize_text(struct speech_priv *this, const char *text, int wait, unsigned long long batch_id) {
     if (!this->synth)
         return -1;
 
@@ -127,10 +126,8 @@ static int synthesize_text(struct speech_priv *this, const char *text,
                 continue;
             dbg(lvl_debug, "synthesize blank: '%s'", seg->text);
             char *encoded = audio_cache_name_encode(seg->text);
-            char *filename = g_strdup_printf("%s%s", encoded,
-                                            this->sample_suffix ? this->sample_suffix : "");
-            char *out_path = g_build_filename(this->cache_dir, "synthetic",
-                                              filename, NULL);
+            char *filename = g_strdup_printf("%s%s", encoded, this->sample_suffix ? this->sample_suffix : "");
+            char *out_path = g_build_filename(this->cache_dir, "synthetic", filename, NULL);
             g_free(filename);
             g_free(encoded);
             synthesizer_synthesize(this->synth, seg->text, out_path, batch_id);
@@ -144,10 +141,8 @@ static int synthesize_text(struct speech_priv *this, const char *text,
     }
 
     char *encoded = audio_cache_name_encode(text);
-    char *filename = g_strdup_printf("%s%s", encoded,
-                                    this->sample_suffix ? this->sample_suffix : "");
-    char *out_path = g_build_filename(this->cache_dir, "synthetic", filename,
-                                      NULL);
+    char *filename = g_strdup_printf("%s%s", encoded, this->sample_suffix ? this->sample_suffix : "");
+    char *out_path = g_build_filename(this->cache_dir, "synthetic", filename, NULL);
     g_free(filename);
     g_free(encoded);
     synthesizer_synthesize(this->synth, text, out_path, batch_id);
@@ -187,8 +182,7 @@ static int speech_cache_say(struct speech_priv *this, const char *text) {
     return 0;
 }
 
-static int speech_cache_prepare(struct speech_priv *this, const char *text,
-                                unsigned long long batch_id) {
+static int speech_cache_prepare(struct speech_priv *this, const char *text, unsigned long long batch_id) {
     if (!text || !*text)
         return 0;
 
@@ -232,9 +226,7 @@ static struct speech_methods speech_cache_meth = {
     speech_cache_batch_begin,
 };
 
-static struct speech_priv *speech_cache_new(struct speech_methods *meth,
-                                            struct attr **attrs,
-                                            struct attr *parent) {
+static struct speech_priv *speech_cache_new(struct speech_methods *meth, struct attr **attrs, struct attr *parent) {
     struct speech_priv *this;
     struct attr *attr;
 
