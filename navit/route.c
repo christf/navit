@@ -2960,7 +2960,7 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
                                 struct coord_geo gp, go;
                                 transform_to_geo(projection_mg, &p->c, &gp);
                                 transform_to_geo(projection_mg, &s->start->c, &go);
-                                dbg(lvl_error, "frontier %d: %s fwd=%s bwd=%s at %.5f,%.5f -> %.5f,%.5f", frontier,
+                                dbg(lvl_debug, "frontier %d: %s fwd=%s bwd=%s at %.5f,%.5f -> %.5f,%.5f", frontier,
                                     item_to_name(s->data.item.type),
                                     route_value_seg(profile, NULL, s, 2) == INT_MAX ? "REFUSED" : "ok",
                                     route_value_seg(profile, NULL, s, -2) == INT_MAX ? "REFUSED" : "ok", go.lng, go.lat,
@@ -2970,24 +2970,24 @@ static struct route_path *route_path_new(struct route_graph *this, struct route_
                         }
                 }
             }
-            dbg(lvl_error, "flood: frontier crossings near pos: %d", frontier);
+            dbg(lvl_debug, "flood: frontier crossings near pos: %d", frontier);
             if (have_lu) {
                 struct coord_geo g;
                 transform_to_geo(projection_mg, &umin_l, &g);
-                dbg(lvl_error, "flood: unreached near pos bbox SW %.4f,%.4f", g.lng, g.lat);
+                dbg(lvl_debug, "flood: unreached near pos bbox SW %.4f,%.4f", g.lng, g.lat);
                 transform_to_geo(projection_mg, &umax_l, &g);
-                dbg(lvl_error, "flood: unreached near pos bbox NE %.4f,%.4f", g.lng, g.lat);
+                dbg(lvl_debug, "flood: unreached near pos bbox NE %.4f,%.4f", g.lng, g.lat);
             }
             transform_to_geo(projection_mg, &rmin, &g);
-            dbg(lvl_error, "flood: %d/%d points reached, reached bbox SW %.4f,%.4f", reached, total, g.lng, g.lat);
+            dbg(lvl_debug, "flood: %d/%d points reached, reached bbox SW %.4f,%.4f", reached, total, g.lng, g.lat);
             transform_to_geo(projection_mg, &rmax, &g);
-            dbg(lvl_error, "flood: reached bbox NE %.4f,%.4f", g.lng, g.lat);
+            dbg(lvl_debug, "flood: reached bbox NE %.4f,%.4f", g.lng, g.lat);
             transform_to_geo(projection_mg, &umin, &g);
-            dbg(lvl_error, "flood: unreached bbox SW %.4f,%.4f", g.lng, g.lat);
+            dbg(lvl_debug, "flood: unreached bbox SW %.4f,%.4f", g.lng, g.lat);
             transform_to_geo(projection_mg, &umax, &g);
-            dbg(lvl_error, "flood: unreached bbox NE %.4f,%.4f", g.lng, g.lat);
+            dbg(lvl_debug, "flood: unreached bbox NE %.4f,%.4f", g.lng, g.lat);
         } else
-            dbg(lvl_error, "flood: %d/%d points reached (%s set empty)", reached, total,
+            dbg(lvl_debug, "flood: %d/%d points reached (%s set empty)", reached, total,
                 have_r ? "unreached" : "reached");
         while ((dbg_seg = route_graph_get_segment(this, pos->street, dbg_seg))) {
             dbg(lvl_error, "pos seg %p type=%s: seg_value fwd=%s bwd=%s, flood start=%d end=%d", dbg_seg,
