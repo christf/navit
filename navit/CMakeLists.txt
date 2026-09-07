@@ -1,5 +1,6 @@
 target_include_directories(navit_config INTERFACE
 	"${CMAKE_CURRENT_SOURCE_DIR}"
+	"${CMAKE_CURRENT_SOURCE_DIR}/support"
 	"${CMAKE_CURRENT_BINARY_DIR}"
 )
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nThis File should never appear on binary distributions\r\n" )
