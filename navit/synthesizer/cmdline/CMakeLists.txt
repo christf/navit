@@ -1,0 +1,1 @@
+module_add_library(synthesizer_cmdline synthesizer_cmdline.c)

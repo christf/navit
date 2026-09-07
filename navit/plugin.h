@@ -51,6 +51,8 @@ enum plugin_category {
     plugin_category_font,
     /** Category for plugins which retrieve traffic information. */
     plugin_category_traffic,
+    /** Category for plugins which synthesize audio samples. */
+    plugin_category_synthesizer,
     /** Dummy for last entry. */
     plugin_category_last,
 };
