@@ -31,11 +31,21 @@ struct speech_methods {
     int (*say)(struct speech_priv *this_, const char *text);
     int (*prepare)(struct speech_priv *this_, const char *text, unsigned long long batch_id);
     unsigned long long (*batch_begin)(struct speech_priv *this_);
+    /**
+     * @brief Speaks the first text from the list which is immediately available.
+     *
+     * Plugins which support this should play {@code texts[0]} if possible, otherwise try the
+     * subsequent (usually shorter) alternatives in order, and only synthesize on demand if none
+     * of them is available. Plugins which do not implement it will only ever be given
+     * {@code texts[0]} by the wrapper.
+     */
+    int (*say_alternates)(struct speech_priv *this_, const char *const *texts);
 };
 
 /* prototypes */
 struct speech *speech_new(struct attr *parent, struct attr **attrs);
 int speech_say(struct speech *this_, const char *text);
+int speech_say_alternates(struct speech *this_, const char *const *texts);
 int speech_sayf(struct speech *this_, const char *format, ...);
 int speech_prepare(struct speech *this_, const char *text, unsigned long long batch_id);
 unsigned long long speech_batch_begin(struct speech *this_);
