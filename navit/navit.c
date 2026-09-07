@@ -78,10 +78,6 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
-/* How many times wider/taller than the screen the map source rectangle is made when building
- * a prefetch display list after a pan gesture (and on initial draw).
- */
-#define PAN_PREFETCH_SCALE_FACTOR 3
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
 /* Fraction of the render margin beyond which the map is re-centered. */
@@ -418,7 +414,7 @@ void navit_draw_async(struct navit *this_, int async) {
         return;
     }
     graphics_draw_drag(this_->gra, NULL);
-    transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, this_->render_margin);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
 }
@@ -702,6 +698,13 @@ void navit_draw_displaylist(struct navit *this_) {
                                   this_->graphics_flags | 1);
 }
 
+/* Returns whether the current viewport is fully covered by the map selections the current
+ * display list was built from. When covered, the existing list can be re-used for a redraw
+ * instead of rebuilding it (which is expensive). */
+static int navit_displaylist_covers(struct navit *this_) {
+    return transform_covers_screen(this_->trans, this_->w, this_->h);
+}
+
 static void navit_map_progress(struct navit *this_) {
     struct map *map;
     struct mapset *ms;
@@ -947,9 +950,14 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
-            if (!this_->zoomed)
+            if (!this_->zoomed) {
                 navit_set_timeout(this_);
-            navit_draw(this_);
+                if (navit_displaylist_covers(this_))
+                    navit_draw_displaylist(this_);
+                else
+                    navit_draw(this_);
+            } else
+                navit_draw(this_);
         } else
             return 1;
     }
@@ -986,7 +994,9 @@ static void navit_motion_timeout(struct navit *this_) {
                 graphics_draw_drag(this_->gra, NULL);
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
-                if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
+                if (this_->zoomed || !navit_displaylist_covers(this_)) {
+                    navit_draw_async(this_, 1);
+                } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
                     if (drag_dx != 0) {
