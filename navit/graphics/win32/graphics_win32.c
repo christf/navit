@@ -1613,6 +1613,10 @@ static struct graphics_methods graphics_methods = {
     NULL, /* get dpi */
     draw_polygon_with_holes,
     NULL, /* set_display_rotation */
+    NULL, /* set_clip */
+    NULL, /* set_clip_rects */
+    NULL, /* clear_clip */
+    NULL, /* scroll */
 };
 
 static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *meth) {
