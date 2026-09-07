@@ -157,6 +157,7 @@ struct graphics_methods {
     navit_float (*get_dpi)(struct graphics_priv *gr);
     void (*draw_polygon_with_holes)(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count,
                                     int hole_count, int *ccount, struct point **holes);
+    void (*set_display_rotation)(struct graphics_priv *gr, double angle_degrees, int center_x, int center_y);
 };
 
 struct graphics_font_methods {
@@ -269,6 +270,7 @@ void graphics_overlay_disable(struct graphics *this_, int disable);
 int graphics_is_disabled(struct graphics *this_);
 void graphics_draw_image(struct graphics *this_, struct graphics_gc *gc, struct point *p, struct graphics_image *img);
 int graphics_draw_drag(struct graphics *this_, struct point *p);
+void graphics_set_display_rotation(struct graphics *this_, double angle_degrees, int center_x, int center_y);
 void graphics_background_gc(struct graphics *this_, struct graphics_gc *gc);
 void graphics_draw_text_std(struct graphics *this_, int text_size, char *text, struct point *p);
 char *graphics_icon_path(const char *icon);
