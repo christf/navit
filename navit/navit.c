@@ -78,6 +78,10 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
+/* Maximum render margin as a percentage of the larger screen dimension. The margin is used
+ * both for the offscreen render surface and as the prefetch fan-out for panning.
+ */
+#define PAN_MARGIN_MAX_PERCENT 50
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
 /* Fraction of the render margin beyond which the map is re-centered. */
@@ -166,6 +170,7 @@ struct navit {
                     unblocked */
     int w, h;
     int render_margin;
+    int pan_margin;
     int drag_bitmap;
     int use_mousewheel;
     struct messagelist *messages;
@@ -765,6 +770,11 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
 
     this_->w = w;
     this_->h = h;
+
+    if (this_->pan_margin >= 0) {
+        int pct = this_->pan_margin > PAN_MARGIN_MAX_PERCENT ? PAN_MARGIN_MAX_PERCENT : this_->pan_margin;
+        this_->render_margin = pct * (w > h ? w : h) / 100;
+    }
 
     /* Fix for #1135: Now w and h are set initially, we can set pitch value again
      *
@@ -1867,6 +1877,7 @@ struct navit *navit_new(struct attr *parent, struct attr **attrs) {
     this_->follow_cursor = 1;
     this_->radius = 30;
     this_->border = 16;
+    this_->pan_margin = -1;
     this_->auto_switch = TRUE;
     this_->tunnel_nightlayout = FALSE;
     this_->layout_before_tunnel = "";
@@ -3061,6 +3072,16 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
         attr_updated = (this_->drag_bitmap != !!attr->u.num);
         this_->drag_bitmap = !!attr->u.num;
         break;
+    case attr_pan_margin:
+        if (attr->u.num < 0)
+            this_->pan_margin = 0;
+        else if (attr->u.num > PAN_MARGIN_MAX_PERCENT)
+            this_->pan_margin = PAN_MARGIN_MAX_PERCENT;
+        else
+            this_->pan_margin = attr->u.num;
+        if (this_->w > 0 && this_->h > 0)
+            this_->render_margin = this_->pan_margin * (this_->w > this_->h ? this_->w : this_->h) / 100;
+        break;
     case attr_flags:
         attr_updated = (this_->flags != attr->u.num);
         this_->flags = attr->u.num;
@@ -3316,6 +3337,9 @@ int navit_get_attr(struct navit *this_, enum attr_type type, struct attr *attr, 
         break;
     case attr_imperial:
         attr->u.num = this_->imperial;
+        break;
+    case attr_pan_margin:
+        attr->u.num = this_->pan_margin;
         break;
     case attr_bookmark_map:
         attr->u.map = bookmarks_get_map(this_->bookmarks);
