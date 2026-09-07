@@ -1140,6 +1140,10 @@ static int osm_node_barrier_default_flags(enum item_type type) {
     }
 }
 
+static int osm_access_flags(int def_flags) {
+    return ((def_flags & ~flagsa[2]) | flags[0] | flags[1] | flagsa[1]) & ~flags[2];
+}
+
 static void osm_update_attr_present(char *k, char *v);
 
 void osm_add_tag(char *k, char *v) {
@@ -1964,7 +1968,7 @@ void osm_end_way(struct maptool_osm *osm) {
         nodes_ref_item_bin(item_bin);
         def_flags = item_get_default_flags(types[i]);
         if (def_flags) {
-            flags_attr_value = ((*def_flags & ~flagsa[2]) | flags[0] | flags[1] | flagsa[1]) & ~flags[2];
+            flags_attr_value = osm_access_flags(*def_flags);
             if (flags_attr_value != *def_flags)
                 add_flags = 1;
         }
@@ -2056,8 +2060,7 @@ void osm_end_node(struct maptool_osm *osm) {
         if (barrier_flags != -1) {
             if (current_node)
                 current_node->is_barrier = 1;
-            item_bin_add_attr_int(item_bin, attr_flags,
-                                  ((barrier_flags & ~flagsa[2]) | flags[0] | flags[1] | flagsa[1]) & ~flags[2]);
+            item_bin_add_attr_int(item_bin, attr_flags, osm_access_flags(barrier_flags));
         }
         item_bin_add_attr_string(item_bin, item_is_town(*item_bin) ? attr_town_name : attr_label,
                                  attr_strings[attr_string_label]);
