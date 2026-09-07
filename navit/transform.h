@@ -85,6 +85,8 @@ void transform_get_size(struct transformation *t, int *width, int *height);
 void transform_setup(struct transformation *t, struct pcoord *c, int scale, int yaw);
 void transform_setup_source_rect(struct transformation *t);
 void transform_setup_source_rect_scale(struct transformation *t, int scale_factor);
+void transform_setup_source_rect_margin(struct transformation *t, int w, int h, int margin);
+int transform_covers_screen(struct transformation *t, int w, int h);
 long transform_get_scale(struct transformation *t);
 void transform_set_scale(struct transformation *t, long scale);
 int transform_get_order(struct transformation *t);
