@@ -3081,7 +3081,7 @@ static char *navigation_cmd_get_exit_announce(struct navigation_command *this_, 
  * in..., then turn right"
  */
 static char *show_maneuver(struct navigation *nav, struct navigation_itm *itm, struct navigation_command *cmd,
-                           enum attr_type type, enum announcement_level level) {
+                           enum attr_type type, enum announcement_level level, int distance_override) {
 
     int distance = itm->dest_length - cmd->itm->dest_length;
     char *d = NULL, *ret = NULL;
@@ -3098,6 +3098,8 @@ static char *show_maneuver(struct navigation *nav, struct navigation_itm *itm, s
     char *instruction = NULL;
     char *strength = NULL; /* Strength of turn like 'easily', 'strongly', etc. */
 
+    if (distance_override >= 0)
+        distance = distance_override;
     if (type != attr_navigation_long_exact)
         distance = round_distance(distance);
 
@@ -3529,7 +3531,8 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
     char *ret, *buf, *next;
 
     if (type != attr_navigation_speech) {
-        return show_maneuver(nav, itm, cmd, type, level_meters); /* We only accumulate maneuvers in speech navigation */
+        return show_maneuver(nav, itm, cmd, type, level_meters,
+                             -1); /* We only accumulate maneuvers in speech navigation */
     }
 
     level = navigation_get_announce_level_cmd(nav, itm, cmd, distance - cmd->length);
@@ -3555,7 +3558,7 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
         }
     }
 
-    ret = show_maneuver(nav, itm, cmd, type, level);
+    ret = show_maneuver(nav, itm, cmd, type, level, -1);
 
     if (level > level_meters) {
         return ret; /* We only concatenate maneuvers that are close each other, so quit here */
@@ -3568,7 +3571,7 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
 
         /* If this level starts with 1 or 0 concatenate the following announcement to the current: */
         if (nextlevel <= level_soon) {
-            next = show_maneuver(nav, cmd->itm, cmd->next, type, level_connect);
+            next = show_maneuver(nav, cmd->itm, cmd->next, type, level_connect, -1);
             if (*next != '\0') { /* is the second announcement not an empty string? */
                 cmd->itm->told = 1;
                 buf = ret;
@@ -3847,6 +3850,100 @@ static void navigation_update(struct navigation *this_, struct route *route, str
 
 static void navigation_flush(struct navigation *this_) {
     navigation_destroy_itms_cmds(this_, NULL);
+}
+
+/**
+ * @brief Generates speech texts for all commands, one text per relevant announcement level.
+ *
+ * For each command (turn), generates exactly one text per announcement level that
+ * the vehicle will pass through as it approaches. The relevant levels are determined
+ * by the vehicle's current distance, the street type, and the user's configured
+ * announce thresholds for that street type.
+ *
+ * Typically 3-4 texts per command:
+ *   level_follow: "In X meters, turn left" (spoken when far away)
+ *   level_soon:   "Turn left soon" (spoken closer)
+ *   level_meters: "In X meters, turn left" (spoken at the level_meters threshold)
+ *   level_now:    "Turn left now" (spoken at the turn)
+ *
+ * The worker thread handles on-demand synthesis as the vehicle approaches and
+ * the level transitions.
+ *
+ * @param this_ The navigation object
+ * @return A GList of newly allocated strings. Caller must free each string and the list.
+ */
+GList *navigation_prepare_all_speech(struct navigation *this_) {
+    GList *texts = NULL;
+    struct navigation_command *cmd;
+
+    if (!this_->first || !this_->cmd_first)
+        return NULL;
+
+    for (cmd = this_->cmd_first; cmd; cmd = cmd->next) {
+        int actual_distance = this_->first->dest_length - cmd->itm->dest_length;
+        enum item_type street_type = cmd->itm->way.item.type;
+        int idx;
+        int announce_now, announce_meters, announce_soon;
+        char *text;
+
+        if (street_type < route_item_first || street_type > route_item_last)
+            continue;
+
+        idx = street_type - route_item_first;
+        announce_now = this_->announce[idx][0];
+        announce_meters = this_->announce[idx][1];
+        announce_soon = this_->announce[idx][2];
+
+        /* Determine which levels the vehicle will pass through and generate
+         * one text per relevant level. */
+
+        /* level_follow: spoken when distance exceeds the highest configured threshold */
+        {
+            int highest = -1;
+            if (announce_now >= 0 && announce_now > highest)
+                highest = announce_now;
+            if (announce_meters > 0 && announce_meters > highest)
+                highest = announce_meters;
+            if (announce_soon >= 0 && announce_soon > highest)
+                highest = announce_soon;
+            if (actual_distance > highest) {
+                text = show_maneuver(this_, this_->first, cmd, attr_navigation_speech, level_follow, actual_distance);
+                if (text && *text)
+                    texts = g_list_append(texts, text);
+                else
+                    g_free(text);
+            }
+        }
+
+        /* level_soon: vehicle passes through if it's beyond the level_soon zone's lower bound */
+        if (announce_soon >= 0 && (announce_meters <= 0 || actual_distance > announce_meters)) {
+            text = show_maneuver(this_, this_->first, cmd, attr_navigation_speech, level_soon, -1);
+            if (text && *text)
+                texts = g_list_append(texts, text);
+            else
+                g_free(text);
+        }
+
+        /* level_meters: vehicle passes through if it's beyond the level_meters zone's lower bound */
+        if (announce_meters > 0 && (announce_now < 0 || actual_distance > announce_now)) {
+            int d = (actual_distance < announce_meters) ? actual_distance : announce_meters;
+            text = show_maneuver(this_, this_->first, cmd, attr_navigation_speech, level_meters, d);
+            if (text && *text)
+                texts = g_list_append(texts, text);
+            else
+                g_free(text);
+        }
+
+        /* level_now: always relevant when configured */
+        if (announce_now >= 0) {
+            text = show_maneuver(this_, this_->first, cmd, attr_navigation_speech, level_now, -1);
+            if (text && *text)
+                texts = g_list_append(texts, text);
+            else
+                g_free(text);
+        }
+    }
+    return texts;
 }
 
 void navigation_destroy(struct navigation *this_) {
