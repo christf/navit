@@ -1,6 +1,4 @@
 file(COPY "skins" DESTINATION ".")
-add_definitions( -DMODULE=gui_qml )
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
 QT4_GENERATE_MOC(proxy.h ${CMAKE_CURRENT_BINARY_DIR}/proxy.moc)
 QT4_GENERATE_MOC(ngqpoint.h ${CMAKE_CURRENT_BINARY_DIR}/ngqpoint.moc)
 QT4_GENERATE_MOC(searchProxy.h ${CMAKE_CURRENT_BINARY_DIR}/searchProxy.moc)
@@ -21,3 +19,5 @@ module_add_library(gui_qml gui_qml.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/routeProxy.moc
 	${CMAKE_CURRENT_BINARY_DIR}/gui_qml.moc
 	)
+target_compile_definitions(gui_qml PRIVATE MODULE=gui_qml)
+target_include_directories(gui_qml PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
