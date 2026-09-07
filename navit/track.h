@@ -42,6 +42,7 @@ struct vehicle;
 struct vehicleprofile;
 int tracking_get_angle(struct tracking *tr);
 struct coord *tracking_get_pos(struct tracking *tr);
+int tracking_get_predicted_coord(struct tracking *tr, struct coord *out);
 int tracking_get_street_direction(struct tracking *tr);
 int tracking_get_segment_pos(struct tracking *tr);
 struct street_data *tracking_get_street_data(struct tracking *tr);

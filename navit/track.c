@@ -24,6 +24,7 @@
 #include "coord.h"
 #include "debug.h"
 #include "item.h"
+#include "kalman.h"
 #include "map.h"
 #include "mapset.h"
 #include "plugin.h"
@@ -115,6 +116,7 @@ struct tracking {
     int overspeed_pref;
     int overspeed_percent_pref;
     int tunnel_extrapolation;
+    struct kalman_filter *kf;
 };
 
 static void tracking_init_cdf(struct cdf_data *cdf, int hist_size) {
@@ -298,6 +300,16 @@ int tracking_get_angle(struct tracking *tr) {
 
 struct coord *tracking_get_pos(struct tracking *tr) {
     return &tr->curr_out;
+}
+
+int tracking_get_predicted_coord(struct tracking *tr, struct coord *out) {
+    double kx, ky;
+    if (!tr->kf || !kalman_is_initialized(tr->kf))
+        return 0;
+    kalman_get_position(tr->kf, &kx, &ky);
+    out->x = (int)kx;
+    out->y = (int)ky;
+    return 1;
 }
 
 int tracking_get_street_direction(struct tracking *tr) {
@@ -614,6 +626,7 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
     struct coord cin;
     struct attr valid, speed_attr, direction_attr, coord_geo, lag, time_attr, static_speed, static_distance;
     double speed, direction;
+    double kf_direction, kf_speed;
     if (v)
         tr->vehicle = v;
     if (vehicleprofile)
@@ -659,11 +672,39 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
     direction = *direction_attr.u.numd;
     tr->valid = attr_position_valid_valid;
     transform_from_geo(pro, coord_geo.u.coord_geo, &tr->curr_in);
+    {
+        struct coord_geo kg;
+        double cos_lat, speed_mps, course_rad, speed_proj;
+        double vx = 0, vy = 0;
+        int use_vel = 0;
+        transform_to_geo(pro, &tr->curr_in, &kg);
+        cos_lat = cos(kg.lat * G_PI / 180.0);
+        if (cos_lat < 0.1)
+            cos_lat = 0.1;
+        speed_mps = speed * 1000.0 / 3600.0;
+        course_rad = direction * G_PI / 180.0;
+        if (speed > 3.0) {
+            speed_proj = speed_mps / cos_lat;
+            vx = speed_proj * sin(course_rad);
+            vy = speed_proj * cos(course_rad);
+            use_vel = 1;
+        }
+        kalman_update(tr->kf, 0, (double)tr->curr_in.x, (double)tr->curr_in.y, vx, vy, use_vel);
+        kf_direction = kalman_get_heading(tr->kf);
+        kf_speed = kalman_get_speed(tr->kf) * cos_lat * 3.6;
+        {
+            double kx, ky;
+            kalman_get_filtered_position(tr->kf, &kx, &ky);
+            tr->curr_in.x = (int)kx;
+            tr->curr_in.y = (int)ky;
+        }
+    }
     if ((speed < static_speed.u.num && transform_distance(pro, &tr->last_in, &tr->curr_in) < static_distance.u.num)) {
         dbg(lvl_debug, "static speed %f coord 0x%x,0x%x vs 0x%x,0x%x", speed, tr->last_in.x, tr->last_in.y,
             tr->curr_in.x, tr->curr_in.y);
         tr->valid = attr_position_valid_static;
         tr->speed = 0;
+        tr->direction = tr->direction_matched = tr->curr_angle = kf_direction;
         return;
     }
     if (tr->tunnel) {
@@ -696,8 +737,8 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
         dbg(lvl_debug, "new 0x%x,0x%x", tr->curr_in.x, tr->curr_in.y);
     }
     tr->pro = pro;
-    tr->curr_angle = tr->direction = direction;
-    tr->speed = speed;
+    tr->curr_angle = tr->direction = kf_direction;
+    tr->speed = kf_speed;
     tr->last_in = tr->curr_in;
     tr->last_out = tr->curr_out;
     tr->last[0] = tr->curr[0];
@@ -750,6 +791,13 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
         tr->curr_out = tr->curr_in;
         tr->coord_geo_valid = 0;
         tr->street_direction = 0;
+        tr->direction_matched = direction;
+    }
+    if (tr->curr_line && tr->street_direction != 0) {
+        int road_heading = tr->direction_matched;
+        if (tr->street_direction == -1)
+            road_heading = (road_heading + 180) % 360;
+        tr->direction = road_heading;
     }
     if (tr->curr_line && (tr->curr_line->street->flags & AF_UNDERGROUND)) {
         if (tr->no_gps)
@@ -757,6 +805,8 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
     } else if (tr->tunnel) {
         tr->speed = 0;
     }
+    if (tr->kf)
+        kalman_set_position(tr->kf, (double)tr->curr_out.x, (double)tr->curr_out.y);
     dbg(lvl_debug, "found 0x%x,0x%x", tr->curr_out.x, tr->curr_out.y);
     callback_list_call_attr_0(tr->callback_list, attr_position_coord_geo);
 }
@@ -854,6 +904,7 @@ struct tracking *tracking_new(struct attr *parent, struct attr **attrs) {
     }
 
     tracking_init_cdf(&this->cdf, hist_size.u.num);
+    this->kf = kalman_new();
 
     return this;
 }
@@ -871,6 +922,7 @@ void tracking_destroy(struct tracking *tr) {
         attr_free(tr->attr);
     tracking_flush(tr);
     callback_list_destroy(tr->callback_list);
+    kalman_destroy(tr->kf);
     g_free(tr->cdf.pos_hist);
     g_free(tr->cdf.dir_hist);
     struct cdf_speed *sp = tr->cdf.speed_hist;
