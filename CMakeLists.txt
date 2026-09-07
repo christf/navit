@@ -227,11 +227,15 @@ if(PKG_CONFIG_FOUND)
 		set_with_reason(support/glib "Glib not found" TRUE ${INTL_LIBS})
 	endif(GLIB2_FOUND)
 
-	# speech/cache, speech/cmdline and synthesizer/cmdline use glib >= 2.32
-	# APIs (g_mutex_init/g_cond_init/g_thread_new/g_hash_table_add ...) which
-	# neither the bundled support/glib nor the ancient glib of the old tomtom
-	# toolchain provide. Disable them unless a modern system glib is available.
-	if (NOT GLIB2_FOUND OR (GLIB2_VERSION AND GLIB2_VERSION VERSION_LESS 2.32))
+	# speech/cache, speech/cmdline, synthesizer/cmdline and audio_cache.c use
+	# glib >= 2.32 APIs (g_mutex_init/g_cond_init/g_thread_new/g_hash_table_add,
+	# gstdio/gstring ...) which neither the bundled support/glib nor the
+	# ancient glib of the old tomtom toolchain provide. Disable/omit them
+	# unless a modern system glib is available.
+	if (GLIB2_FOUND AND (NOT GLIB2_VERSION OR NOT GLIB2_VERSION VERSION_LESS 2.32))
+		set(HAVE_GLIB2_32 TRUE)
+	else()
+		set(HAVE_GLIB2_32 FALSE)
 		foreach( MODULE_PATH speech/cache speech/cmdline synthesizer/cmdline)
 			set_with_reason(${MODULE_PATH} "requires glib >= 2.32" FALSE)
 		endforeach()
