@@ -21,7 +21,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-09-03 23:53+0200\n"
 "PO-Revision-Date: 2025-02-04 00:01+0000\n"
 "Last-Translator: Bruno Fragoso <darth_signa@hotmail.com>\n"
 "Language-Team: Portuguese <https://hosted.weblate.org/projects/navit/navit-"
@@ -205,9 +205,6 @@ msgstr "%sem %s%s%s"
 #, c-format
 msgid "%sinto the %s"
 msgstr "%sna %s"
-
-msgid "When possible, please turn around"
-msgstr "Quando for possível, inverta o sentido de marcha"
 
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
@@ -399,6 +396,9 @@ msgstr "depois chegou ao seu destino."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Chega ao seu destino %s"
+
+msgid "When possible, please turn around"
+msgstr "Quando for possível, inverta o sentido de marcha"
 
 msgid "Interchange"
 msgstr "Trevo"
