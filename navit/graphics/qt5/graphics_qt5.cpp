@@ -890,7 +890,12 @@ static struct graphics_methods graphics_methods = {
     NULL,  // show_native_keyboard
     NULL,  // hide_native_keyboard
     get_dpi,
-    draw_polygon_with_holes  //
+    draw_polygon_with_holes,
+    NULL, /* set_display_rotation */
+    NULL, /* set_clip */
+    NULL, /* set_clip_rects */
+    NULL, /* clear_clip */
+    NULL, /* scroll */
 };
 
 /* create new graphics context on given context */

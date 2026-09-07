@@ -158,6 +158,11 @@ struct graphics_methods {
     void (*draw_polygon_with_holes)(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count,
                                     int hole_count, int *ccount, struct point **holes);
     void (*set_display_rotation)(struct graphics_priv *gr, double angle_degrees, int center_x, int center_y);
+    void (*set_clip)(struct graphics_priv *gr, struct point *p, int w, int h);
+    void (*set_clip_rects)(struct graphics_priv *gr, struct point *p1, int w1, int h1, struct point *p2, int w2,
+                           int h2);
+    void (*clear_clip)(struct graphics_priv *gr);
+    int (*scroll)(struct graphics_priv *gr, int dx, int dy);
 };
 
 struct graphics_font_methods {
@@ -305,6 +310,10 @@ void graphics_draw_polygon_clipped(struct graphics *gra, struct graphics_gc *gc,
 void graphics_draw_polyline_clipped(struct graphics *gra, struct graphics_gc *gc, struct point *pa, int count,
                                     int *width, int poly);
 navit_float graphics_get_dpi(struct graphics *gra);
+void graphics_set_clip_rect(struct graphics *gra, struct point *p, int w, int h);
+void graphics_set_clip_rects(struct graphics *gra, struct point *p1, int w1, int h1, struct point *p2, int w2, int h2);
+void graphics_clear_clip(struct graphics *gra);
+int graphics_scroll(struct graphics *gra, int dx, int dy);
 
 /* end of prototypes */
 #ifdef __cplusplus

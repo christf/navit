@@ -1244,11 +1244,16 @@ static struct graphics_methods graphics_methods = {
     NULL,
     overlay_disable,
     overlay_resize,
+    NULL, /* set_attr */
     NULL, /* show_native_keyboard */
     NULL, /* hide_native_keyboard */
     NULL, /* get_dpi */
     NULL, /* draw_polygon_with_holes */
     NULL, /* set_display_rotation */
+    NULL, /* set_clip */
+    NULL, /* set_clip_rects */
+    NULL, /* clear_clip */
+    NULL, /* scroll */
 };
 
 static struct graphics_priv *graphics_opengl_new_helper(struct graphics_methods *meth) {
