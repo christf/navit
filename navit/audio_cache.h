@@ -39,22 +39,18 @@ struct cache_segment {
 struct audio_cache *audio_cache_new(const char *cache_dir);
 void audio_cache_destroy(struct audio_cache *ac);
 
-GList *audio_cache_lookup(struct audio_cache *ac, const char *text,
-                          const char *suffix);
+GList *audio_cache_lookup(struct audio_cache *ac, const char *text, const char *suffix);
 
-GList *audio_cache_decompose(struct audio_cache *ac, const char *text,
-                             const char *suffix);
+GList *audio_cache_decompose(struct audio_cache *ac, const char *text, const char *suffix);
 
 void audio_cache_segment_free(struct cache_segment *seg);
 
-int audio_cache_put(struct audio_cache *ac, const char *text,
-                    const void *data, size_t len,
-                    const char *suffix, int synthetic);
+int audio_cache_put(struct audio_cache *ac, const char *text, const void *data, size_t len, const char *suffix,
+                    int synthetic);
 
 void audio_cache_touch(const char *path);
 
-void audio_cache_cleanup(struct audio_cache *ac, size_t max_bytes,
-                         const char *suffix);
+void audio_cache_cleanup(struct audio_cache *ac, size_t max_bytes, const char *suffix);
 
 char *audio_cache_synthetic_dir(struct audio_cache *ac);
 char *audio_cache_manual_dir(struct audio_cache *ac);
