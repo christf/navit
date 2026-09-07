@@ -50,9 +50,11 @@ jobs:
       - name: Setup requirements
         run: |
            bash scripts/setup_common_requirements.sh
-           apt-get install -y libpng-dev libfreetype6-dev libdbus-glib-1-dev libgtk2.0-dev curl
+           apt-get install -y libpng-dev libfreetype6-dev libdbus-glib-1-dev libgtk2.0-dev curl pkg-config libglib2.0-dev
       - name: Build for Linux
         run: bash scripts/build_linux.sh
+      - name: Run barrier routing regression test
+        run: test/run_barrier_test.sh "$GITHUB_WORKSPACE/linux"
       - uses: actions/upload-artifact@v7
         with:
            name: Linux Artifacts
