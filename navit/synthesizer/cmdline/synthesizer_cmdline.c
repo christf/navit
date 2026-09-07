@@ -46,6 +46,11 @@ struct synthesizer_priv {
     char *cmdline;
     GSequence *queue;
     unsigned long long next_batch_id;
+    GMutex mutex;
+    GCond cond;
+    GThread *thread;
+    int shutdown;
+    int paused;
 };
 
 static void pending_synth_free(struct pending_synth *ps) {
@@ -93,6 +98,9 @@ static void synthesizer_cmdline_fill_slots(struct synthesizer_priv *this) {
     int running = 0;
     GSequenceIter *iter;
 
+    if (this->paused)
+        return;
+
     for (iter = g_sequence_get_begin_iter(this->queue); iter != g_sequence_get_end_iter(this->queue);
          iter = g_sequence_iter_next(iter)) {
         struct pending_synth *ps = g_sequence_get(iter);
@@ -113,24 +121,66 @@ static void synthesizer_cmdline_fill_slots(struct synthesizer_priv *this) {
     }
 }
 
-static void synthesizer_cmdline_reap_done(struct synthesizer_priv *this) {
-    GSequenceIter *iter = g_sequence_get_begin_iter(this->queue);
-    while (iter != g_sequence_get_end_iter(this->queue)) {
-        struct pending_synth *ps = g_sequence_get(iter);
-        GSequenceIter *next = g_sequence_iter_next(iter);
-        if (ps->spi) {
-            int st = spawn_process_check_status(ps->spi, 0);
-            if (st >= 0) {
-                spawn_process_info_free(ps->spi);
-                if (ps->tmp_output && g_file_test(ps->tmp_output, G_FILE_TEST_EXISTS))
-                    g_rename(ps->tmp_output, ps->output);
-                pending_synth_free(ps);
-                g_sequence_remove(iter);
+static void synthesizer_cmdline_reap_entry(struct pending_synth *ps, int st) {
+    if (st >= 0 && ps->tmp_output && g_file_test(ps->tmp_output, G_FILE_TEST_EXISTS)) {
+        struct stat fst;
+        if (stat(ps->tmp_output, &fst) == 0 && fst.st_size > 0) {
+            g_rename(ps->tmp_output, ps->output);
+        } else {
+            dbg(lvl_warning, "synthesis failed for '%s', removing empty output", ps->text);
+            g_unlink(ps->tmp_output);
+        }
+    } else if (ps->tmp_output) {
+        g_unlink(ps->tmp_output);
+    }
+}
+
+static gpointer synthesizer_cmdline_worker(gpointer data) {
+    struct synthesizer_priv *this = data;
+
+    g_mutex_lock(&this->mutex);
+    while (!this->shutdown) {
+        GSequenceIter *running_iter = NULL;
+        GSequenceIter *iter;
+
+        synthesizer_cmdline_fill_slots(this);
+
+        for (iter = g_sequence_get_begin_iter(this->queue); iter != g_sequence_get_end_iter(this->queue);
+             iter = g_sequence_iter_next(iter)) {
+            struct pending_synth *ps = g_sequence_get(iter);
+            if (ps->spi) {
+                running_iter = iter;
+                break;
             }
         }
-        iter = next;
+
+        if (running_iter) {
+            struct pending_synth *ps = g_sequence_get(running_iter);
+            int st;
+
+            g_mutex_unlock(&this->mutex);
+            st = spawn_process_check_status(ps->spi, 1);
+            g_mutex_lock(&this->mutex);
+
+            spawn_process_info_free(ps->spi);
+            ps->spi = NULL;
+            if (st >= 0) {
+                synthesizer_cmdline_reap_entry(ps, st);
+                pending_synth_free(ps);
+                g_sequence_remove(running_iter);
+                g_cond_broadcast(&this->cond);
+            }
+        } else if (g_sequence_get_length(this->queue) > 0) {
+            if (this->paused)
+                g_cond_wait(&this->cond, &this->mutex);
+            else
+                g_cond_wait_until(&this->cond, &this->mutex, g_get_monotonic_time() + 50 * 1000);
+        } else {
+            g_cond_wait(&this->cond, &this->mutex);
+        }
     }
-    synthesizer_cmdline_fill_slots(this);
+    g_mutex_unlock(&this->mutex);
+    return NULL;
 }
 
 static int synthesizer_cmdline_synthesize(struct synthesizer_priv *this, const char *text, const char *output_path,
@@ -162,50 +212,48 @@ static int synthesizer_cmdline_synthesize(struct synthesizer_priv *this, const c
         }
     }
 
-    {
-        int fd = open(output_path, O_WRONLY | O_CREAT | O_EXCL, 0666);
-        if (fd != -1) {
-            close(fd);
-        } else if (errno == EEXIST) {
-            dbg(lvl_debug, "lock file '%s' already exists", output_path);
-        } else {
-            dbg(lvl_error, "cannot create lock file '%s'", output_path);
-        }
-    }
-
     struct pending_synth *ps = g_new0(struct pending_synth, 1);
     ps->text = g_strdup(text);
     ps->output = g_strdup(output_path);
     ps->priority = batch;
-    g_sequence_insert_sorted(this->queue, ps, pending_synth_compare, NULL);
 
-    synthesizer_cmdline_reap_done(this);
+    g_mutex_lock(&this->mutex);
+    g_sequence_insert_sorted(this->queue, ps, pending_synth_compare, NULL);
+    g_cond_signal(&this->cond);
+    g_mutex_unlock(&this->mutex);
 
     return 0;
 }
 
 static unsigned long long synthesizer_cmdline_batch_begin(struct synthesizer_priv *this) {
-    GSequenceIter *iter = g_sequence_get_begin_iter(this->queue);
-    while (iter != g_sequence_get_end_iter(this->queue)) {
-        struct pending_synth *ps = g_sequence_get(iter);
-        GSequenceIter *next = g_sequence_iter_next(iter);
-        if (!ps->spi) {
-            dbg(lvl_debug, "discard pending batch=%llu '%s'", ps->priority, ps->output);
-            pending_synth_free(ps);
-            g_sequence_remove(iter);
-        }
-        iter = next;
-    }
+    g_mutex_lock(&this->mutex);
     this->next_batch_id++;
     dbg(lvl_debug, "new batch id=%llu", this->next_batch_id);
+    g_mutex_unlock(&this->mutex);
     return this->next_batch_id;
 }
 
 static int synthesizer_cmdline_check_status(struct synthesizer_priv *this) {
-    synthesizer_cmdline_reap_done(this);
-    if (g_sequence_get_length(this->queue) == 0)
+    int len;
+
+    g_mutex_lock(&this->mutex);
+    len = g_sequence_get_length(this->queue);
+    g_mutex_unlock(&this->mutex);
+
+    if (len == 0)
         return 255;
     return -1;
+}
+
+static int synthesizer_cmdline_wait_done(struct synthesizer_priv *this) {
+    g_mutex_lock(&this->mutex);
+    while (g_sequence_get_length(this->queue) > 0 && !this->shutdown)
+        g_cond_wait(&this->cond, &this->mutex);
+    g_mutex_unlock(&this->mutex);
+
+    if (this->shutdown)
+        return -1;
+    return 255;
 }
 
 static void pending_synth_destroy_wrapper(gpointer data, gpointer user_data) {
@@ -220,17 +268,39 @@ static void pending_synth_destroy_wrapper(gpointer data, gpointer user_data) {
 }
 
 static void synthesizer_cmdline_destroy(struct synthesizer_priv *this) {
+    g_mutex_lock(&this->mutex);
+    this->shutdown = 1;
+    g_cond_signal(&this->cond);
+    g_mutex_unlock(&this->mutex);
+
+    if (this->thread)
+        g_thread_join(this->thread);
+
     g_sequence_foreach(this->queue, pending_synth_destroy_wrapper, NULL);
     g_sequence_free(this->queue);
+    g_mutex_clear(&this->mutex);
+    g_cond_clear(&this->cond);
     g_free(this->cmdline);
     g_free(this);
 }
 
+static void synthesizer_cmdline_pause(struct synthesizer_priv *this) {
+    g_mutex_lock(&this->mutex);
+    this->paused = 1;
+    g_mutex_unlock(&this->mutex);
+}
+
+static void synthesizer_cmdline_resume(struct synthesizer_priv *this) {
+    g_mutex_lock(&this->mutex);
+    this->paused = 0;
+    g_cond_signal(&this->cond);
+    g_mutex_unlock(&this->mutex);
+}
+
 static struct synthesizer_methods synthesizer_cmdline_meth = {
-    synthesizer_cmdline_destroy,
-    synthesizer_cmdline_synthesize,
-    synthesizer_cmdline_check_status,
-    synthesizer_cmdline_batch_begin,
+    synthesizer_cmdline_destroy,   synthesizer_cmdline_synthesize,  synthesizer_cmdline_check_status,
+    synthesizer_cmdline_wait_done, synthesizer_cmdline_batch_begin, synthesizer_cmdline_pause,
+    synthesizer_cmdline_resume,
 };
 
 static struct synthesizer_priv *synthesizer_cmdline_new(struct synthesizer_methods *meth, struct attr **attrs,
@@ -247,6 +317,9 @@ static struct synthesizer_priv *synthesizer_cmdline_new(struct synthesizer_metho
         this->cmdline = g_strdup("navit-speech-cache-synthesize.sh");
 
     this->queue = g_sequence_new(NULL);
+    g_mutex_init(&this->mutex);
+    g_cond_init(&this->cond);
+    this->thread = g_thread_new("navit-synth", synthesizer_cmdline_worker, this);
 
     *meth = synthesizer_cmdline_meth;
     return this;
