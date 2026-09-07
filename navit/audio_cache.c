@@ -22,16 +22,16 @@
 #include "file.h"
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #ifdef _WIN32
 #    include <windows.h>
 #else
 #    include <sys/stat.h>
-#    include <utime.h>
 #    include <unistd.h>
+#    include <utime.h>
 #endif
 
 struct audio_cache {
@@ -89,8 +89,7 @@ char *audio_cache_name_decode(const char *name) {
             g_string_append_c(s, (char)val);
             p += 3;
             continue;
-        literal:
-            ;
+        literal:;
         } else if (*p == '_') {
             g_string_append_c(s, ' ');
             p++;
@@ -207,8 +206,7 @@ static GList *find_longest_match(GList *files, const char *text, const char *suf
     return NULL;
 }
 
-GList *audio_cache_lookup(struct audio_cache *ac, const char *text,
-                          const char *suffix) {
+GList *audio_cache_lookup(struct audio_cache *ac, const char *text, const char *suffix) {
     GList *all_files = NULL;
     GList *result = NULL;
     GList *synthetic_files = NULL;
@@ -259,9 +257,8 @@ GList *audio_cache_lookup(struct audio_cache *ac, const char *text,
     return result;
 }
 
-int audio_cache_put(struct audio_cache *ac, const char *text,
-                    const void *data, size_t len,
-                    const char *suffix, int synthetic) {
+int audio_cache_put(struct audio_cache *ac, const char *text, const void *data, size_t len, const char *suffix,
+                    int synthetic) {
     char *dir = synthetic ? ac->synthetic_dir : ac->manual_dir;
     char *encoded = audio_cache_name_encode(text);
     char *filename = g_strdup_printf("%s%s", encoded, suffix ? suffix : "");
@@ -305,8 +302,7 @@ void audio_cache_segment_free(struct cache_segment *seg) {
     g_free(seg);
 }
 
-GList *audio_cache_decompose(struct audio_cache *ac, const char *text,
-                             const char *suffix) {
+GList *audio_cache_decompose(struct audio_cache *ac, const char *text, const char *suffix) {
     GList *all_files = NULL;
     GList *synthetic_files = NULL;
     GList *manual_files = NULL;
@@ -373,8 +369,7 @@ GList *audio_cache_decompose(struct audio_cache *ac, const char *text,
 
 void audio_cache_touch(const char *path) {
 #ifdef _WIN32
-    HANDLE h = CreateFileA(path, FILE_WRITE_ATTRIBUTES, 0, NULL, OPEN_EXISTING,
-                           FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h = CreateFileA(path, FILE_WRITE_ATTRIBUTES, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h != INVALID_HANDLE_VALUE) {
         FILETIME ft;
         GetSystemTimeAsFileTime(&ft);
@@ -400,8 +395,7 @@ struct file_info {
     long long size;
 };
 
-static void cleanup_stale_temps(const char *dir, GHashTable *regulars,
-                                GList *temps) {
+static void cleanup_stale_temps(const char *dir, GHashTable *regulars, GList *temps) {
     time_t now = time(NULL);
     GList *l;
 
@@ -512,8 +506,7 @@ static void lru_evict(GHashTable *regulars, size_t max_bytes) {
         for (i = 0; i < count && total > (long long)max_bytes; i++) {
             if (g_unlink(info[i].path) == 0) {
                 total -= info[i].size;
-                dbg(lvl_debug, "evicted %s (size %lld)", info[i].path,
-                    (long long)info[i].size);
+                dbg(lvl_debug, "evicted %s (size %lld)", info[i].path, (long long)info[i].size);
             }
         }
     }
@@ -524,8 +517,7 @@ static void lru_evict(GHashTable *regulars, size_t max_bytes) {
     g_list_free(remaining);
 }
 
-void audio_cache_cleanup(struct audio_cache *ac, size_t max_bytes,
-                         const char *suffix) {
+void audio_cache_cleanup(struct audio_cache *ac, size_t max_bytes, const char *suffix) {
     char *dir = ac->synthetic_dir;
     GHashTable *regulars;
     GList *temps;
