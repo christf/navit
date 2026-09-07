@@ -537,6 +537,7 @@ static struct graphics_methods graphics_methods = {
     .hide_native_keyboard = NULL,     // TODO add proxy
     .get_dpi = NULL,                  // TODO add proxy
     .draw_polygon_with_holes = NULL,  // TODO add proxy
+    .set_display_rotation = NULL,
 
 };
 
