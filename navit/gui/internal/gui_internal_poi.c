@@ -620,6 +620,7 @@ void gui_internal_cmd_pois_filter(struct gui_priv *this, struct widget *wm, void
 }
 
 #define POI_BATCH_SIZE 2000
+#define POI_FOOTER_ROW_DIST 100000000
 
 struct poi_search_state {
     struct gui_priv *this;
@@ -729,7 +730,7 @@ static void gui_internal_pois_display_results(struct poi_search_state *state) {
     state->items = NULL;
 
     row = gui_internal_widget_table_row_new(this, gravity_left | flags_fill | orientation_horizontal);
-    row->datai = 100000000;
+    row->datai = POI_FOOTER_ROW_DIST;
     gui_internal_widget_append(wtable, row);
     wl = gui_internal_box_new(this, gravity_left_center | orientation_horizontal | flags_fill);
     gui_internal_widget_append(row, wl);
