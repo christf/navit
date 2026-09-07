@@ -47,7 +47,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 23:53+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2026-02-09 18:25+0000\n"
 "Last-Translator: jkoan <jkoan@gmx.de>\n"
 "Language-Team: German <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -370,10 +370,6 @@ msgstr "dann die %1$s Straße %2$s"
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Die %1$s Straße %2$s abbiegen"
-
-#, c-format
-msgid "after %i roads"
-msgstr "nach %i Straßen"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -3093,6 +3089,10 @@ msgstr "Süd+Mittel-Amerika"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Französisch-Guayana"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "nach %i Straßen"
 
 #~ msgid "Searching..."
 #~ msgstr "Suche läuft..."

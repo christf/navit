@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 23:53+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Faroese <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -331,10 +331,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "tak tann %1$s vegin til %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "eftir %i vegir"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -3016,6 +3012,10 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "eftir %i vegir"
 
 #, c-format
 #~ msgid "Route %4.0fkm    %02d:%02d ETA"
