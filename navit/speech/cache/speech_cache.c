@@ -99,7 +99,7 @@ static void playback_files(struct speech_priv *this, GList *files) {
     g_strfreev(cmdv);
 }
 
-static int synthesize_text(struct speech_priv *this, const char *text, int wait, unsigned long long batch_id) {
+static int synthesize_text(struct speech_priv *this, const char *text, unsigned long long batch_id) {
     if (!this->synth)
         return -1;
 
@@ -118,8 +118,6 @@ static int synthesize_text(struct speech_priv *this, const char *text, int wait,
             g_free(filename);
             g_free(encoded);
             synthesizer_synthesize(this->synth, seg->text, out_path, batch_id);
-            if (wait)
-                synthesizer_wait_done(this->synth);
             g_free(out_path);
             ok = 1;
         }
@@ -133,8 +131,6 @@ static int synthesize_text(struct speech_priv *this, const char *text, int wait,
     g_free(filename);
     g_free(encoded);
     synthesizer_synthesize(this->synth, text, out_path, batch_id);
-    if (wait)
-        synthesizer_wait_done(this->synth);
     g_free(out_path);
     return 0;
 }
@@ -153,20 +149,8 @@ static int speech_cache_say(struct speech_priv *this, const char *text) {
         return 0;
     }
 
-    unsigned long long batch = synthesizer_batch_begin(this->synth);
-    dbg(lvl_debug, "cache MISS, synthesizing '%s' batch=%llu", text, batch);
-    synthesize_text(this, text, 1, batch);
-
-    matches = audio_cache_lookup(this->ac, text, this->sample_suffix);
-    if (matches) {
-        dbg(lvl_debug, "after synthesis cache HIT: %d file(s)", g_list_length(matches));
-        playback_files(this, matches);
-        g_list_free_full(matches, g_free);
-    } else {
-        dbg(lvl_error, "synthesis produced no file for '%s'", text);
-    }
-
-    return 0;
+    dbg(lvl_debug, "cache MISS (synthesis in progress): '%s'", text);
+    return -1;
 }
 
 static int speech_cache_prepare(struct speech_priv *this, const char *text, unsigned long long batch_id) {
@@ -180,7 +164,7 @@ static int speech_cache_prepare(struct speech_priv *this, const char *text, unsi
     }
 
     dbg(lvl_debug, "prepare: synthesizing '%s' batch=%llu", text, batch_id);
-    synthesize_text(this, text, 0, batch_id);
+    synthesize_text(this, text, batch_id);
     return 0;
 }
 
