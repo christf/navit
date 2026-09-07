@@ -588,6 +588,10 @@ static struct graphics_methods graphics_methods = {
     NULL, /*get_dpi*/
     draw_polygon_with_holes,
     NULL, /* set_display_rotation */
+    NULL, /* set_clip */
+    NULL, /* set_clip_rects */
+    NULL, /* clear_clip */
+    NULL, /* scroll */
 };
 
 static void resize_callback(struct graphics_priv *gra, int w, int h) {
