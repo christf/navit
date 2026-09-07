@@ -683,7 +683,7 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             stride = (g->w + 2) * 4;
             if (color) {
                 shadow = g_malloc(stride * (g->h + 2));
-                gr->freetype_methods.get_shadow(g, shadow, stride, &white, &transparent);
+                gr->freetype_methods.get_shadow(g, shadow, stride, &white, &transparent, 1);
 
                 struct point p;
                 p.x = ((x + g->x) >> 6) - 1;
