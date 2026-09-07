@@ -163,6 +163,7 @@ struct graphics_methods {
                            int h2);
     void (*clear_clip)(struct graphics_priv *gr);
     int (*scroll)(struct graphics_priv *gr, int dx, int dy);
+    void (*freeze_display_rotation)(struct graphics_priv *gr);
 };
 
 struct graphics_font_methods {
@@ -276,6 +277,7 @@ int graphics_is_disabled(struct graphics *this_);
 void graphics_draw_image(struct graphics *this_, struct graphics_gc *gc, struct point *p, struct graphics_image *img);
 int graphics_draw_drag(struct graphics *this_, struct point *p);
 void graphics_set_display_rotation(struct graphics *this_, double angle_degrees, int center_x, int center_y);
+void graphics_freeze_display_rotation(struct graphics *this_);
 void graphics_background_gc(struct graphics *this_, struct graphics_gc *gc);
 void graphics_draw_text_std(struct graphics *this_, int text_size, char *text, struct point *p);
 char *graphics_icon_path(const char *icon);
