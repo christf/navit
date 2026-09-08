@@ -82,6 +82,9 @@ struct vehicle;
  * both for the offscreen render surface and as the prefetch fan-out for panning.
  */
 #define PAN_MARGIN_MAX_PERCENT 50
+/* Prefetch source-rect room for a rebuild during a pan gesture: at least this divisor
+ * of the larger screen dimension, so a fast drag does not immediately uncover the list. */
+#define PAN_PREFETCH_SCREEN_DIVISOR 2
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
 /* Fraction of the render margin beyond which the map is re-centered. */
@@ -412,17 +415,27 @@ char *navit_get_user_data_directory(int create) {
     return dir;
 }
 
-void navit_draw_async(struct navit *this_, int async) {
+/* Prefetch margin for display lists that must survive a pan gesture: at least half the
+ * larger screen dimension, so a fast drag does not immediately uncover the list. */
+static int navit_pan_prefetch_margin(struct navit *this_) {
+    int half_screen = (this_->w > this_->h ? this_->w : this_->h) / PAN_PREFETCH_SCREEN_DIVISOR;
+    return this_->render_margin > half_screen ? this_->render_margin : half_screen;
+}
 
+static void navit_draw_async_margin(struct navit *this_, int async, int margin) {
     if (this_->blocked) {
         this_->blocked |= 2;
         dbg(lvl_debug, "draw_async: blocked=%d, deferred", this_->blocked);
         return;
     }
     graphics_draw_drag(this_->gra, NULL);
-    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, this_->render_margin);
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
+}
+
+void navit_draw_async(struct navit *this_, int async) {
+    navit_draw_async_margin(this_, async, this_->render_margin);
 }
 
 void navit_draw(struct navit *this_) {
@@ -969,7 +982,7 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
                 if (navit_displaylist_covers(this_))
                     navit_draw_displaylist(this_);
                 else
-                    navit_draw(this_);
+                    navit_draw_async_margin(this_, 0, navit_pan_prefetch_margin(this_));
             } else
                 navit_draw(this_);
         } else
@@ -1009,7 +1022,7 @@ static void navit_motion_timeout(struct navit *this_) {
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
                 if (this_->zoomed || !navit_displaylist_covers(this_)) {
-                    navit_draw_async(this_, 1);
+                    navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_));
                 } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
