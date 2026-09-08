@@ -2236,14 +2236,6 @@ static int gui_internal_set_attr(struct gui_priv *this, struct attr *attr) {
         g_free(this->on_map_click);
         this->on_map_click = g_strdup(attr->u.str);
         return 1;
-    case attr_layout:
-        if (attr->u.layout && this->nav)
-            navit_set_attr(this->nav, attr);
-        return 1;
-    case attr_layout_name:
-        if (attr->u.str && this->nav)
-            navit_set_attr(this->nav, attr);
-        return 1;
     default:
         dbg(lvl_error, "Unknown attribute: %s", attr_to_name(attr->type));
         return 1;
