@@ -227,6 +227,7 @@ static int navit_cmd_set_center_cursor(struct navit *this_, char *function, stru
 static int navit_cmd_announcer_toggle(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
+static int navit_displaylist_covers(struct navit *this_);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -634,7 +635,10 @@ static int navit_animation_tick(void *data) {
             transform_set_yaw(this_->trans_cursor, yaw);
             navit_set_center_coord_screen(this_, scroll_coord, &cursor_fixed, 0);
             transform_copy(this_->trans, this_->trans_cursor);
-            navit_draw(this_);
+            if (navit_displaylist_covers(this_))
+                navit_draw_displaylist(this_);
+            else
+                navit_draw(this_);
             vehicle_reset_map_scroll(nv->vehicle);
             this_->anim_last_redraw_yaw = yaw;
             this_->anim_last_displayed_yaw = yaw;
