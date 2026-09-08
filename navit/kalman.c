@@ -32,6 +32,8 @@
 #define KF_ACCEL_VAR 4.0
 #define KF_POS_VAR 100.0
 #define KF_VEL_VAR 4.0
+/* Maximum per-step heading change (radians) accepted from the velocity measurement. */
+#define KF_MAX_HEADING_STEP 0.78539816339744830962
 
 struct kalman_filter {
     double x[KF_N];
@@ -232,16 +234,16 @@ static void kf_update_pos(struct kalman_filter *kf, double x, double y) {
         kf->x[i] += s;
     }
 
-    mat4_identity(KH);
+    mat4_identity(IKH);
     for (i = 0; i < KF_N; i++)
         for (j = 0; j < KF_N; j++) {
             double s = 0;
             for (k = 0; k < 2; k++)
                 s += K[i * 2 + k] * H[k * KF_N + j];
-            KH[i * KF_N + j] = s;
+            IKH[i * KF_N + j] = (i == j ? 1.0 : 0.0) - s;
         }
-    mat4_sub(kf->P, KH, IKH);
-    memcpy(kf->P, IKH, sizeof(IKH));
+    mat4_mul(IKH, kf->P, KH);
+    memcpy(kf->P, KH, sizeof(KH));
 
     for (i = 0; i < KF_N * KF_N; i += KF_N + 1)
         if (kf->P[i] < 0)
@@ -256,6 +258,24 @@ static void kf_update_pos_vel(struct kalman_filter *kf, double x, double y, doub
     double IKH[KF_N * KF_N];
     double yinn[KF_N];
     int i, j;
+
+    /* Gate single-packet heading spikes: rotate the measured velocity so its direction
+     * differs from the current estimate by at most KF_MAX_HEADING_STEP. */
+    {
+        double ang_x = atan2(kf->x[2], kf->x[3]);
+        double ang_z = atan2(z[2], z[3]);
+        double diff = ang_z - ang_x;
+        while (diff > KF_PI)
+            diff -= 2 * KF_PI;
+        while (diff < -KF_PI)
+            diff += 2 * KF_PI;
+        if (fabs(diff) > KF_MAX_HEADING_STEP) {
+            double vlen = sqrt(z[2] * z[2] + z[3] * z[3]);
+            double clamped = diff > 0 ? KF_MAX_HEADING_STEP : -KF_MAX_HEADING_STEP;
+            z[2] = vlen * sin(ang_x + clamped);
+            z[3] = vlen * cos(ang_x + clamped);
+        }
+    }
 
     for (i = 0; i < KF_N; i++)
         yinn[i] = z[i] - kf->x[i];
