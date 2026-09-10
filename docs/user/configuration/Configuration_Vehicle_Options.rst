@@ -35,7 +35,7 @@ Here some of the available options:
 GPS
 ~~~
 
-Most esential detail is the gps source, that need to be adapted to your
+Most essential detail is the gps source, that need to be adapted to your
 local setup.
 
 **Local:**
@@ -70,7 +70,7 @@ Linux:
 -  source="file:/dev/ttyS0" - serial GPS connected to the first serial
    port (you may need to add the correct baudrate eg.: freerunner
    source="file:/dev/ttySAC1" baudrate="9600")
--  source="gpsd_dbus:" - via dbus, postion reported by gpsd
+-  source="gpsd_dbus:" - via dbus, position reported by gpsd
 
 | **Network based:**
 | If you want to connect multiple tools to your GPS, you need an

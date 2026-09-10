@@ -46,7 +46,7 @@ common navigation systems).
 Latitude / Longitude in degrees and minutes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Latitude / Longitude can also be specified in degress and minutes with
+Latitude / Longitude can also be specified in degrees and minutes with
 compass directions (N/S, E/W):
 
 ``4808 N 1134 E``
