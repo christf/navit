@@ -340,6 +340,9 @@ static android_LogPriority dbg_level_to_android(dbg_level level) {
  */
 void debug_vprintf(dbg_level level, const char *module, const int mlen, const char *function, const int flen,
                    int prefix, const char *fmt, va_list ap) {
+    if (rw_lock)
+        thread_lock_acquire_write(rw_lock);
+
     char *end; /* Pointer to the NUL terminating byte of debug_message */
     char debug_message[4096];
     char *message_origin = debug_message + sizeof(debug_message)
@@ -455,6 +458,8 @@ void debug_vprintf(dbg_level level, const char *module, const int mlen, const ch
 #        ifdef HAVE_SOCKET
         if (debug_socket != -1) {
             sendto(debug_socket, debug_message, len, 0, (struct sockaddr *)&debug_sin, sizeof(debug_sin));
+            if (rw_lock)
+                thread_lock_release_write(rw_lock);
             return;
         }
 #        endif
@@ -466,16 +471,17 @@ void debug_vprintf(dbg_level level, const char *module, const int mlen, const ch
 #    endif
 #endif
     }
+
+    if (rw_lock)
+        thread_lock_release_write(rw_lock);
 }
 
 void debug_printf(dbg_level level, const char *module, const int mlen, const char *function, const int flen, int prefix,
                   const char *fmt, ...) {
     va_list ap;
-    thread_lock_acquire_read(rw_lock);
     va_start(ap, fmt);
     debug_vprintf(level, module, mlen, function, flen, prefix, fmt, ap);
     va_end(ap);
-    thread_lock_release_read(rw_lock);
 }
 
 void debug_assert_fail(const char *module, const int mlen, const char *function, const int flen, const char *file,

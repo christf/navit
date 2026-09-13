@@ -274,6 +274,7 @@ if(PKG_CONFIG_FOUND)
     endif()
 else(PKG_CONFIG_FOUND)
     set_with_reason(support/glib "Glib not found" TRUE ${INTL_LIBS})
+    set_with_reason(traffic/traff_http "libcurl not found" FALSE)
 endif(PKG_CONFIG_FOUND)
 
 # speech/cache, speech/cmdline, synthesizer/cmdline and audio_cache.c use

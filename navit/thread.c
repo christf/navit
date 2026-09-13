@@ -22,6 +22,8 @@
  * @brief Abstraction layer for system-specific thread routines.
  */
 
+#define _GNU_SOURCE
+
 #include "thread.h"
 #include <glib.h>
 #include <stdint.h>
@@ -32,7 +34,6 @@
 #else
 #    include <errno.h>
 #    include <sys/time.h>
-#    define _GNU_SOURCE
 #endif
 #include "debug.h"
 
@@ -69,7 +70,7 @@ static void *thread_main_wrapper(void *data) {
     return ret;
 }
 
-char *thread_format_error(int error) {
+static char *thread_format_error(int error) {
     return strerror(error);
 }
 
@@ -96,7 +97,7 @@ static DWORD WINAPI thread_main_wrapper(LPVOID data) {
  * Wrapping the function in a conditional causes the build to fail if thread_new() is called on a
  * platform without thread support.
  */
-thread *thread_new(int (*main)(void *), void *data, char *name) {
+thread *thread_new(int (*main)(void *), void *data, const char *name) {
 #    ifdef HAVE_POSIX_THREADS
     int err;
     thread *ret = g_new0(thread, 1);

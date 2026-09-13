@@ -74,7 +74,6 @@ extern "C" {
 #else
 #    define HAVE_POSIX_THREADS 1
 #    define HAVE_NAVIT_THREADS 1
-#    define _GNU_SOURCE
 #    include <pthread.h>
 #endif
 
@@ -119,7 +118,7 @@ struct thread_event_pthread;
  *
  * @return The new thread, or NULL if an error occurred.
  */
-thread *thread_new(int (*main)(void *), void *data, char *name);
+thread *thread_new(int (*main)(void *), void *data, const char *name);
 
 /**
  * @brief Frees all resources associated with the thread.
@@ -141,6 +140,10 @@ void thread_sleep(long msec);
  * @brief Exits the current thread.
  *
  * The exit code can be obtained by calling `thread_join()` on the thread.
+ *
+ * The wrapper memory for the thread (allocated by `thread_new()`) is only
+ * reclaimed when the thread's main function returns, so a thread that exits
+ * through `thread_exit()` leaks that small allocation.
  *
  * If Navit was built without thread support, this is a no-op.
  *

@@ -44,7 +44,6 @@ enum escape_mode {
                        | escape_mode_html_gt, /*!< Use all known HTML-style escape sequences */
 };
 
-char *floattostr(char *ret, size_t size, navit_float f, char sep);
 void strtoupper(char *dest, const char *src);
 void strtolower(char *dest, const char *src);
 unsigned int uint_sqrt(unsigned int n);

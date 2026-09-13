@@ -24,6 +24,10 @@
  *
  * This plugin receives TraFF feeds from a TraFF HTTP server, either on the local device or on a
  * remote system.
+ *
+ * Not yet handled: TraFF {@code replaces} (update) semantics, so updated messages are stored as
+ * new messages while the old ones expire; the server-issued response timeout is parsed but not
+ * acted upon.
  */
 
 #include "attr.h"
@@ -45,6 +49,7 @@
 #include "vehicle.h"
 #include <curl/curl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef _POSIX_C_SOURCE
@@ -57,6 +62,9 @@
  * Unless `attr_interval` is set, this interval will be used. 600000 msec = 10 minutes.
  */
 #define DEFAULT_INTERVAL 600000
+
+/** Minimum poll interval, in msec. Prevents a misconfigured source from polling in a tight loop. */
+#define MIN_INTERVAL 1000
 
 /**
  * @brief Minimum area around the current position for which to retrieve traffic updates.
@@ -79,6 +87,12 @@
 /** Delay before dispatching a traffic feed to the main loop, in msec */
 #define FEED_DISPATCH_DELAY 1
 
+/** Timeout for establishing a connection to the TraFF server, in seconds */
+#define CONNECT_TIMEOUT 15
+
+/** Timeout for a complete HTTP request to the TraFF server, in seconds */
+#define TRANSFER_TIMEOUT 60
+
 /**
  * @brief Stores information about the plugin instance.
  */
@@ -96,6 +110,7 @@ struct traffic_priv {
     thread_event *queue_event;           /**< Event that is signaled when a request is posted to the queue */
     char *subscription_id;               /**< Subscription ID */
     int exiting;                         /**< Whether the plugin is shutting down */
+    struct event_timeout *feed_dispatch_ev; /**< Pending feed dispatch event for the main loop */
     struct callback *traffic_cb;         /**< Callback registered with the navit instance */
     struct callback *position_cb;        /**< Callback registered with the navit instance */
     struct callback *destination_cb;     /**< Callback registered with the navit instance */
@@ -137,10 +152,19 @@ void traffic_traff_http_destroy(struct traffic_priv *this_) {
         dbg(lvl_debug, "worker thread terminated");
     } else {
         /* the worker thread never started and did not dispose of the queue infrastructure */
+        while (this_->queue) {
+            char *request = this_->queue->data;
+            this_->queue = g_list_remove(this_->queue, request);
+            g_free(request);
+        }
         thread_event_destroy(this_->queue_event);
         this_->queue_event = NULL;
         thread_lock_destroy(this_->queue_lock);
         this_->queue_lock = NULL;
+    }
+    if (this_->feed_dispatch_ev) {
+        event_remove_timeout(this_->feed_dispatch_ev);
+        this_->feed_dispatch_ev = NULL;
     }
     if (this_->traffic_cb) {
         navit_remove_callback(this_->nav, this_->traffic_cb);
@@ -164,6 +188,7 @@ void traffic_traff_http_destroy(struct traffic_priv *this_) {
     }
     g_free(this_->subscription_id);
     this_->subscription_id = NULL;
+    g_free(this_->source);
     g_free(this_);
 }
 
@@ -237,8 +262,13 @@ static struct curl_result *curl_post(char *url, char *data) {
     ret->data = g_malloc0(1);
     ret->size = 0;
 
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: text/xml");
+    headers = curl_slist_append(headers, "Accept: text/xml");
+
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data);
+    curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
 
     /* provide a callback and buffer for result data */
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, curl_result_callback);
@@ -251,7 +281,20 @@ static struct curl_result *curl_post(char *url, char *data) {
     /* follow redirects */
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
 
+    /* a stalled server must not block the worker thread indefinitely */
+    curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT);
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, TRANSFER_TIMEOUT);
+
     CURLcode curl_res = curl_easy_perform(curl_handle);
+    long response_code = 0;
+    if (curl_res == CURLE_OK) {
+        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
+        if (response_code < 200 || response_code >= 300) {
+            dbg(lvl_error, "HTTP request failed with status %ld", response_code);
+            curl_res = CURLE_HTTP_RETURNED_ERROR;
+        }
+    }
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl_handle);
     if (curl_res != CURLE_OK) {
         dbg(lvl_error, "curl status: %s", curl_easy_strerror(curl_res));
@@ -273,13 +316,15 @@ static struct curl_result *curl_post(char *url, char *data) {
  * @param messages Parsed messages
  * @param cb Pointer to the callback used to call this function
  */
-static void traffic_traff_http_on_feed_received(struct traffic *traffic, struct traffic_message **messages,
+static void traffic_traff_http_on_feed_received(struct traffic_priv *this_, struct traffic_message **messages,
                                                 struct callback **cb) {
     dbg(lvl_debug, "enter");
     callback_destroy(*cb);
     g_free(cb);
-
-    traffic_process_messages(traffic, messages);
+    if (this_->feed_dispatch_ev) {
+        this_->feed_dispatch_ev = NULL;
+    }
+    traffic_process_messages(this_->traffic, messages);
     g_free(messages);
 }
 
@@ -314,12 +359,12 @@ static int traffic_traff_http_process_response(struct traffic_priv *this_, struc
         if (messages && *messages) {
             dbg(lvl_debug, "response contains messages, posting traffic feed");
             cb = g_new0(struct callback *, 1);
-            *cb = callback_new_3(callback_cast(traffic_traff_http_on_feed_received), this_->traffic, messages, cb);
-            event_add_timeout(FEED_DISPATCH_DELAY, 0, *cb);
+            *cb = callback_new_3(callback_cast(traffic_traff_http_on_feed_received), this_, messages, cb);
+            this_->feed_dispatch_ev = event_add_timeout(FEED_DISPATCH_DELAY, 0, *cb);
             response->messages = NULL;
         }
     } else {
-        dbg(lvl_error, "TraFF request failed with status %s", response->status);
+        dbg(lvl_error, "TraFF request failed with status %s", response->status ? response->status : "unknown");
     }
     if (!ok && messages) {
         int i;
@@ -464,6 +509,11 @@ static void traffic_traff_http_worker_wait(struct traffic_priv *this_) {
     while (wait_left > 0 && !traffic_traff_http_is_exiting(this_)) {
         long wait_slice = wait_left > EXIT_RECHECK_INTERVAL ? EXIT_RECHECK_INTERVAL : wait_left;
         thread_event_wait(this_->queue_event, wait_slice);
+        thread_lock_acquire_write(this_->queue_lock);
+        int has_work = this_->queue != NULL;
+        thread_lock_release_write(this_->queue_lock);
+        if (has_work)
+            break;
         wait_left -= wait_slice;
     }
 }
@@ -625,10 +675,10 @@ static void traffic_traff_http_position_callback(struct traffic_priv *this_, str
 static int traffic_traff_http_init(struct traffic_priv *this_) {
     /* TODO verify event system, accept if thread-safe, warn if functions are missing, else exit
      *
-     * Thread-safe and OK to use: glib, android, sdl
+     * Thread-safe and OK to use: glib, android
      * Functions missing, won’t work: null, opengl
      * Probably not thread-safe: win32, qt (for qt_qpainter), qt5
-     * Not sure: cocoa
+     * Needs in-depth verification: cocoa, sdl
      */
     if (!strcmp("null", event_system()) || !strcmp("opengl", event_system())) {
         /* null and opengl do not implement functions we require */
@@ -688,6 +738,8 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
     /* worker_thread will be set when we initialize */
     attr = attr_search(attrs, attr_interval);
     ret->interval = attr ? attr->u.num : DEFAULT_INTERVAL;
+    if (ret->interval < MIN_INTERVAL)
+        ret->interval = MIN_INTERVAL;
     attr = attr_search(attrs, attr_source);
     if (!attr) {
         dbg(lvl_error, "traffic source unset. Unable to use traff-http plugin");
@@ -699,7 +751,7 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
         g_free(ret);
         return NULL;
     }
-    ret->source = attr->u.str;
+    ret->source = g_strdup(attr->u.str);
     ret->queue_lock = thread_lock_new();
     ret->queue_event = thread_event_new();
     *meth = traffic_traff_http_meth;
@@ -722,6 +774,7 @@ static struct traffic_priv *traffic_traff_http_new(struct navit *nav, struct tra
 void plugin_init(void) {
     dbg(lvl_debug, "enter");
     curl_global_init(CURL_GLOBAL_ALL);
+    atexit(curl_global_cleanup);
 
     plugin_register_category_traffic("traff_http", traffic_traff_http_new);
 }

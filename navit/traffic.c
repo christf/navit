@@ -4385,7 +4385,7 @@ static void traffic_add_segments_idle(struct traffic_shared_priv *shared) {
         data = traffic_message_parse_events(message);
         traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
         g_free(data);
-        if (message->priv->items && navit_get_ready(shared->navit) == 3)
+        if (message->priv->items && navit_get_ready(shared->navit) == NAVIT_READY_FULL)
             navit_draw_async(shared->navit, 1);
     }
 
@@ -4598,7 +4598,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
 
     if (this_->shared->message_queue) {
         /* if we're in the middle of the queue, trigger a redraw (if needed) and exit */
-        if ((ret & MESSAGE_UPDATE_SEGMENTS) && (navit_get_ready(this_->navit) == 3))
+        if ((ret & MESSAGE_UPDATE_SEGMENTS) && (navit_get_ready(this_->navit) == NAVIT_READY_FULL))
             navit_draw_async(this_->navit, 1);
         return ret;
     } else {
@@ -4650,7 +4650,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
     route_recalculate_partial(this_->shared->rt);
 
     /* trigger redraw if segments have changed */
-    if ((ret & MESSAGE_UPDATE_SEGMENTS) && (navit_get_ready(this_->navit) == 3))
+    if ((ret & MESSAGE_UPDATE_SEGMENTS) && (navit_get_ready(this_->navit) == NAVIT_READY_FULL))
         navit_draw_async(this_->navit, 1);
 
     return ret;
@@ -4944,27 +4944,29 @@ static void traffic_xml_start(xml_context *dummy, const char *tag_name, const ch
      */
 }
 
-static int floatparse(char *line, gdouble *lat, gdouble *lon) {
-    char *foo = g_strdup(line);
-    char *token = strtok(foo, " ");
+static int floatparse(char *line, navit_float *lat, navit_float *lon) {
+    char *foo;
+    char *token;
+    double dlat, dlon;
 
+    if (!line || !*line)
+        return 1;
+
+    foo = g_strdup(line);
+    token = strtok(foo, " ");
     if (token) {
-        *lat = g_ascii_strtod(token, NULL);
+        dlat = g_ascii_strtod(token, NULL);
         token = strtok(NULL, " ");
         if (token) {
-            *lon = g_ascii_strtod(token, NULL);
-        } else {
+            dlon = g_ascii_strtod(token, NULL);
             g_free(foo);
-            return 1;
+            *lat = (navit_float)dlat;
+            *lon = (navit_float)dlon;
+            return 0;
         }
-    } else {
-        g_free(foo);
-        return 1;
     }
-
     g_free(foo);
-
-    return 0;
+    return 1;
 }
 
 /**
@@ -5145,8 +5147,8 @@ static void traffic_xml_text(xml_context *dummy, const char *text, gsize len, vo
         /* This will work only for leaf nodes, which is not an issue at the moment as the only nodes
          * with actual text data are leaf nodes. For a node which has children, this function will get
          * called multiple times: for text before, within, between and after the child nodes (even if
-         * empty), in the order encountered. */
-        // FIXME make sure we avoid memory leaks if this function is called multiple times
+         * empty), in the order encountered. In any case only the last chunk is kept. */
+        g_free(el->text);
         el->text = g_strndup(text, len);
     }
     g_free(text_sz);
@@ -6019,6 +6021,45 @@ static int traffic_xml_parse_text(const char *xml, struct xml_state *state) {
     return xml_parse_text(xml, state, traffic_xml_start, traffic_xml_end, traffic_xml_text);
 }
 
+/**
+ * @brief Releases the parser state on a failed parse.
+ *
+ * Only needed on failure: on success, the parsed data has been drained into the
+ * returned messages, response or location, so this function must not be called.
+ * Each member is owned by the state only until it has been transferred to a
+ * parent object, after which it is NULL, so freeing every non-NULL member is
+ * safe.
+ *
+ * @param state The parser state to release
+ */
+static void traffic_xml_state_destroy(struct xml_state *state) {
+    g_free(state->status);
+    g_free(state->subscription_id);
+    g_free(state->location_txt_data);
+    while (state->tagstack) {
+        traffic_xml_element_destroy((struct xml_element *)state->tagstack->data);
+        state->tagstack = g_list_remove(state->tagstack, state->tagstack->data);
+    }
+    traffic_point_destroy(state->at);
+    traffic_point_destroy(state->from);
+    traffic_point_destroy(state->to);
+    traffic_point_destroy(state->via);
+    traffic_point_destroy(state->not_via);
+    traffic_location_destroy(state->location);
+    while (state->si) {
+        traffic_suppl_info_destroy((struct traffic_suppl_info *)state->si->data);
+        state->si = g_list_remove(state->si, state->si->data);
+    }
+    while (state->events) {
+        traffic_event_destroy((struct traffic_event *)state->events->data);
+        state->events = g_list_remove(state->events, state->events->data);
+    }
+    while (state->messages) {
+        traffic_message_destroy((struct traffic_message *)state->messages->data);
+        state->messages = g_list_remove(state->messages, state->messages->data);
+    }
+}
+
 struct traffic_message **traffic_get_messages_from_xml_file(struct traffic *this_, char *filename) {
     struct xml_state state;
     if (filename && file_exists(filename)) {
@@ -6026,6 +6067,7 @@ struct traffic_message **traffic_get_messages_from_xml_file(struct traffic *this
         if (xml_parse_file(filename, &state, traffic_xml_start, traffic_xml_end, traffic_xml_text))
             return traffic_get_messages_from_parsed_xml(&state);
         dbg(lvl_error, "could not retrieve stored traffic messages");
+        traffic_xml_state_destroy(&state);
     }
     return NULL;
 }
@@ -6036,6 +6078,7 @@ struct traffic_response *traffic_get_response_from_xml_string(struct traffic *th
         if (traffic_xml_parse_text(xml, &state))
             return traffic_get_response_from_parsed_xml(&state);
         dbg(lvl_error, "no data supplied");
+        traffic_xml_state_destroy(&state);
     }
     return NULL;
 }
@@ -6046,6 +6089,7 @@ struct traffic_message **traffic_get_messages_from_xml_string(struct traffic *th
         if (traffic_xml_parse_text(xml, &state))
             return traffic_get_messages_from_parsed_xml(&state);
         dbg(lvl_error, "no data supplied");
+        traffic_xml_state_destroy(&state);
     }
     return NULL;
 }
@@ -6083,9 +6127,7 @@ struct traffic_message **traffic_get_stored_messages(struct traffic *this_) {
 }
 
 static void traffic_coordtostr(char *dst, size_t dstsize, navit_float a, navit_float b, navit_float c, navit_float d) {
-#define TRAFFIC_COORDTOSTR_NUMSIZE 14
     navit_float nums[4] = {a, b, c, d};
-    char e[4][TRAFFIC_COORDTOSTR_NUMSIZE];
 
     if (a > c) {
         dbg(lvl_error, "rl.lat > lu.lat, this should never happen");
@@ -6093,11 +6135,10 @@ static void traffic_coordtostr(char *dst, size_t dstsize, navit_float a, navit_f
 
     dst[0] = '\0';
     for (int i = 0; i < 4; i++) {
-        floattostr(e[i], TRAFFIC_COORDTOSTR_NUMSIZE, nums[i], '.');
         if (i) {
             strncat(dst, " ", dstsize - strlen(dst) - 1);
         }
-        strncat(dst, e[i], dstsize - strlen(dst) - 1);
+        g_ascii_formatd(dst + strlen(dst), dstsize - strlen(dst), "%+.6f", nums[i]);
     }
 }
 
