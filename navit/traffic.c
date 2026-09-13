@@ -4267,6 +4267,8 @@ static void traffic_dump_messages_to_xml(struct traffic_shared_priv *shared) {
 
                 for (i = 0; i < 5; i++)
                     if (points[i]) {
+                        char latbuf[G_ASCII_DTOSTR_BUF_SIZE];
+                        char lonbuf[G_ASCII_DTOSTR_BUF_SIZE];
                         fprintf(f, "      <%s", point_names[i]);
                         if (points[i]->junction_name)
                             fprintf(f, " junction_name=\"%s\"", points[i]->junction_name);
@@ -4275,7 +4277,9 @@ static void traffic_dump_messages_to_xml(struct traffic_shared_priv *shared) {
                         if (points[i]->tmc_id)
                             fprintf(f, " tmc_id=\"%s\"", points[i]->tmc_id);
                         fprintf(f, ">");
-                        fprintf(f, "%+f %+f", points[i]->coord.lat, points[i]->coord.lng);
+                        g_ascii_formatd(latbuf, sizeof(latbuf), "%+.6f", points[i]->coord.lat);
+                        g_ascii_formatd(lonbuf, sizeof(lonbuf), "%+.6f", points[i]->coord.lng);
+                        fprintf(f, "%s %s", latbuf, lonbuf);
                         fprintf(f, "</%s>\n", point_names[i]);
                     }
 
