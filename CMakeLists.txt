@@ -1032,6 +1032,9 @@ if (NOT NAVIT_DEPENDENCY_ERROR)
 	message("\nTo configure your build use 'cmake -L' to find changeable variables and run cmake again with 'cmake -D <var-name>=<your value> ...'.")
 endif(NOT NAVIT_DEPENDENCY_ERROR)
 
+# registers the test harness of navit/tests (built with BUILD_NAVIT_TESTS=ON) with CTest
+enable_testing()
+
 add_subdirectory (navit)
 add_subdirectory (man)
 
