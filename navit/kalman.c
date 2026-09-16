@@ -42,6 +42,30 @@ struct kalman_filter {
     int initialized;
 };
 
+/* Simulated-clock seam so tests can advance the filter deterministically
+ * instead of waiting for wall time; kalman_set_simulated_time(now_s) drives
+ * prediction and extrapolation from an injected timestamp. */
+static struct timeval kf_sim_now;
+static int kf_use_sim_now;
+
+static void kf_now(struct timeval *tv) {
+    if (kf_use_sim_now) {
+        *tv = kf_sim_now;
+        return;
+    }
+    gettimeofday(tv, NULL);
+}
+
+void kalman_set_simulated_time(double now_s) {
+    if (now_s < 0) {
+        kf_use_sim_now = 0;
+        return;
+    }
+    kf_sim_now.tv_sec = (time_t)now_s;
+    kf_sim_now.tv_usec = (suseconds_t)((now_s - (time_t)now_s) * 1000000.0);
+    kf_use_sim_now = 1;
+}
+
 static void mat4_mul(const double *A, const double *B, double *C) {
     int i, j, k;
     for (i = 0; i < KF_N; i++)
@@ -341,12 +365,12 @@ void kalman_update(struct kalman_filter *kf, double dt, double x, double y, doub
         kf->P[1 * KF_N + 1] = KF_POS_VAR * 10;
         kf->P[2 * KF_N + 2] = KF_VEL_VAR * 10;
         kf->P[3 * KF_N + 3] = KF_VEL_VAR * 10;
-        gettimeofday(&kf->last_update, NULL);
+        kf_now(&kf->last_update);
         kf->initialized = 1;
         return;
     }
 
-    gettimeofday(&now, NULL);
+    kf_now(&now);
     if (dt <= 0)
         dt = get_time_since(&kf->last_update, &now);
     if (dt <= 0)
@@ -390,7 +414,7 @@ void kalman_get_position(struct kalman_filter *kf, double *x, double *y) {
         return;
     }
 
-    gettimeofday(&now, NULL);
+    kf_now(&now);
     dt = get_time_since(&kf->last_update, &now);
     if (dt > 0 && dt < 5.0) {
         *x = kf->x[0] + kf->x[2] * dt;
@@ -420,4 +444,11 @@ void kalman_set_position(struct kalman_filter *kf, double x, double y) {
         return;
     kf->x[0] = x;
     kf->x[1] = y;
+}
+
+void kalman_set_velocity(struct kalman_filter *kf, double vx, double vy) {
+    if (!kf->initialized)
+        return;
+    kf->x[2] = vx;
+    kf->x[3] = vy;
 }
