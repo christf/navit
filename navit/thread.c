@@ -289,10 +289,9 @@ void thread_event_wait(thread_event *this_, long msec) {
     else {
         gettimeofday(&tp, NULL);
         ts.tv_sec = tp.tv_sec + msec / 1000;
-        ts.tv_nsec = tp.tv_usec + (msec % 1000) * 1000000;
-        ts.tv_sec += ts.tv_nsec / 1000000;
-        ts.tv_nsec %= 1000000;
-        ts.tv_nsec *= 1000;
+        ts.tv_nsec = (tp.tv_usec * 1000) + ((msec % 1000) * 1000000);
+        ts.tv_sec += ts.tv_nsec / 1000000000;
+        ts.tv_nsec %= 1000000000;
 
         pthread_cond_timedwait(this_->cond, this_->mutex, &ts);
     }
