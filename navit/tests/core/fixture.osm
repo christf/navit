@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+  <!-- 3x3 grid, rows y0=52.390 y1=52.394 y2=52.398, cols x0=13.060 x1=13.066 x2=13.072 -->
+  <node id="101" lat="52.390" lon="13.060"/>
+  <node id="102" lat="52.390" lon="13.066"/>
+  <node id="103" lat="52.390" lon="13.072"/>
+  <node id="201" lat="52.394" lon="13.060"/>
+  <node id="202" lat="52.394" lon="13.066"/>
+  <node id="203" lat="52.394" lon="13.072"/>
+  <node id="301" lat="52.398" lon="13.060"/>
+  <node id="302" lat="52.398" lon="13.066"/>
+  <node id="303" lat="52.398" lon="13.072"/>
+  <node id="401" lat="52.398" lon="13.080"/>
+  <node id="402" lat="52.390" lon="13.080"/>
+  <node id="500" lat="52.394" lon="13.066">
+    <tag k="name" v="Testhausen"/>
+    <tag k="place" v="town"/>
+    <tag k="population" v="10000"/>
+  </node>
+  <way id="1101">
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <nd ref="103"/>
+    <tag k="name" v="Suedstrasse"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="1102">
+    <nd ref="201"/>
+    <nd ref="202"/>
+    <nd ref="203"/>
+    <tag k="name" v="Mittelstrasse"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="1103">
+    <nd ref="301"/>
+    <nd ref="302"/>
+    <nd ref="303"/>
+    <tag k="name" v="Nordstrasse"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="1201">
+    <nd ref="101"/>
+    <nd ref="201"/>
+    <nd ref="301"/>
+    <tag k="name" v="Westallee"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="1202">
+    <nd ref="102"/>
+    <nd ref="202"/>
+    <nd ref="302"/>
+    <tag k="name" v="Mitteallee"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="1203">
+    <nd ref="103"/>
+    <nd ref="203"/>
+    <nd ref="303"/>
+    <tag k="name" v="Ostallee"/>
+    <tag k="highway" v="residential"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <!-- oneway southeast-bound shortcut cutting the grid diagonally -->
+  <node id="601" lat="52.392" lon="13.069"/>
+  <way id="1301">
+    <nd ref="203"/>
+    <nd ref="601"/>
+    <nd ref="102"/>
+    <tag k="name" v="Einbahnstrasse"/>
+    <tag k="highway" v="residential"/>
+    <tag k="oneway" v="yes"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <!-- car-only bypass east of the grid -->
+  <way id="1401">
+    <nd ref="401"/>
+    <nd ref="402"/>
+    <tag k="name" v="Testspange"/>
+    <tag k="highway" v="trunk"/>
+    <tag k="maxspeed" v="100"/>
+    <tag k="bicycle" v="no"/>
+  </way>
+  <way id="1402">
+    <nd ref="303"/>
+    <nd ref="401"/>
+    <tag k="name" v="Nordanschluss"/>
+    <tag k="highway" v="service"/>
+    <tag k="maxspeed" v="30"/>
+    <tag k="bicycle" v="no"/>
+  </way>
+  <way id="1403">
+    <nd ref="402"/>
+    <nd ref="103"/>
+    <tag k="name" v="Suedanschluss"/>
+    <tag k="highway" v="service"/>
+    <tag k="maxspeed" v="30"/>
+    <tag k="bicycle" v="no"/>
+  </way>
+  <!-- no left turn from Mitteallee (northbound at 202) into Mittelstrasse towards 201 -->
+  <relation id="1501">
+    <member type="way" ref="1202" role="from"/>
+    <member type="node" ref="202" role="via"/>
+    <member type="way" ref="1102" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
+</osm>
