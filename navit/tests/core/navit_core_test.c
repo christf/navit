@@ -12,6 +12,7 @@
 #include "graphics.h"
 #include "gui.h"
 #include "item.h"
+#include "kalman.h"
 #include "linguistics.h"
 #include "main.h"
 #include "map.h"
@@ -421,6 +422,181 @@ static int scenario_search_town_street(void) {
     return 0;
 }
 
+/* The vehicle drives straight north at constant speed; GPS delivers one fix per
+ * second with noisy position and course.  Between fixes the map-scroll target
+ * follows the Kalman extrapolated ("predicted") position, exactly as
+ * navit_animation_tick() does.  Any sideways drift of that extrapolation shows
+ * up as a jump of the scroll target when the next fix snaps back to the road,
+ * i.e. as a periodic sideways drag of the map.  The extrapolation inherits the
+ * noisy GPS course unless the filter velocity is re-aligned with the matched
+ * road after every fix, so the harness runs both variants: the course variant
+ * keeps the extrapolated heading noisy and must show the drag, the road variant
+ * pins the velocity to the road heading and must stay still. */
+#define SCROLL_W 800
+#define SCROLL_H 480
+#define SCROLL_CURSOR_X (SCROLL_W / 2)
+#define SCROLL_CURSOR_Y (SCROLL_H * 80 / 100)
+#define SCROLL_FIX_MS 1000
+#define SCROLL_NFIXES 40
+#define SCROLL_SPEED_MPS (80.0 / 3.6)
+#define SCROLL_START_LAT 52.4
+#define SCROLL_ZOOM 32
+#define SCROLL_COURSE_NOISE_DEG 12.0
+#define SCROLL_POS_NOISE_M 0.6
+
+enum scroll_vel_mode {
+    SCROLL_VEL_COURSE,
+    SCROLL_VEL_ROAD
+};
+
+struct scroll_harness {
+    struct kalman_filter *kf;
+    struct transformation *trans;
+    struct transformation *trans_cursor;
+};
+
+static void scroll_harness_init(struct scroll_harness *hs, struct coord *start) {
+    struct pcoord pc = {projection_mg, start->x, start->y};
+    struct map_selection sel;
+    memset(&sel, 0, sizeof(sel));
+    sel.u.p_rect.rl.x = SCROLL_W;
+    sel.u.p_rect.rl.y = SCROLL_H;
+    hs->kf = kalman_new();
+    hs->trans = transform_new(&pc, SCROLL_ZOOM, 0);
+    hs->trans_cursor = transform_new(&pc, SCROLL_ZOOM, 0);
+    transform_set_screen_selection(hs->trans, &sel);
+    transform_set_screen_selection(hs->trans_cursor, &sel);
+}
+
+/* One GPS fix, mirroring tracking_update(): inject the ground-speed vector in
+ * projection units, snap the filtered position to the straight road and, in
+ * tracked mode, pin the filter velocity to the road heading. */
+static struct coord scroll_advance_fix(struct scroll_harness *hs, GRand *rng, double t_s, enum scroll_vel_mode mode) {
+    struct coord road = geo_to_mg(SCROLL_START_LAT + SCROLL_SPEED_MPS * t_s / 6371000.0 * 180.0 / M_PI, 10.35);
+    struct coord raw;
+    struct coord snapped = road;
+    double cos_lat = cos(SCROLL_START_LAT * M_PI / 180.0);
+    double course = g_rand_double_range(rng, -SCROLL_COURSE_NOISE_DEG, SCROLL_COURSE_NOISE_DEG);
+    double vx, vy, fx, fy;
+    if (g_rand_double(rng) < 0.03)
+        course += g_rand_double_range(rng, -20, 20);
+    raw.x = road.x + (int)(g_rand_double_range(rng, -SCROLL_POS_NOISE_M, SCROLL_POS_NOISE_M) / cos_lat);
+    raw.y = road.y + (int)g_rand_double_range(rng, -SCROLL_POS_NOISE_M, SCROLL_POS_NOISE_M);
+    vx = SCROLL_SPEED_MPS * sin(course * M_PI / 180.0) / cos_lat;
+    vy = SCROLL_SPEED_MPS * cos(course * M_PI / 180.0) / cos_lat;
+    kalman_update(hs->kf, 0, raw.x, raw.y, vx, vy, 1);
+    kalman_get_filtered_position(hs->kf, &fx, &fy);
+    snapped.y = (int)fy;
+    /* tracking_update() re-anchors the filter state to the matched road. */
+    kalman_set_position(hs->kf, snapped.x, snapped.y);
+    if (mode == SCROLL_VEL_ROAD)
+        kalman_set_velocity(hs->kf, 0.0, SCROLL_SPEED_MPS / cos_lat);
+    return snapped;
+}
+
+/* Measure the per-fix jump of the scroll target, i.e. how far the map would be
+ * re-dragged sideways/forwards when the extrapolated position snaps back to
+ * the matched road at each new fix. */
+static void scroll_simulate(struct scroll_harness *hs, GRand *rng, enum scroll_vel_mode mode, double *mean_lat,
+                            double *max_lat, double *mean_fwd, double *max_fwd) {
+    struct point cursor_fixed = {SCROLL_CURSOR_X, SCROLL_CURSOR_Y};
+    double sum_lat = 0.0, max_lat_seen = 0.0;
+    double sum_fwd = 0.0, max_fwd_seen = 0.0;
+    int counted = 0;
+
+    kalman_set_simulated_time(0.0);
+    transform_set_yaw(hs->trans, 0);
+    transform_set_yaw(hs->trans_cursor, 0);
+    for (int fix = 0; fix < SCROLL_NFIXES; fix++) {
+        long t_ms = fix * SCROLL_FIX_MS;
+        struct coord predicted;
+        struct point screen, target;
+        double px, py;
+        int target_before_x, target_before_y;
+        int have_before = 0;
+
+        /* Map-scroll target just before the fix: the extrapolated position has
+         * crept sideways/forwards since the previous fix. */
+        if (fix > 0) {
+            kalman_set_simulated_time((double)(t_ms - SCROLL_FIX_MS / 30) / 1000.0);
+            kalman_get_position(hs->kf, &px, &py);
+            predicted.x = (int)px;
+            predicted.y = (int)py;
+            if (transform_point(hs->trans_cursor, projection_mg, &predicted, &screen)) {
+                target_before_x = cursor_fixed.x - screen.x;
+                target_before_y = cursor_fixed.y - screen.y;
+                have_before = 1;
+            }
+        }
+
+        /* The new fix re-anchors the extrapolation to the matched road. */
+        kalman_set_simulated_time((double)t_ms / 1000.0);
+        scroll_advance_fix(hs, rng, t_ms / 1000.0, mode);
+        kalman_get_position(hs->kf, &px, &py);
+        predicted.x = (int)px;
+        predicted.y = (int)py;
+        if (have_before && transform_point(hs->trans_cursor, projection_mg, &predicted, &screen)) {
+            target.x = cursor_fixed.x - screen.x;
+            target.y = cursor_fixed.y - screen.y;
+            sum_lat += abs(target.x - target_before_x);
+            sum_fwd += abs(target.y - target_before_y);
+            if (abs(target.x - target_before_x) > max_lat_seen)
+                max_lat_seen = abs(target.x - target_before_x);
+            if (abs(target.y - target_before_y) > max_fwd_seen)
+                max_fwd_seen = abs(target.y - target_before_y);
+            counted++;
+        }
+    }
+    if (!counted) {
+        *mean_lat = *max_lat = *mean_fwd = *max_fwd = 0.0;
+        return;
+    }
+    *mean_lat = sum_lat / counted;
+    *max_lat = max_lat_seen;
+    *mean_fwd = sum_fwd / counted;
+    *max_fwd = max_fwd_seen;
+}
+
+static int scenario_kalman_scroll(void) {
+    struct coord start = geo_to_mg(SCROLL_START_LAT, 10.35);
+    GRand *rng_raw = g_rand_new_with_seed(42);
+    GRand *rng_trk = g_rand_new_with_seed(42);
+    double mean_lat_raw, max_lat_raw, mean_fwd_raw, max_fwd_raw;
+    double mean_lat_trk, max_lat_trk, mean_fwd_trk, max_fwd_trk;
+
+    {
+        struct scroll_harness hs;
+        scroll_harness_init(&hs, &start);
+        scroll_simulate(&hs, rng_raw, SCROLL_VEL_COURSE, &mean_lat_raw, &max_lat_raw, &mean_fwd_raw, &max_fwd_raw);
+        kalman_destroy(hs.kf);
+        transform_destroy(hs.trans);
+        transform_destroy(hs.trans_cursor);
+    }
+    {
+        struct scroll_harness hs;
+        scroll_harness_init(&hs, &start);
+        scroll_simulate(&hs, rng_trk, SCROLL_VEL_ROAD, &mean_lat_trk, &max_lat_trk, &mean_fwd_trk, &max_fwd_trk);
+        kalman_destroy(hs.kf);
+        transform_destroy(hs.trans);
+        transform_destroy(hs.trans_cursor);
+    }
+    g_rand_free(rng_raw);
+    g_rand_free(rng_trk);
+
+    printf("course scroll: mean lateral jump %.2f px (max %.2f), forwards %.2f px (max %.2f)\n", mean_lat_raw,
+           max_lat_raw, mean_fwd_raw, max_fwd_raw);
+    printf("road   scroll: mean lateral jump %.2f px (max %.2f), forwards %.2f px (max %.2f)\n", mean_lat_trk,
+           max_lat_trk, mean_fwd_trk, max_fwd_trk);
+
+    /* The unfiltered extrapolating course carries the GPS heading noise, so the
+     * map is dragged sideways with every fix and recovers it each second. */
+    CHECK(mean_lat_raw >= 0.6, "course variant must show periodic lateral drags, mean %.2f px", mean_lat_raw);
+    /* Aligning the extrapolation with the matched road leaves the lateral
+     * scroll target stationary. */
+    CHECK(mean_lat_trk < 0.4, "road variant must keep lateral scroll at zero, got %.2f px", mean_lat_trk);
+    return 0;
+}
+
 struct scenario {
     const char *name;
     int (*fn)(void);
@@ -434,6 +610,7 @@ static struct scenario scenarios[] = {
     {"route_oneway",           scenario_route_oneway          },
     {"route_turn_restriction", scenario_route_turn_restriction},
     {"search_town_street",     scenario_search_town_street    },
+    {"kalman_scroll",          scenario_kalman_scroll         },
 };
 
 int main(int argc, char **argv) {
