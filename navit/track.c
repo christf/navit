@@ -805,8 +805,24 @@ void tracking_update(struct tracking *tr, struct vehicle *v, struct vehicleprofi
     } else if (tr->tunnel) {
         tr->speed = 0;
     }
-    if (tr->kf)
+    if (tr->kf) {
         kalman_set_position(tr->kf, (double)tr->curr_out.x, (double)tr->curr_out.y);
+        /* On a matched street the extrapolated position (used between fixes)
+         * must follow the road heading, not the noisy GPS course: align the
+         * filter velocity with the matched direction to stop lateral drift. */
+        if (tr->curr_line && tr->street_direction != 0 && tr->speed > 0.0) {
+            struct coord_geo kg_vel;
+            double cl, heading_rad;
+            transform_to_geo(pro, &tr->curr_out, &kg_vel);
+            cl = cos(kg_vel.lat * G_PI / 180.0);
+            if (cl < 0.1)
+                cl = 0.1;
+            heading_rad = tr->direction * G_PI / 180.0;
+            /* Web Mercator scales ground meters by 1/cos(lat) in both axes */
+            kalman_set_velocity(tr->kf, tr->speed / 3.6 * sin(heading_rad) / cl,
+                                tr->speed / 3.6 * cos(heading_rad) / cl);
+        }
+    }
     dbg(lvl_debug, "found 0x%x,0x%x", tr->curr_out.x, tr->curr_out.y);
     callback_list_call_attr_0(tr->callback_list, attr_position_coord_geo);
 }
