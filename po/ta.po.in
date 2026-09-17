@@ -11,7 +11,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 23:53+0200\n"
+"POT-Creation-Date: 2026-09-17 18:08+0200\n"
 "PO-Revision-Date: 2026-03-02 06:09+0000\n"
 "Last-Translator: தமிழ்நேரம் <tamilneram247@gmail.com>\n"
 "Language-Team: Tamil <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -334,10 +334,6 @@ msgstr "பிறகு %2$s க்கு %1$s சாலையில் செ�
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "%2$s க்கு %1$s சாலையை எடுத்துக் கொள்ளுங்கள்"
-
-#, c-format
-msgid "after %i roads"
-msgstr "%iநான் சாலைகளுக்குப் பிறகு"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -3061,6 +3057,10 @@ msgstr "தெற்கு+மத்திய அமெரிக்கா"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "கயானா ஃபிராங்காய்"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%iநான் சாலைகளுக்குப் பிறகு"
 
 #~ msgid "Searching..."
 #~ msgstr "தேடுகிறது..."
