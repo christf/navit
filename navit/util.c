@@ -1248,7 +1248,7 @@ static void spawn_process_sigchld(int sig) {
 }
 #endif
 
-void spawn_process_init() {
+void spawn_process_init(void) {
 #ifdef _POSIX_C_SOURCE
     struct sigaction act;
     act.sa_handler = spawn_process_sigchld;

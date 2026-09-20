@@ -110,7 +110,7 @@ static void main_setup_environment(int mode) {
             switch (val[0]) {
             case ':':
                 if (val[1] == ':')
-                    val = g_strdup_printf("%s/%s%s", getenv("NAVIT_PREFIX"), LIBDIR + sizeof(PREFIX), val + 2);
+                    val = g_strdup_printf("%s/%s%s", getenv("NAVIT_PREFIX"), (const char *)LIBDIR + sizeof(PREFIX), val + 2);
                 else
                     val = g_strdup_printf("%s%s", getenv("NAVIT_PREFIX"), val + 1);
                 break;

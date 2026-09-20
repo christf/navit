@@ -2007,7 +2007,6 @@ static void traffic_location_populate_route_graph(struct traffic_location *this_
                             route_graph_add_segment(rg, s_pnt, e_pnt, &data);
                     } else {
                         int isseg, rc;
-                        int sc = 0;
                         do {
                             isseg = item_coord_is_node(item);
                             rc = item_coord_get(item, &c, 1);
@@ -2027,7 +2026,6 @@ static void traffic_location_populate_route_graph(struct traffic_location *this_
                         } while (rc);
                         e_pnt = route_graph_add_point(rg, &l);
                         dbg_assert(len >= 0);
-                        sc++;
                         data.len = len;
                         if (!route_graph_segment_is_duplicate(s_pnt, &data))
                             route_graph_add_segment(rg, s_pnt, e_pnt, &data);

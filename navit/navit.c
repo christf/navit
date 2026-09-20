@@ -1816,7 +1816,7 @@ static int navit_former_destinations_active(struct navit *this_) {
     return active;
 }
 
-struct map *read_former_destinations_from_file() {
+struct map *read_former_destinations_from_file(void) {
     struct attr type, data, no_warn, flags, *attrs[5];
     char *destination_file = bookmarks_get_destination_file(FALSE);
     struct map *m;
@@ -3307,7 +3307,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
         get_attr = (int (*)(void *, enum attr_type, struct attr *, struct attr_iter *))vehicle_get_attr;
     }
     if (get_attr(attr_object, attr_position_valid, &attr_valid, NULL))
-        if (!attr_valid.u.num != attr_position_valid_invalid)
+        if (attr_valid.u.num == attr_position_valid_invalid)
             return;
     if (!get_attr(attr_object, attr_position_direction, &attr_dir, NULL)
         || !get_attr(attr_object, attr_position_speed, &attr_speed, NULL)
@@ -3788,7 +3788,7 @@ int navit_set_layout_by_name(struct navit *n, const char *name) {
     return 0;
 }
 
-void navit_disable_suspend() {
+void navit_disable_suspend(void) {
     gui_disable_suspend(global_navit->gui);
     callback_list_call_attr_0(global_navit->attr_cbl, attr_unsuspend);
 }
