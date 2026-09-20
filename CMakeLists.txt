@@ -914,7 +914,15 @@ endif(NOT WIN32)
 # passes the flag as a -D definition, and the macro-name warning this
 # generates would itself be promoted to an error, making the check fail.
 # It is added last so the availability probes above still run as warnings.
-add_compile_options("-Werror")
+# GCC older than 5 is not aware of the pragmas and warnings we rely on, so
+# the availability probes silently reject our flag set and the pre-existing
+# warnings would become fatal. Leave those toolchains alone.
+if (NOT (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5))
+	add_compile_options("-Werror")
+	message(STATUS "Treating compiler warnings as errors")
+else()
+	message(STATUS "Compiler too old for -Werror, building with warnings")
+endif()
 
 if (EXTRA_DEFINES)
 	add_definitions("${EXTRA_DEFINES}")
