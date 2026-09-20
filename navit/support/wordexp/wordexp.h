@@ -28,7 +28,7 @@ typedef struct {
 #define	WRDE_BADVAL	2		/* undefined variable */
 #define	WRDE_CMDSUB	3		/* command substitution not allowed */
 #define	WRDE_NOSPACE	4		/* no memory for result */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if (defined(_XOPEN_SOURCE) && _XOPEN_SOURCE >= 4) || defined(_NETBSD_SOURCE)
 #define	WRDE_NOSYS	5		/* obsolete, reserved */
 #endif
 #define	WRDE_SYNTAX	6		/* shell syntax error */
