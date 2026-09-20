@@ -848,7 +848,7 @@ static int LoadSoundFile(const char *fname, int index)
 {//===================================================
 	FILE *f;
 	char *p;
-	int *ip;
+	int ip;
 	int  length;
 	char fname_temp[100];
 	char fname2[sizeof(path_home)+13+40];
@@ -928,8 +928,8 @@ static int LoadSoundFile(const char *fname, int index)
 	remove(fname_temp);
 #endif
 
-	ip = (int *)(&p[40]);
-	soundicon_tab[index].length = (*ip) / 2;  // length in samples
+	memcpy(&ip, &p[40], sizeof(ip));
+	soundicon_tab[index].length = ip / 2;  // length in samples
 	soundicon_tab[index].data = p;
 	return(0);
 }  //  end of LoadSoundFile
@@ -1543,7 +1543,11 @@ static int AddNameData(const char *name, int wide)
 
 	if(wide)
 	{
-		len = (wcslen((const wchar_t *)name)+1)*sizeof(wchar_t);
+		const wchar_t zero = 0;
+		len = 0;
+		while(memcmp((const char *)name + len, (const char *)&zero, sizeof(wchar_t)) != 0)
+			len += sizeof(wchar_t);
+		len += sizeof(wchar_t);
 		n_namedata = (n_namedata + sizeof(wchar_t) - 1) % sizeof(wchar_t);  // round to wchar_t boundary
 	}
 	else
