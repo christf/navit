@@ -278,7 +278,7 @@ static void
 slice_config_init (SliceConfig *config)
 {
   /* don't use g_malloc/g_message here */
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   gchar buffer[1024];
   const gchar *val = _g_getenv_nomalloc ("G_SLICE", buffer);
   const GDebugKey keys[] = {
@@ -288,7 +288,7 @@ slice_config_init (SliceConfig *config)
   gint flags = !val ? 0 : g_parse_debug_string (val, keys, G_N_ELEMENTS (keys));
 #endif
   *config = slice_config;
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   if (flags & (1 << 0))         /* always-malloc */
     config->always_malloc = TRUE;
   if (flags & (1 << 1))         /* debug-blocks */
@@ -321,7 +321,7 @@ g_slice_init_nomessage (void)
   mem_assert ((sys_page_size & (sys_page_size - 1)) == 0);
   slice_config_init (&allocator->config);
   allocator->min_page_size = sys_page_size;
-#if HAVE_COMPLIANT_POSIX_MEMALIGN || HAVE_MEMALIGN
+#if defined(HAVE_COMPLIANT_POSIX_MEMALIGN) || defined(HAVE_MEMALIGN)
   /* allow allocation of pages up to 8KB (with 8KB alignment).
    * this is useful because many medium to large sized structures
    * fit less than 8 times (see [4]) into 4KB pages.
@@ -1022,7 +1022,7 @@ allocator_add_slab (Allocator *allocator,
   if (!mem)
     {
       const gchar *syserr = "unknown error";
-#if HAVE_STRERROR
+#if defined(HAVE_STRERROR)
       syserr = strerror (errno);
 #endif
       mem_error ("failed to allocate %u bytes (alignment: %u): %s\n",
@@ -1134,7 +1134,7 @@ slab_allocator_free_chunk (gsize    chunk_size,
  * if none is provided, we implement malloc(3)-based alloc-only page alignment
  */
 
-#if !(HAVE_COMPLIANT_POSIX_MEMALIGN || HAVE_MEMALIGN || HAVE_VALLOC)
+#if !(defined(HAVE_COMPLIANT_POSIX_MEMALIGN) || defined(HAVE_MEMALIGN) || defined(HAVE_VALLOC))
 static GTrashStack *compat_valloc_trash = NULL;
 #endif
 
@@ -1144,13 +1144,13 @@ allocator_memalign (gsize alignment,
 {
   gpointer aligned_memory = NULL;
   gint err = ENOMEM;
-#if     HAVE_COMPLIANT_POSIX_MEMALIGN
+#if defined(HAVE_COMPLIANT_POSIX_MEMALIGN)
   err = posix_memalign (&aligned_memory, alignment, memsize);
-#elif   HAVE_MEMALIGN
+#elif defined(HAVE_MEMALIGN)
   errno = 0;
   aligned_memory = memalign (alignment, memsize);
   err = errno;
-#elif   HAVE_VALLOC
+#elif defined(HAVE_VALLOC)
   errno = 0;
   aligned_memory = valloc (memsize);
   err = errno;
@@ -1193,7 +1193,7 @@ static void
 allocator_memfree (gsize    memsize,
                    gpointer mem)
 {
-#if     HAVE_COMPLIANT_POSIX_MEMALIGN || HAVE_MEMALIGN || HAVE_VALLOC
+#if defined(HAVE_COMPLIANT_POSIX_MEMALIGN) || defined(HAVE_MEMALIGN) || defined(HAVE_VALLOC)
   free (mem);
 #else
   mem_assert (memsize <= sys_page_size);
@@ -1300,7 +1300,7 @@ static void
 smc_tree_abort (int errval)
 {
   const char *syserr = "unknown error";
-#if HAVE_STRERROR
+#if defined(HAVE_STRERROR)
   syserr = strerror (errval);
 #endif
   mem_error ("MemChecker: failure in debugging tree: %s", syserr);

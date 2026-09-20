@@ -387,7 +387,7 @@ g_utf8_strncpy (gchar       *dest,
   return dest;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 G_LOCK_DEFINE_STATIC (aliases);
 
 static GHashTable *
@@ -903,7 +903,7 @@ g_utf8_to_ucs4_fast (const gchar *str,
   return result;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_utf8_to_ucs4:
  * @str: a UTF-8 encoded string
@@ -1125,7 +1125,7 @@ g_utf16_to_utf8 (const gunichar2  *str,
 	    }
 	  else
 	    {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                    _("Invalid sequence in conversion input"));
 #endif
@@ -1136,7 +1136,7 @@ g_utf16_to_utf8 (const gunichar2  *str,
 	{
 	  if (high_surrogate)
 	    {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                    _("Invalid sequence in conversion input"));
 #endif
@@ -1161,7 +1161,7 @@ g_utf16_to_utf8 (const gunichar2  *str,
 
   if (high_surrogate && !items_read)
     {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
       g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_PARTIAL_INPUT,
                            _("Partial character sequence at end of input"));
 #endif
@@ -1272,7 +1272,7 @@ g_utf16_to_ucs4 (const gunichar2  *str,
 	    }
 	  else
 	    {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                    _("Invalid sequence in conversion input"));
 #endif
@@ -1283,7 +1283,7 @@ g_utf16_to_ucs4 (const gunichar2  *str,
 	{
 	  if (high_surrogate)
 	    {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                    _("Invalid sequence in conversion input"));
 #endif
@@ -1308,7 +1308,7 @@ g_utf16_to_ucs4 (const gunichar2  *str,
 
   if (high_surrogate && !items_read)
     {
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
       g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_PARTIAL_INPUT,
                            _("Partial character sequence at end of input"));
 #endif
@@ -1413,13 +1413,13 @@ g_utf8_to_utf16 (const gchar *str,
 	    {
 	      if (items_read)
 		break;
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      else
 		g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_PARTIAL_INPUT,
                                      _("Partial character sequence at end of input"));
 #endif
 	    }
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	  else
 	    g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                  _("Invalid byte sequence in conversion input"));
@@ -1431,7 +1431,7 @@ g_utf8_to_utf16 (const gchar *str,
 	n16 += 1;
       else if (wc < 0xe000)
 	{
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	  g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                _("Invalid sequence in conversion input"));
 #endif
@@ -1444,7 +1444,7 @@ g_utf8_to_utf16 (const gchar *str,
 	n16 += 2;
       else
 	{
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 //	  g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
 //                               _("Character out of range for UTF-16"));
 #endif
@@ -1531,7 +1531,7 @@ g_ucs4_to_utf16 (const gunichar  *str,
 	n16 += 1;
       else if (wc < 0xe000)
 	{
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	  g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                _("Invalid sequence in conversion input"));
 #endif
@@ -1544,7 +1544,7 @@ g_ucs4_to_utf16 (const gunichar  *str,
 	n16 += 2;
       else
 	{
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	  g_set_error_literal (error, G_CONVERT_ERROR, G_CONVERT_ERROR_ILLEGAL_SEQUENCE,
                                _("Character out of range for UTF-16"));
 #endif
@@ -1846,7 +1846,7 @@ g_utf8_strreverse (const gchar *str,
   return result;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 
 gchar *
 _g_utf8_make_valid (const gchar *name)

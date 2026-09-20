@@ -44,7 +44,7 @@
 
 #include "galias.h"
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 struct _GStringChunk
 {
   GHashTable *const_table;
@@ -103,7 +103,7 @@ g_str_hash (gconstpointer v)
   return h;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 #define MY_MAXSIZE ((gsize)-1)
 
 static inline gsize

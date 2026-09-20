@@ -47,7 +47,7 @@ g_error_new_valist (GQuark         domain,
   return error;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_error_new:
  * @domain: error domain 
@@ -209,13 +209,13 @@ g_set_error (GError      **err,
 
   if (*err == NULL)
     *err = new;
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   else
     g_warning (ERROR_OVERWRITTEN_WARNING, new->message);    
 #endif /* NOT_NEEDED_FOR_NAVIT */
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_set_error_literal:
  * @err: a return location for a #GError, or %NULL

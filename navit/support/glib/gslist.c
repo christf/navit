@@ -175,7 +175,7 @@ g_slist_free (GSList *list)
   g_slice_free_chain (GSList, list, next);
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_slist_free_1:
  * @list: a #GSList element
@@ -306,7 +306,7 @@ g_slist_prepend (GSList   *list,
   return new_list;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_slist_insert:
  * @list: a #GSList

@@ -384,7 +384,7 @@ g_ascii_strtod (const gchar *nptr,
   decimal_point_len = strlen (decimal_point);
 #endif
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   g_assert (decimal_point_len != 0);
 #endif /* NOT_NEEDED_FOR_NAVIT */
 
@@ -606,7 +606,7 @@ g_ascii_formatd (gchar       *buffer,
   decimal_point_len = strlen (decimal_point);
 #endif
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   g_assert (decimal_point_len != 0);
 #endif /* NOT_NEEDED_FOR_NAVIT */
 
@@ -867,7 +867,7 @@ g_ascii_strtoll (const gchar *nptr,
     return (gint64) result;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 G_CONST_RETURN gchar*
 g_strerror (gint errnum)
 {
@@ -1315,7 +1315,7 @@ g_strerror (gint errnum)
 #endif
     }
 #else /* NO_SYS_ERRLIST */
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
   extern int sys_nerr;
   extern char *sys_errlist[];
 
@@ -1469,7 +1469,7 @@ extern const char *strsignal(int);
     }
 #else /* NO_SYS_SIGLIST */
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 #ifdef NO_SYS_SIGLIST_DECL
   extern char *sys_siglist[];	/*(see Tue Jan 19 00:44:24 1999 in changelog)*/
 #endif
@@ -2108,7 +2108,7 @@ g_strcompress (const gchar *source)
 	  switch (*p)
 	    {
 	    case '\0':
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 	      g_warning ("g_strcompress: trailing \\");
 #endif /* NOT_NEEDED_FOR_NAVIT */
 	      goto out;
@@ -2345,7 +2345,7 @@ g_strsplit (const gchar *string,
   return str_array;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_strsplit_set:
  * @string: The string to be tokenized
@@ -2762,7 +2762,7 @@ g_strrstr_len (const gchar *haystack,
     }
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_str_has_suffix:
  * @str: a nul-terminated string.
@@ -2877,7 +2877,7 @@ g_strv_length (gchar **str_array)
   return i;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_dpgettext:
  * @domain: the translation domain to use, or %NULL to use

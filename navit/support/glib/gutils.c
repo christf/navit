@@ -85,7 +85,7 @@
 #endif /* G_PLATFORM_WIN32 */
 
 #ifdef G_OS_WIN32
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 #  include <direct.h>
 #endif /* NOT_NEEDED_FOR_NAVIT */
 #  include <shlobj.h>
@@ -126,7 +126,7 @@
 #include <libintl.h>
 #endif
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 const guint glib_major_version = GLIB_MAJOR_VERSION;
 const guint glib_minor_version = GLIB_MINOR_VERSION;
 const guint glib_micro_version = GLIB_MICRO_VERSION;
@@ -784,7 +784,7 @@ g_path_is_absolute (const gchar *file_name)
   return FALSE;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_path_skip_root:
  * @file_name: a file name.
@@ -953,7 +953,7 @@ g_path_get_dirname (const gchar	   *file_name)
   return base;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_get_current_dir:
  *
@@ -1950,7 +1950,7 @@ g_set_prgname (const gchar *prgname)
   G_UNLOCK (g_prgname);
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 G_LOCK_DEFINE_STATIC (g_application_name);
 static gchar *g_application_name = NULL;
 
@@ -3173,7 +3173,7 @@ g_int_hash (gconstpointer v)
   return *(const gint*) v;
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 /**
  * g_nullify_pointer:
  * @nullify_location: the memory address of the pointer.

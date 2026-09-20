@@ -42,7 +42,7 @@
 #include <errno.h>
 
 #include "glib.h"
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 #include "gdebug.h"
 #endif /* NOT_NEEDED_FOR_NAVIT */
 #include "gprintfint.h"
@@ -50,7 +50,7 @@
 #include "galias.h"
 #include "config.h"
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 #ifdef G_OS_WIN32
 #include <process.h>		/* For getpid() */
 #include <io.h>
@@ -1071,7 +1071,7 @@ g_printf_string_upper_bound (const gchar *format,
 #endif
 }
 
-#if NOT_NEEDED_FOR_NAVIT
+#if defined(NOT_NEEDED_FOR_NAVIT)
 void
 _g_messages_thread_init_nomessage (void)
 {
