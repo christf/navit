@@ -1916,7 +1916,7 @@ int CompileDictionary(const char *dsource, const char *dict_name, FILE *log, cha
 	FILE *f_out;
 	int offset_rules=0;
 	int value;
-	char fname_in[sizeof(path_home)+45];
+	char fname_in[sizeof(path_home)+50];
 	char fname_out[sizeof(path_home)+15];
 	char fname_temp[sizeof(path_home)+15];
 	char path[sizeof(path_home)+40];       // path_dsource+20
