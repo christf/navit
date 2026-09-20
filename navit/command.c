@@ -78,6 +78,7 @@ struct command_saved {
     struct attr context_attr;       /**< The root of the object hierarchy, which will be assumed as
                                      *   the parent of all unqualified or partially qualified object
                                      *   references. **/
+    struct attr prev;               /**< Working parent attribute, used while registering callbacks. **/
     int num_cbs;                    /**< Number of entries in {@code cbs} **/
     struct command_saved_cb *cbs;   /**< List of callbacks for this saved command **/
     struct callback *cb;            /**< Callback that should be called when we re-evaluate **/
@@ -1751,7 +1752,6 @@ static void command_saved_callbacks_changed(struct command_saved *cs) {
  * @return True if all callbacks were successfully registered, false if the function failed
  */
 static int command_register_callbacks(struct command_saved *cs) {
-    struct attr prev; /* The parent of the next object which will be retrieved. */
     struct attr cb_attr;
     int status;
     struct object_func *func;
@@ -1762,11 +1762,11 @@ static int command_register_callbacks(struct command_saved *cs) {
 
     dbg(lvl_debug, "enter: cs=%p, cs->async=%d, cs->command=%s", cs, cs->async, cs->command);
     cs->ctx.expr = cs->command;
-    prev = cs->context_attr;
+    cs->prev = cs->context_attr;
 
     while ((status = get_next_object(&cs->ctx, &cs->res)) != 0) {
         tmpoffset = cs->res.var - cs->command;
-        cs->ctx.attr = &prev;
+        cs->ctx.attr = &cs->prev;
         resolve(&cs->ctx, &cs->res);
 
         if (cs->ctx.error) {
@@ -1784,8 +1784,8 @@ static int command_register_callbacks(struct command_saved *cs) {
             return 0;
         }
 
-        if (prev.type != attr_none) {
-            func = object_func_lookup(prev.type);
+        if (cs->prev.type != attr_none) {
+            func = object_func_lookup(cs->prev.type);
 
             if (func->add_attr) {
                 if (status == 2) {  // This is not the final attribute name
@@ -1801,22 +1801,22 @@ static int command_register_callbacks(struct command_saved *cs) {
                 cs->num_cbs++;
                 cs->cbs = g_realloc(cs->cbs, (sizeof(struct command_saved_cb) * cs->num_cbs));
                 cs->cbs[cs->num_cbs - 1].cb = cb;
-                cs->cbs[cs->num_cbs - 1].attr = prev;
+                cs->cbs[cs->num_cbs - 1].attr = cs->prev;
 
                 cb_attr.u.callback = cb;
                 cb_attr.type = attr_callback;
 
-                func->add_attr(prev.u.data, &cb_attr);
+                func->add_attr(cs->prev.u.data, &cb_attr);
 
             } else {
-                dbg(lvl_error, "Could not add callback because add_attr is missing for type %i", prev.type);
+                dbg(lvl_error, "Could not add callback because add_attr is missing for type %i", cs->prev.type);
             }
         }
 
         if (status == 2) {
-            prev = cs->res.attr;
+            cs->prev = cs->res.attr;
         } else {
-            prev = cs->context_attr;
+            cs->prev = cs->context_attr;
         }
     }
 

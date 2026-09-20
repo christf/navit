@@ -41,7 +41,12 @@
  */
 
 struct coord *coord_get(unsigned char **p) {
+    /* Legacy API keeping its place in the libnavit ABI. It returns a pointer
+     * into the caller's buffer, so alignment is the caller's responsibility. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     struct coord *ret = (struct coord *)(*p);
+#pragma GCC diagnostic pop
     *p += sizeof(*ret);
     return ret;
 }

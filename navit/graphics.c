@@ -38,6 +38,7 @@
 #include "layout.h"
 #include "map.h"
 #include "mapset.h"
+#include <stdint.h>
 #include "navit.h"
 #include "plugin.h"
 #include "point.h"
@@ -1538,7 +1539,11 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
 
     p = g_malloc(len);
 
+    /* p is a g_malloc() result and therefore aligned for any data type */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     di = (struct displayitem *)p;
+#pragma GCC diagnostic pop
     p += sizeof(*di) + count * sizeof(*c);
     di->item = *item;
     di->z_order = 0;
@@ -3287,7 +3292,11 @@ void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct tra
     } else {
         buffer = g_malloc(sizeof(struct displayitem) + max_coord * sizeof(struct coord));
     }
+    /* both g_alloca and g_malloc keep the buffer aligned for any data type */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     di = (struct displayitem *)buffer;
+#pragma GCC diagnostic pop
 
     es = itm->elements;
     di->item.type = type_none;
@@ -3394,7 +3403,7 @@ static void displaylist_update_layers(struct displaylist *displaylist, GList *la
             GList *types = itemgra->type;
             if (itemgra->order.min <= order && itemgra->order.max >= order) {
                 while (types) {
-                    enum item_type type = (enum item_type)types->data;
+                    enum item_type type = (enum item_type)(intptr_t)types->data;
                     set_hash_entry(displaylist, type);
                     types = g_list_next(types);
                 }
@@ -4072,7 +4081,7 @@ void graphics_remove_selection(struct graphics *gra, struct item *item, enum ite
 void graphics_clear_selection(struct graphics *gra, struct displaylist *dl) {
     while (gra->selection) {
         struct item *item = (struct item *)gra->selection->data;
-        graphics_remove_selection(gra, item, (enum item_type)item->priv_data, dl);
+        graphics_remove_selection(gra, item, (enum item_type)(intptr_t)item->priv_data, dl);
     }
 }
 

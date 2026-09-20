@@ -558,8 +558,13 @@ void *debug_malloc(const char *where, int line, const char *func, int size) {
     head->return_address[6] = __builtin_return_address(6);
     head->return_address[7] = __builtin_return_address(7);
     head++;
-    tail = (struct malloc_tail *)((unsigned char *)head + size);
-    tail->magic = 0xdeadbef0;
+    /* The tail sits right after the user block, whose size need not be a
+     * multiple of the tail's alignment, so the magic is written by copy. */
+    {
+        struct malloc_tail tail;
+        tail.magic = 0xdeadbef0;
+        memcpy((unsigned char *)head + size, &tail, sizeof(tail));
+    }
     return head;
 }
 #pragma GCC diagnostic pop
@@ -599,18 +604,23 @@ char *debug_guard(const char *where, int line, const char *func, char *str) {
 
 void debug_free(const char *where, int line, const char *func, void *ptr) {
     struct malloc_head *head;
-    struct malloc_tail *tail;
+    struct malloc_tail tail;
     if (!ptr)
         return;
     mallocs--;
+    /* head was the original malloc() result, so it is maximally aligned */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     head = (struct malloc_head *)((unsigned char *)ptr - sizeof(*head));
-    tail = (struct malloc_tail *)((unsigned char *)ptr + head->size);
+#pragma GCC diagnostic pop
+    memcpy(&tail, (unsigned char *)ptr + head->size, sizeof(tail));
     debug_malloc_size -= head->size;
-    if (head->magic != 0xdeadbeef || tail->magic != 0xdeadbef0) {
+    if (head->magic != 0xdeadbeef || tail.magic != 0xdeadbef0) {
         fprintf(stderr, "Invalid free from %s:%d %s\n", where, line, func);
     }
     head->magic = 0;
-    tail->magic = 0;
+    tail.magic = 0;
+    memcpy((unsigned char *)ptr + head->size, &tail, sizeof(tail));
     if (head->prev)
         head->prev->next = head->next;
     else

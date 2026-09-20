@@ -176,8 +176,18 @@ void *cache_entry_new(struct cache *cache, void *id, int size) {
     return &ret->id[cache->id_size];
 }
 
+/* cache_entry_new() hands out the entry's id array; entry_size is the offset of
+ * that array, so going back recovers the original g_slice_alloc0() allocation,
+ * which is aligned for any data type. */
+static struct cache_entry *cache_entry_from_data(struct cache *cache, void *data) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+    return (struct cache_entry *)((char *)data - cache->entry_size);
+#pragma GCC diagnostic pop
+}
+
 void cache_entry_destroy(struct cache *cache, void *data) {
-    struct cache_entry *entry = (struct cache_entry *)((char *)data - cache->entry_size);
+    struct cache_entry *entry = cache_entry_from_data(cache, data);
     dbg(lvl_debug, "destroy 0x%x 0x%x 0x%x 0x%x 0x%x", entry->id[0], entry->id[1], entry->id[2], entry->id[3],
         entry->id[4]);
     entry->usage--;
@@ -242,7 +252,7 @@ void cache_flush(struct cache *cache, void *id) {
 }
 
 void cache_flush_data(struct cache *cache, void *data) {
-    struct cache_entry *entry = (struct cache_entry *)((char *)data - cache->entry_size);
+    struct cache_entry *entry = cache_entry_from_data(cache, data);
     if (entry) {
         cache_remove_from_list(entry->where, entry);
         cache_remove(cache, entry);
@@ -303,7 +313,7 @@ void *cache_lookup(struct cache *cache, void *id) {
 }
 
 void cache_insert(struct cache *cache, void *data) {
-    struct cache_entry *entry = (struct cache_entry *)((char *)data - cache->entry_size);
+    struct cache_entry *entry = cache_entry_from_data(cache, data);
     dbg(lvl_debug, "insert 0x%x 0x%x 0x%x 0x%x 0x%x", entry->id[0], entry->id[1], entry->id[2], entry->id[3],
         entry->id[4]);
     if (cache->insert == &cache->t1) {

@@ -1565,6 +1565,15 @@ static int route_segment_data_size(int flags) {
     return ret;
 }
 
+/* segments are g_malloc0()'d and seg_size is a multiple of the alignment of
+ * struct route_segment_data, so the resulting address is suitably aligned */
+static struct route_segment_data *route_segment_data_at(struct route_path_segment *segment, int seg_size) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+    return (struct route_segment_data *)((char *)segment + seg_size);
+#pragma GCC diagnostic pop
+}
+
 /**
  * @brief Checks if the route graph already contains a particular segment.
  *
@@ -1707,7 +1716,7 @@ static void route_path_add_line(struct route_path *this, struct coord *start, st
     seg_size = sizeof(*segment) + sizeof(struct coord) * ccnt;
     seg_dat_size = sizeof(struct route_segment_data);
     segment = g_malloc0(seg_size + seg_dat_size);
-    segment->data = (struct route_segment_data *)((char *)segment + seg_size);
+    segment->data = route_segment_data_at(segment, seg_size);
     segment->ncoords = ccnt;
     segment->direction = 0;
     segment->c[0] = *start;
@@ -1810,7 +1819,7 @@ static int route_path_add_item_from_graph(struct route_path *this, struct route_
     seg_size = sizeof(*segment) + sizeof(struct coord) * (ccnt + extra);
     seg_dat_size = route_segment_data_size(rgs->data.flags);
     segment = g_malloc0(seg_size + seg_dat_size);
-    segment->data = (struct route_segment_data *)((char *)segment + seg_size);
+    segment->data = route_segment_data_at(segment, seg_size);
     segment->direction = dir;
     cd = segment->c;
     if (pos && (c[0].x != pos->lp.x || c[0].y != pos->lp.y))
@@ -2577,7 +2586,6 @@ static void route_graph_add_street(struct route_graph *this, struct item *item, 
                 route_graph_add_segment(this, s_pnt, e_pnt, &data);
         } else {
             int isseg, rc;
-            int sc = 0;
             do {
                 isseg = item_coord_is_node(item);
                 rc = item_coord_get(item, &c, 1);
@@ -2597,7 +2605,6 @@ static void route_graph_add_street(struct route_graph *this, struct item *item, 
             } while (rc);
             e_pnt = route_graph_add_point(this, &l);
             dbg_assert(len >= 0);
-            sc++;
             data.len = len;
             if (!route_graph_segment_is_duplicate(s_pnt, &data))
                 route_graph_add_segment(this, s_pnt, e_pnt, &data);
