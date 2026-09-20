@@ -28,7 +28,12 @@
 #include "item.h"
 #include "navit.h"
 #include "navit_nls.h"
+/* GTK2 still ships a GTimeVal member in GtkTooltips, deprecated in newer glib;
+ * clang flags it, but the member is unused, so suppress it for the include. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <gtk/gtk.h>
+#pragma GCC diagnostic pop
 #include <string.h>
 
 #ifdef __APPLE__

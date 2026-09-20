@@ -29,7 +29,12 @@
 #include "search.h"
 #include "track.h"
 #include <fcntl.h>
+/* GTK2 still ships a GTimeVal member in GtkTooltips, deprecated in newer glib;
+ * clang flags it, but the member is unused, so suppress it for the include. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <gtk/gtk.h>
+#pragma GCC diagnostic pop
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

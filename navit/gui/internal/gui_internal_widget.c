@@ -1190,7 +1190,6 @@ void gui_internal_table_pack(struct gui_priv *this, struct widget *w) {
 
     int height = 0;
     int width = 0;
-    int count = 0;
     GList *column_data = gui_internal_compute_table_dimensions(this, w);
     GList *current = 0;
     struct table_column_desc *cell_desc = 0;
@@ -1204,12 +1203,6 @@ void gui_internal_table_pack(struct gui_priv *this, struct widget *w) {
         width = width + cell_desc->width + this->spacing;
         if (height < cell_desc->height) {
             height = cell_desc->height;
-        }
-    }
-
-    for (current = w->children; current; current = g_list_next(current)) {
-        if (current->data != table_data->scroll_buttons.button_box) {
-            count++;
         }
     }
 

@@ -152,7 +152,11 @@ static void svg_debug_gc_set_linewidth(struct graphics_gc_priv *gc, int w) {
 }
 
 static void svg_debug_gc_set_dashes(struct graphics_gc_priv *gc, int w, int offset, unsigned char *dash_list, int n) {
+    /* the dash list is handed down as an unsigned int array (see graphics.h) */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     gc->dashed = (unsigned int *)dash_list;
+#pragma GCC diagnostic pop
     gc->is_dashed = TRUE;
     if (gc->graphics_gc_methods_proxy->gc_set_dashes) {
         gc->graphics_gc_methods_proxy->gc_set_dashes(gc->graphics_gc_priv_proxy, w, offset, dash_list, n);

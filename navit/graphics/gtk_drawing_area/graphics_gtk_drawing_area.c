@@ -34,7 +34,12 @@
 #include <cairo.h>
 #include <errno.h>
 #include <gdk/gdkkeysyms.h>
+/* GTK2 still ships a GTimeVal member in GtkTooltips, deprecated in newer glib;
+ * clang flags it, but the member is unused, so suppress it for the include. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <gtk/gtk.h>
+#pragma GCC diagnostic pop
 #include <locale.h> /* For WIN32 */
 #include <math.h>
 #include <signal.h>

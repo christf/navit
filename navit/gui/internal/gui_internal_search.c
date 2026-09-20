@@ -262,7 +262,7 @@ static int gui_internal_get_match_quality(char *item_name, char *search_text, in
         word_match,
         substring_match,
         housenum_but_no_street_match
-    } match_quality;
+    } match_quality = substring_match;
     if (is_house_number_without_street) {
         match_quality = housenum_but_no_street_match;
     } else if (item_name) {

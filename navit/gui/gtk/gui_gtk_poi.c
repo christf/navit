@@ -32,7 +32,12 @@
 #include "popup.h"
 #include "transform.h"
 #include "util.h"
+/* GTK2 still ships a GTimeVal member in GtkTooltips, deprecated in newer glib;
+ * clang flags it, but the member is unused, so suppress it for the include. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <gtk/gtk.h>
+#pragma GCC diagnostic pop
 #include <stdlib.h>
 
 #include "navigation.h" /* for FEET_PER_METER and other conversion factors. */

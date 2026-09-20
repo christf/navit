@@ -502,6 +502,13 @@ static struct font_freetype_font *font_freetype_font_new(struct graphics_priv *g
 }
 
 /** Implementation of font_freetype_methods.get_shadow. */
+/*
+ * The glyph buffers are 32 bits per pixel, allocated by the graphics drivers
+ * from aligned memory. Pixel writes advance in 4-byte steps, so they remain
+ * aligned as long as the buffer is.
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 static int font_freetype_glyph_get_shadow(struct font_freetype_glyph *g, unsigned char *data, int stride,
                                           struct color *foreground, struct color *background) {
     int x, y, w = g->w, h = g->h;
@@ -582,6 +589,7 @@ static int font_freetype_glyph_get_glyph(struct font_freetype_glyph *g, unsigned
     }
     return 1;
 }
+#pragma GCC diagnostic pop
 
 static void font_freetype_destroy(void) {
     // Do not call FcFini here: GdkPixbuf also (indirectly) uses fontconfig (for SVGs with
