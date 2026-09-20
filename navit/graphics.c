@@ -38,7 +38,6 @@
 #include "layout.h"
 #include "map.h"
 #include "mapset.h"
-#include <stdint.h>
 #include "navit.h"
 #include "plugin.h"
 #include "point.h"
@@ -51,6 +50,7 @@
 #include <glib.h>
 #include <glib/gtypes.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef HAVE_API_WIN32_CE

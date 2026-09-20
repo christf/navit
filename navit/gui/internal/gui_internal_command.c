@@ -704,10 +704,10 @@ static int gui_internal_cmd2_network_info(struct gui_priv *this, char *function,
     while (tmp) {
         if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
             /* getifaddrs() returns sockaddr buffers that are suitably aligned */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wcast-align"
             struct sockaddr_in *pAddr = (struct sockaddr_in *)tmp->ifa_addr;
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
             if (g_ascii_strncasecmp(tmp->ifa_name, "lo", 2)) {
                 text = g_strdup_printf("%s: %s", tmp->ifa_name, inet_ntoa(pAddr->sin_addr));
                 gui_internal_widget_append(wb, w = gui_internal_label_new(this, text));
