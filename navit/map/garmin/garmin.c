@@ -336,7 +336,7 @@ static int point_attr_get(void *priv_data, enum attr_type attr_type, struct attr
             mr->last_attr = 0;
         }
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wimplicit-fallthrough="
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
         switch (mr->last_attr) {
         case 0:
             mr->last_attr++;

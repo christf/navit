@@ -782,7 +782,12 @@ static int zipfile_to_tile(struct map_priv *m, struct zip_cd *cd, struct tile *t
     zipfn = (char *)(file_data_read(fi, binfile_cd_offset(cd) + sizeof(struct zip_lfh), lfh->zipfnln));
     strncpy(buffer, zipfn, lfh->zipfnln);
     buffer[lfh->zipfnln] = '\0';
+    /* file_data_read() returns an mmap or g_malloc base, and the tile payload
+     * of a navit binfile is laid out in int32 units */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     t->start = (int *)binfile_read_content(m, fi, binfile_cd_offset(cd), lfh);
+#pragma GCC diagnostic pop
     t->end = t->start + lfh->zipuncmp / 4;
     t->fi = fi;
     file_data_free(fi, (unsigned char *)zipfn);
@@ -854,8 +859,12 @@ static struct map_rect_priv *map_rect_new_binfile(struct map_priv *map, struct m
         unsigned char *d;
         if (map->fi) {
             d = file_data_read(map->fi, 0, map->fi->size);
+            /* the map file data is int32-aligned; the end pointer is only compared */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
             t.start = (int *)d;
             t.end = (int *)(d + map->fi->size);
+#pragma GCC diagnostic pop
             t.fi = map->fi;
             t.zipfile_num = 0;
             t.mode = 0;
@@ -1367,7 +1376,11 @@ static struct duplicate *duplicate_test(struct map_search_priv *msp, struct item
         len = len + strlen(attr2.u.str);
     }
     buffer = g_alloca(sizeof(char) * len);
+    /* g_alloca() keeps the buffer aligned for any data type */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     d = (struct duplicate *)buffer;
+#pragma GCC diagnostic pop
     if (!item_coord_get(item, &d->c, 1)) {
         d->c.x = 0;
         d->c.y = 0;
@@ -1763,7 +1776,11 @@ static int map_binfile_open(struct map_priv *m) {
         dbg(lvl_error, "Failed to load '%s'", m->filename);
         return 0;
     }
+    /* file_data_read() returns an mmap or g_malloc base, so the beginning is int32-aligned */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     magic = (int *)file_data_read(m->fi, 0, 4);
+#pragma GCC diagnostic pop
     if (!magic) {
         file_destroy(m->fi);
         m->fi = NULL;

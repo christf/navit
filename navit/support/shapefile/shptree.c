@@ -1004,8 +1004,12 @@ static
 SAOffset SHPTreeReadLibc( void *p, SAOffset size, SAOffset nmemb, SAFile file )
 
 {
+    /* In the libc backend SAFile carries a FILE * obtained from fopen(), which is heap-aligned. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     return (SAOffset) fread( p, (size_t) size, (size_t) nmemb,
                                  (FILE *) file );
+#pragma GCC diagnostic pop
 }
 
 /************************************************************************/
@@ -1016,7 +1020,10 @@ static
 SAOffset SHPTreeSeekLibc( SAFile file, SAOffset offset, int whence )
 
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     return (SAOffset) fseek( (FILE *) file, (long) offset, whence );
+#pragma GCC diagnostic pop
 }
 
 /************************************************************************/

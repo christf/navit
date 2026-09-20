@@ -642,6 +642,10 @@ static SAFile VSI_SHP_Open(const char *pszFilename, const char *pszAccess)
 /*                            VSI_SHP_Read()                            */
 /************************************************************************/
 
+/* SAFile only ever carries a FILE * from fopen(), which is heap-aligned. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+
 static SAOffset VSI_SHP_Read(void *p, SAOffset size, SAOffset nmemb, SAFile file)
 
 {
@@ -693,6 +697,7 @@ static int VSI_SHP_Close(SAFile file)
 {
     return fclose((FILE *)file);
 }
+#pragma GCC diagnostic pop
 
 /************************************************************************/
 /*                              SADError()                              */
