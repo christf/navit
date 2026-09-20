@@ -751,7 +751,7 @@ static const char *LookupCharName(Translator *tr, int c, int only)
 	char phonemes2[60];
 	const char *lang_name = NULL;
 	char *string;
-	static char buf[60];
+	static char buf[200];
 
 	buf[0] = 0;
 	flags[0] = 0;
@@ -809,14 +809,14 @@ static const char *LookupCharName(Translator *tr, int c, int only)
 		{
 			SetWordStress(translator2, phonemes, flags, -1, 0);
 			DecodePhonemes(phonemes,phonemes2);
-			sprintf(buf,"[\002_^_%s %s _^_%s]]","en",phonemes2,WordToString2(tr->translator_name));
+			snprintf(buf,sizeof(buf),"[\002_^_%s %s _^_%s]]","en",phonemes2,WordToString2(tr->translator_name));
 			SelectPhonemeTable(voice->phoneme_tab_ix);  // revert to original phoneme table
 		}
 		else
 		{
 			SetWordStress(tr, phonemes, flags, -1, 0);
 			DecodePhonemes(phonemes,phonemes2);
-			sprintf(buf,"[\002%s]] ",phonemes2);
+			snprintf(buf,sizeof(buf),"[\002%s]] ",phonemes2);
 		}
 	}
 	else
