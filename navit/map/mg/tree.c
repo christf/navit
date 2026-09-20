@@ -46,10 +46,6 @@ struct tree_hdr_h {
         unsigned int size;*/
     unsigned char p[8];
 };
-static inline unsigned int tree_hdr_h_get_addr(struct tree_hdr_h *tree) {
-    unsigned char *p = tree->p;
-    return get_u32(&p);
-}
 static inline unsigned int tree_hdr_h_get_size(struct tree_hdr_h *tree) {
     unsigned char *p = tree->p + 4;
     return get_u32(&p);
@@ -91,10 +87,6 @@ static inline unsigned int tree_hdr_v_get_count(struct tree_hdr_v *tree) {
 }
 static inline unsigned int tree_hdr_v_get_next(struct tree_hdr_v *tree) {
     unsigned char *p = tree->p + 4;
-    return get_u32_unal(&p);
-}
-static inline unsigned int tree_hdr_v_get_unknown(struct tree_hdr_v *tree) {
-    unsigned char *p = tree->p + 8;
     return get_u32_unal(&p);
 }
 

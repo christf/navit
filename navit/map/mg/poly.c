@@ -92,7 +92,7 @@ static void poly_get_data(struct poly_priv *poly, unsigned char **p) {
     poly->order = *(*p)++;
     poly->type = *(*p)++;
     poly->polys = get_u32_unal(p);
-    poly->count = (unsigned int *)(*p);
+    poly->count = *p;
     (*p) += poly->polys * sizeof(unsigned int);
     poly->count_sum = get_u32_unal(p);
 }
@@ -228,7 +228,9 @@ int poly_get(struct map_rect_priv *mr, struct poly_priv *poly, struct item *item
         item->id_lo = poly->subpoly_num_all | (mr->b.block_num << 16);
         item->id_hi = (mr->current_file << 16);
         dbg(lvl_debug, "0x%x 0x%x", item->id_lo, item->id_hi);
-        poly->subpoly_next = mr->b.p + L(poly->count[poly->subpoly_num]) * sizeof(struct coord);
+        unsigned int subpoly_count;
+        memcpy(&subpoly_count, poly->count + poly->subpoly_num * sizeof(unsigned int), sizeof(subpoly_count));
+        poly->subpoly_next = mr->b.p + L(subpoly_count) * sizeof(struct coord);
         poly->subpoly_num++;
         poly->subpoly_num_all++;
         if (poly->subpoly_num >= poly->polys)

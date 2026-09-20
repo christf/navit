@@ -33,10 +33,6 @@ static inline unsigned int block_index_item_get_blocknum(struct block_index_item
     unsigned char *p = blk->p;
     return get_u32(&p);
 }
-static inline unsigned int block_index_item_get_blocks(struct block_index_item *blk) {
-    unsigned char *p = blk->p + 4;
-    return get_u32(&p);
-}
 
 struct block_index {
     /*	unsigned int blocks;
@@ -45,10 +41,6 @@ struct block_index {
         struct block_index_item list[0];*/
     unsigned char p[12];
 };
-static inline unsigned int block_index_get_blocks(struct block_index *blk) {
-    unsigned char *p = blk->p;
-    return get_u32(&p);
-}
 static inline unsigned int block_index_get_size(struct block_index *blk) {
     unsigned char *p = blk->p + 4;
     return get_u32(&p);

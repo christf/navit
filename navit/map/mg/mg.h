@@ -109,7 +109,7 @@ struct poly_priv {
     unsigned char order;
     unsigned char type;
     unsigned int polys;
-    unsigned int *count;
+    unsigned char *count;
     unsigned int count_sum;
 
     int aidx;
@@ -190,7 +190,7 @@ struct street_name {
     char *name1;
     char *name2;
     int segment_count;
-    struct street_name_segment *segments;
+    unsigned char *segments;
     int aux_len;
     unsigned char *aux_data;
     int tmp_len;
@@ -207,29 +207,26 @@ struct street_name_numbers {
     int tag;
     int dist;
     int country;
-    struct coord *c;
+    struct coord c;
     struct housenumber first;
     struct housenumber last;
     int segment_count;
-    struct street_name_segment *segments;
+    unsigned char *segments;
     int aux_len;
     unsigned char *aux_data;
     int tmp_len;
     unsigned char *tmp_data;
 };
 static inline void street_name_numbers_get_coord(struct street_name_numbers *str, struct coord *c) {
-    unsigned char *p = (unsigned char *)str->c;
-    c->x = get_u32_unal(&p);
-    c->y = get_u32_unal(&p);
+    *c = str->c;
 }
 
 struct street_name_number {
     int len;
     int tag;
-    struct coord *c;
+    struct coord c;
     struct housenumber first;
     struct housenumber last;
-    struct street_name_segment *segment;
 };
 
 struct street_priv {

@@ -40,17 +40,19 @@ static void street_name_debug(struct street_name *sn, FILE *out) {
         unsigned char *pn,*pn_end;
         struct street_name_number nn;
         street_name_numbers_get(&nns, &p);
-        fprintf(out,"0x%x 0x%x type=town_label label=\"%s(%d):0x%x:%d%s-%d%s\" debug=\"len=0x%x\"",nns.c->x,nns.c->y,sn->name2,
+        fprintf(out,"0x%x 0x%x type=town_label label=\"%s(%d):0x%x:%d%s-%d%s\" debug=\"len=0x%x\"",nns.c.x,nns.c.y,sn->name2,
                 sn->segment_count, nns.tag, nns.first.number,nns.first.suffix,nns.last.number,nns.last.suffix,nns.len);
         for (i = 0 ; i < sn->segment_count ; i++) {
-            fprintf(out," debug=\"segment(%d)=0x%x\"",i,sn->segments[i].segid);
+            int segid;
+            memcpy(&segid, sn->segments + i * sizeof(struct street_name_segment), sizeof(segid));
+            fprintf(out," debug=\"segment(%d)=0x%x\"",i,segid);
         }
         fprintf(out,"\n");
         pn=nns.aux_data;
         pn_end=nns.aux_data+nns.aux_len;
         while (pn < pn_end) {
             street_name_number_get(&nn, &pn);
-            fprintf(out,"0x%x 0x%x type=town_label label=\"%s:0x%x:%d%s-%d%s\" debug=\"len=0x%x\"\n", nn.c->x, nn.c->y, sn->name2,
+            fprintf(out,"0x%x 0x%x type=town_label label=\"%s:0x%x:%d%s-%d%s\" debug=\"len=0x%x\"\n", nn.c.x, nn.c.y, sn->name2,
                     nn.tag, nn.first.number, nn.first.suffix, nn.last.number,nn.last.suffix,nn.len);
         }
     }
@@ -66,7 +68,7 @@ static void street_name_get(struct street_name *name, unsigned char **p) {
     name->name1 = get_string(p);
     name->name2 = get_string(p);
     name->segment_count = get_u32_unal(p);
-    name->segments = (struct street_name_segment *)(*p);
+    name->segments = *p;
     (*p) += (sizeof(struct street_name_segment)) * name->segment_count;
     name->aux_len = name->len - (*p - start);
     name->aux_data = *p;
@@ -85,13 +87,15 @@ static void street_name_numbers_get(struct street_name_numbers *name_numbers, un
     name_numbers->tag = get_u8(p);
     name_numbers->dist = get_u32_unal(p);
     name_numbers->country = get_u32_unal(p);
-    name_numbers->c = coord_get(p);
+    /* mg records pack the coord without alignment, so read it by copying */
+    memcpy(&name_numbers->c, *p, sizeof(name_numbers->c));
+    (*p) += sizeof(name_numbers->c);
     name_numbers->first.number = get_u16_unal(p);
     name_numbers->first.suffix = get_string(p);
     name_numbers->last.number = get_u16_unal(p);
     name_numbers->last.suffix = get_string(p);
     name_numbers->segment_count = get_u32_unal(p);
-    name_numbers->segments = (struct street_name_segment *)(*p);
+    name_numbers->segments = *p;
     (*p) += sizeof(struct street_name_segment) * name_numbers->segment_count;
     name_numbers->aux_len = name_numbers->len - (*p - start);
     name_numbers->aux_data = *p;
@@ -108,12 +112,12 @@ static void street_name_number_get(struct street_name_number *name_number, unsig
     unsigned char *start = *p;
     name_number->len = get_u16_unal(p);
     name_number->tag = get_u8(p);
-    name_number->c = coord_get(p);
+    memcpy(&name_number->c, *p, sizeof(name_number->c));
+    (*p) += sizeof(name_number->c);
     name_number->first.number = get_u16_unal(p);
     name_number->first.suffix = get_string(p);
     name_number->last.number = get_u16_unal(p);
     name_number->last.suffix = get_string(p);
-    name_number->segment = (struct street_name_segment *)p;
     *p = start + name_number->len;
 }
 
@@ -666,7 +670,7 @@ static void debug(struct map_rect_priv *mr) {
             printf("  tag 0x%x\n", nns.tag);
             printf("  dist 0x%x\n", nns.dist);
             printf("  country 0x%x\n", nns.country);
-            printf("  coord 0x%x,0x%x\n", nns.c->x, nns.c->y);
+            printf("  coord 0x%x,0x%x\n", nns.c.x, nns.c.y);
             printf("  first %d\n", nns.first.number);
             printf("  last %d\n", nns.last.number);
             printf("  segment count 0x%x\n", nns.segment_count);
@@ -678,7 +682,7 @@ static void debug(struct map_rect_priv *mr) {
                 street_name_number_get(&nn, &pn);
                 printf("    len 0x%x\n", nn.len);
                 printf("    tag 0x%x\n", nn.tag);
-                printf("    coord 0x%x,0x%x\n", nn.c->x, nn.c->y);
+                printf("    coord 0x%x,0x%x\n", nn.c.x, nn.c.y);
                 printf("    first %d\n", nn.first.number);
                 printf("    last %d\n", nn.last.number);
             }
