@@ -26,6 +26,12 @@
 G_BEGIN_DECLS
 
 /* System thread identifier comparision and assignment */
+#if !defined(GLIB_SIZEOF_SYSTEM_THREAD)
+#define GLIB_SIZEOF_SYSTEM_THREAD 0
+#endif
+#if !defined(SIZEOF_VOID_P)
+#define SIZEOF_VOID_P 0
+#endif
 #if GLIB_SIZEOF_SYSTEM_THREAD == SIZEOF_VOID_P
 # define g_system_thread_equal_simple(thread1, thread2)			\
    ((thread1).dummy_pointer == (thread2).dummy_pointer)

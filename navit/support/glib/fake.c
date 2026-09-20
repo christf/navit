@@ -58,7 +58,7 @@ static void _g_private_init(GPrivate *priv) {
 #endif
 
 GPrivate* g_private_new(GDestroyNotify notify){
-#if HAVE_API_WIN32_BASE
+#if defined(HAVE_API_WIN32_BASE)
     int dwTlsIndex;
 #  ifndef TLS_OUT_OF_INDEXES
 #    define TLS_OUT_OF_INDEXES (-1)
