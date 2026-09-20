@@ -62,7 +62,12 @@ static char *string_hash_lookup(const char *key) {
 static char **th_get_subtile(const struct tile_head *th, int idx) {
     char *subtile_ptr = NULL;
     subtile_ptr = (char *)th + sizeof(struct tile_head) + idx * sizeof(char *);
+    /* tile heads live in malloc'd memory and the array is reached at multiples
+     * of sizeof(char *), so the pointer is always suitably aligned */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     return (char **)subtile_ptr;
+#pragma GCC diagnostic pop
 }
 
 int tile(struct rect *r, char *suffix, char *ret, int max, int overlap, struct rect *tr) {
@@ -547,25 +552,16 @@ void write_tilesdir(struct tile_info *info, struct zip_info *zip_info, FILE *out
 }
 
 void merge_tiles(struct tile_info *info) {
-    struct tile_head *th;
     char basetile[1024];
     char subtile[1024];
     GList *tiles_list_sorted, *last;
     int i, i_min, len, size_all, size[5], size_min, work_done;
-    long long zip_size;
 
     do {
         tiles_list_sorted = get_tiles_list();
         fprintf(stderr, "PROGRESS: sorting %d tiles\n", g_list_length(tiles_list_sorted));
         tiles_list_sorted = g_list_sort(tiles_list_sorted, (GCompareFunc)g_strcmp0);
         fprintf(stderr, "PROGRESS: sorting %d tiles done\n", g_list_length(tiles_list_sorted));
-        last = g_list_last(tiles_list_sorted);
-        zip_size = 0;
-        while (last) {
-            th = g_hash_table_lookup(tile_hash, last->data);
-            zip_size += th->total_size;
-            last = g_list_previous(last);
-        }
         last = g_list_last(tiles_list_sorted);
         work_done = 0;
         while (last) {

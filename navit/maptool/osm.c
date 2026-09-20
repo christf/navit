@@ -1401,9 +1401,18 @@ static struct node_item *current_node;
 osmid id_last_node;
 GHashTable *node_hash, *way_hash;
 
+/* node_buffer.base is g_realloc()'d (aligned for any type) and only ever
+ * advanced by whole struct node_item records, so the base is safe to use. */
+static struct node_item *node_buffer_items(void) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+    return (struct node_item *)node_buffer.base;
+#pragma GCC diagnostic pop
+}
+
 static void node_buffer_to_hash(void) {
     int i, count = node_buffer.size / sizeof(struct node_item);
-    struct node_item *ni = (struct node_item *)node_buffer.base;
+    struct node_item *ni = node_buffer_items();
 
     for (i = 0; i < count; i++)
         g_hash_table_insert(node_hash, (gpointer)(long long)(ni[i].nd_id), (gpointer)(long long)i);
@@ -1427,7 +1436,7 @@ static struct node_item *allocate_node_item_in_buffer(void) {
     if (node_buffer.size + sizeof(struct node_item) > slice_size) {
         flush_nodes(0);
     }
-    new_node = (struct node_item *)(node_buffer.base + node_buffer.size);
+    new_node = node_buffer_items() + node_buffer.size / sizeof(struct node_item);
     node_buffer.size += sizeof(struct node_item);
     return new_node;
 }
@@ -1466,7 +1475,7 @@ void osm_add_node(osmid id, double lat, double lon) {
         }
     } else if (!g_hash_table_lookup(node_hash, (gpointer)(long long)(current_node->nd_id)))
         g_hash_table_insert(node_hash, (gpointer)(long long)(current_node->nd_id),
-                            (gpointer)(long long)(current_node - (struct node_item *)node_buffer.base));
+                            (gpointer)(long long)(current_node - node_buffer_items()));
     else {
         remove_last_node_item_from_buffer();
         nodeid = 0;
@@ -1475,14 +1484,14 @@ void osm_add_node(osmid id, double lat, double lon) {
 
 void clear_node_item_buffer(void) {
     int j, count = node_buffer.size / sizeof(struct node_item);
-    struct node_item *ni = (struct node_item *)(node_buffer.base);
+    struct node_item *ni = node_buffer_items();
     for (j = 0; j < count; j++) {
         ni[j].ref_way = 0;
     }
 }
 
 static long long node_item_find_index_in_ordered_list(osmid id) {
-    struct node_item *node_buffer_base = (struct node_item *)(node_buffer.base);
+    struct node_item *node_buffer_base = node_buffer_items();
     long long node_count = node_buffer.size / sizeof(struct node_item);
     if (node_count == 0)
         return -1;
@@ -1523,7 +1532,7 @@ static long long node_item_find_index_in_ordered_list(osmid id) {
 }
 
 static struct node_item *node_item_get(osmid id) {
-    struct node_item *node_buffer_base = (struct node_item *)(node_buffer.base);
+    struct node_item *node_buffer_base = node_buffer_items();
     long long result_index;
     if (node_hash) {
         // Use g_hash_table_lookup_extended instead of g_hash_table_lookup
@@ -3092,10 +3101,15 @@ static void process_multipolygons_finish(GList *tr, FILE *out) {
                 buffer = g_malloc0(inner_len);
                 memcpy(&(buffer[used]), &(hole_len), sizeof(int));
                 used += sizeof(int);
+                /* g_malloc0() keeps the buffer aligned and the int header keeps the
+                 * coordinates divisible by sizeof(struct coord), which is 4-byte aligned */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
                 hole_coord = (struct coord *)&(buffer[used]);
                 used += process_multipolygons_loop_dump(multipolygon->inner, inner_scount[a], inner_sequences[a],
                                                         inner_direction, (struct coord *)&(buffer[used]))
                         * sizeof(struct coord);
+#pragma GCC diagnostic pop
                 /* check if at least one point is inside the outer */
                 for (d = 0; d < hole_len; d++)
                     if (bbox_contains_coord(&outer_bbox, hole_coord))

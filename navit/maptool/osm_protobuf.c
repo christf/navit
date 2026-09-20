@@ -173,8 +173,7 @@ static void process_tag(OSMPBF__PrimitiveBlock *primitive_block, int key, int va
 
 static void process_dense(OSMPBF__PrimitiveBlock *primitive_block, OSMPBF__DenseNodes *dense, struct maptool_osm *osm) {
     int i, j = 0, has_tags;
-    long long id = 0, lat = 0, lon = 0, changeset = 0, timestamp = 0;
-    int user_sid = 0, uid = 0;
+    long long id = 0, lat = 0, lon = 0;
 
     if (!dense)
         return;
@@ -183,10 +182,6 @@ static void process_dense(OSMPBF__PrimitiveBlock *primitive_block, OSMPBF__Dense
         id += dense->id[i];
         lat += dense->lat[i];
         lon += dense->lon[i];
-        changeset += dense->denseinfo->changeset[i];
-        user_sid += dense->denseinfo->user_sid[i];
-        uid += dense->denseinfo->uid[i];
-        timestamp += dense->denseinfo->timestamp[i];
         has_tags = dense->keys_vals && dense->keys_vals[j];
         osm_add_node(id, lat / latlon_scale, lon / latlon_scale);
         if (has_tags) {

@@ -696,6 +696,9 @@ static void itembin_slice(struct slicerpolygon *sp, struct rect *box) {
  * @param[out] out - space for filtered attr. At least size long.
  * @param[in] remove - type of item to remove from attr
  */
+/* item_bin attr records come in 4-byte strides from an aligned buffer, see itembin.c */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 static int itembin_filter_attr(struct attr_bin *in, int size, struct attr_bin *out, enum attr_type remove) {
     int nout = 0;
     char *in_pos = (char *)in;
@@ -715,6 +718,7 @@ static int itembin_filter_attr(struct attr_bin *in, int size, struct attr_bin *o
     }
     return nout;
 }
+#pragma GCC diagnostic pop
 
 /**
  * @brief free structure filled by itembin_disassemble

@@ -135,13 +135,11 @@ static GList *tile_data_to_segments(int *tile_data) {
     int *end = tile_data + tile_data[0];
     int *curr = tile_data + 1;
     GList *segments = NULL;
-    int count = 0;
 
     while (curr < end) {
         struct item_bin *ib = (struct item_bin *)curr;
         segments = g_list_prepend(segments, item_bin_to_poly_segment(ib, geom_poly_segment_type_way_right_side));
         curr += ib->len + 1;
-        count++;
     }
     return segments;
 }

@@ -25,6 +25,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * All item_bin / attr_bin records are laid out in multiples of 4 bytes from a
+ * g_malloc() or g_alloca() base, so casting file data to those structs cannot
+ * misalign. This holds for the whole file, so -Wcast-align is disabled here.
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+
 int item_bin_read(struct item_bin *ib, FILE *in) {
     if (fread(ib, 4, 1, in) == 0)
         return 0;
@@ -655,3 +663,4 @@ void clip_polygon(struct item_bin *ib, struct rect *r, struct tile_parameter *pa
         item_bin_write_clipped(ib_in, param, out);
     }
 }
+#pragma GCC diagnostic pop

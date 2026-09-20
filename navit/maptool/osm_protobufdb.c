@@ -102,7 +102,12 @@ void dump_block(OSMPBF__PrimitiveBlock *pb) {
 #endif
 
 static int osm_protobufdb_finish_block(struct osm_protobufdb_context *ctx) {
+    /* OSMPBF__BLOB__INIT also zeroes the deprecated obsolete bzip2 fields,
+     * which this file never uses */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     OSMPBF__Blob *blob, empty_blob = OSMPBF__BLOB__INIT;
+#pragma GCC diagnostic pop
     int len;
     if (!ctx->pb)
         return 0;

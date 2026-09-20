@@ -28,7 +28,7 @@
 #endif
 #include <string.h>
 
-char *tempfile_obtain_prefix() {
+char *tempfile_obtain_prefix(void) {
     static char *tmpfile_prefix = NULL;
 
     if (!tmpfile_prefix) {
@@ -44,7 +44,7 @@ char *tempfile_obtain_prefix() {
     return tmpfile_prefix;
 }
 
-void tempfile_cleanup() {
+void tempfile_cleanup(void) {
     char *prefix = tempfile_obtain_prefix();
     DIR *dir = opendir(prefix);
     if (dir) {

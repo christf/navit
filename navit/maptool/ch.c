@@ -306,6 +306,13 @@ static void ch_process(FILE **files, int depth, int resolve) {
 
 static void ch_setup(char *suffix) {
     int i;
+    /*
+     * Casting file data to structs: ch_create_tempfiles() writes whole structs,
+     * and file_data_read() returns page/max-aligned buffers, so the records are
+     * provably aligned despite the increase in alignment requirement.
+     */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
     if (!sgr) {
         int *data, size, offset = 0;
         char *filename = tempfile_name(suffix, "sgr");
@@ -356,6 +363,7 @@ static void ch_setup(char *suffix) {
         file_mmap(ddsg_node_index);
         node_index = (struct coord *)file_data_read(ddsg_node_index, 0, file_size(ddsg_node_index));
     }
+#pragma GCC diagnostic pop
 }
 
 static void ch_create_tempfiles(char *suffix, FILE **files, int count, int mode) {
