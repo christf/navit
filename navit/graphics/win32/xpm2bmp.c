@@ -506,7 +506,7 @@ static int CreateBitmapFromXpm(const char *filename, PXPM2BMP pXpm2bmp) {
                 }
 
                 memset(pXpm2bmp->dib, 0, sizeof(BITMAPINFOHEADER));
-                pXpm2bmp->bmih = (BITMAPINFOHEADER *)pXpm2bmp->dib;
+                pXpm2bmp->bmih = (BITMAPINFOHEADER *)(void *)pXpm2bmp->dib;
                 pXpm2bmp->bmih->biSize = sizeof(BITMAPINFOHEADER);
                 pXpm2bmp->bmih->biWidth = pXpm2bmp->size_x;
                 pXpm2bmp->bmih->biHeight = -((long)pXpm2bmp->size_y);
@@ -515,7 +515,7 @@ static int CreateBitmapFromXpm(const char *filename, PXPM2BMP pXpm2bmp) {
                 pXpm2bmp->bmih->biCompression = 0;
                 pXpm2bmp->wimage_data = pXpm2bmp->dib + sizeof(BITMAPINFOHEADER);
 
-                pXpm2bmp->bmih_trans = (BITMAPINFOHEADER *)pXpm2bmp->dib_trans;
+                pXpm2bmp->bmih_trans = (BITMAPINFOHEADER *)(void *)pXpm2bmp->dib_trans;
                 pXpm2bmp->bmih_trans->biSize = sizeof(BITMAPINFOHEADER);
                 pXpm2bmp->bmih_trans->biWidth = pXpm2bmp->size_x;
                 pXpm2bmp->bmih_trans->biHeight = -((long)pXpm2bmp->size_y);
