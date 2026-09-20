@@ -100,7 +100,7 @@ void debug_vprintf(dbg_level level, const char *module, const int mlen, const ch
 void debug_printf(dbg_level level, const char *module, const int mlen, const char *function, const int flen, int prefix,
                   const char *fmt, ...)
 #ifdef __GNUC__
-    __attribute__((format(printf, 7, 8)))
+    __attribute__((format(__printf__, 7, 8)))
 #endif
     ;
 void debug_assert_fail(const char *module, const int mlen, const char *function, const int flen, const char *file,
