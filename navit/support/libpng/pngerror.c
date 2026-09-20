@@ -234,9 +234,11 @@ png_default_error(png_structp png_ptr, png_const_charp error_message)
        fprintf(stderr, PNG_STRING_NEWLINE);
      }
      else
-       fprintf(stderr, "libpng error: %s, offset=%d",
-          error_message, offset);
-       fprintf(stderr, PNG_STRING_NEWLINE);
+       {
+         fprintf(stderr, "libpng error: %s, offset=%d",
+            error_message, offset);
+         fprintf(stderr, PNG_STRING_NEWLINE);
+       }
    }
    else
 #endif
