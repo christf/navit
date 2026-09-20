@@ -245,7 +245,6 @@ static void traffic_traff_android_position_callback(struct traffic_priv *this_, 
     struct attr attr;
     struct coord c;
     struct coord_rect cr;
-    jmethodID cid;
     if (!vehicle_get_attr(vehicle, attr_position_coord_geo, &attr, NULL))
         return;
     transform_from_geo(projection_mg, attr.u.coord_geo, &c);
@@ -274,8 +273,6 @@ static void traffic_traff_android_position_callback(struct traffic_priv *this_, 
  */
 static int traffic_traff_android_init(struct traffic_priv *this_) {
     jmethodID cid;
-    struct route *route;
-    struct attr attr;
     struct navigation *navigation;
 
     if (!android_find_class_global("org/navitproject/navit/NavitTraff", &this_->NavitTraffClass))
