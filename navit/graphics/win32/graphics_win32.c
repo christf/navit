@@ -21,11 +21,11 @@
 
 #ifdef HAVE_API_WIN32_CE
 #    include "libc.h"
-#    /* cegcc's math.h does not declare the standard math functions */
-#    extern double fabs(double);
-#    extern double atan2(double, double);
-#    extern BOOL ReleasePowerRequirement(HANDLE);
-#    extern HANDLE SetPowerRequirement(LPCTSTR, DWORD, DWORD, void *, DWORD);
+/* cegcc's math.h does not declare the standard math functions */
+extern double fabs(double);
+extern double atan2(double, double);
+extern BOOL ReleasePowerRequirement(HANDLE);
+extern HANDLE SetPowerRequirement(LPCTSTR, DWORD, DWORD, void *, DWORD);
 #endif
 
 // #define FAST_TRANSPARENCY 1
