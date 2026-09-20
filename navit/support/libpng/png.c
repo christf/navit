@@ -816,7 +816,7 @@ AC || CB || 0
  A and D, and X || Y is (X << 16) + Y.
 */
 
-void png_64bit_product (long v1, long v2, unsigned long *hi_product,
+static void png_64bit_product (long v1, long v2, unsigned long *hi_product,
    unsigned long *lo_product)
 {
  int a, b, c, d;
