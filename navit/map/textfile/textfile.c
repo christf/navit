@@ -41,7 +41,7 @@ static int map_id;
 
 static void remove_comment_line(char *line) {
     if (line[0] == TEXTFILE_COMMENT_CHAR) {
-        line = '\0';
+        line[0] = '\0';
     }
 }
 
