@@ -120,7 +120,8 @@ void strncpy0(char *dest, const char *source, int size)
 {//====================================================
 	if(source!=NULL)
 	{
-		strncpy(dest,source,size);
+		if(size <= 0) return;
+		strncpy(dest,source,size-1);
 		dest[size-1] = 0;
 	}
 }

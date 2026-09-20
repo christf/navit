@@ -284,7 +284,8 @@ char *DecodeRule(const char *group_chars, int group_length, char *rule, int cont
 				finished=1;
 				break;
 			case RULE_PRE_ATSTART:
-				at_start = 1;  // drop through to next case
+				at_start = 1;
+				/* fall through */
 			case RULE_PRE:
 				match_type = RULE_PRE;
 				*p = 0;
@@ -1010,7 +1011,8 @@ static void copy_rule_string(char *string, int *state_out)
 					break;
 
 				case 'Y':
-					c = 'I';   // drop through to next case
+					c = 'I';
+					/* fall through */
 				case 'A':   // vowel
 				case 'B':
 				case 'C':
@@ -1139,7 +1141,8 @@ static void copy_rule_string(char *string, int *state_out)
 					break;
 
 				case 'P':
-					sxflags |= SUFX_P;   // Prefix, now drop through to Suffix
+					sxflags |= SUFX_P;
+					/* fall through */
 				case 'S':
 					output[ix++] = RULE_ENDING;
 					value = 0;
@@ -1934,10 +1937,10 @@ int CompileDictionary(const char *dsource, const char *dict_name, FILE *log, cha
 
 	// try with and without '.txt' extension
 	sprintf(path,"%s%s_",dsource,dict_name);
-	sprintf(fname_in,"%srules.txt",path);
+	snprintf(fname_in,sizeof(fname_in),"%srules.txt",path);
 	if((f_in = fopen(fname_in,"r")) == NULL)
 	{
-		sprintf(fname_in,"%srules",path);
+		snprintf(fname_in,sizeof(fname_in),"%srules",path);
 		if((f_in = fopen_log(fname_in,"r")) == NULL)
 		{
 			if(fname_err)

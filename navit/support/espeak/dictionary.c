@@ -83,7 +83,9 @@ static unsigned char remove_accent[N_REMOVE_ACCENT] = {
 void strncpy0(char *to,const char *from, int size)
 {//===================================================
 // strcpy with limit, ensures a zero terminator
-	strncpy(to,from,size);
+	if(size <= 0)
+		return;
+	strncpy(to,from,size-1);
 	to[size-1] = 0;
 }
 #endif
@@ -239,7 +241,7 @@ int LoadDictionary(Translator *tr, const char *name, int no_error)
 {//===============================================================
 	int hash;
 	char *p;
-	int *pw;
+	int pw[2];
 	int length;
 	FILE *f;
 	unsigned int size;
@@ -275,7 +277,7 @@ int LoadDictionary(Translator *tr, const char *name, int no_error)
 	fclose(f);
 
 
-	pw = (int *)(tr->data_dictlist);
+	memcpy(pw, tr->data_dictlist, sizeof(pw));
 	length = Reverse4Bytes(pw[1]);
 
 	if(size <= (N_HASH_DICT + sizeof(int)*2))
@@ -384,7 +386,7 @@ const char *EncodePhonemes(const char *p, char *outptr, int *bad_phoneme)
 
 			if((c = p[1]) == '|')
 			{
-				// treat double || as a word-break symbol, drop through
+				// treat double || as a word-break symbol, fall through
 				// to the default case with c = '|'
 			}
 			else
@@ -392,6 +394,7 @@ const char *EncodePhonemes(const char *p, char *outptr, int *bad_phoneme)
 				p++;
 				break;
 			}
+			/* fall through */
 
 		default:
 			// lookup the phoneme mnemonic, find the phoneme with the highest number of
@@ -1300,7 +1303,7 @@ void SetWordStress(Translator *tr, char *output, unsigned int *dictionary_flags,
 		// stress on first syllable, unless it is a light syllable followed by a heavy syllable
 		if((syllable_weight[1] > 0) || (syllable_weight[2] == 0))
 			break;
-		// else drop through to case 1
+		/* fall through */
 	case 1:
 		// stress on second syllable
 		if((stressed_syllable == 0) && (vowel_count > 2))
@@ -1315,16 +1318,16 @@ void SetWordStress(Translator *tr, char *output, unsigned int *dictionary_flags,
 		break;
 
 	case 10:  // penultimate, but final if only 1 or 2 syllables
-		if(stressed_syllable == 0)
-		{
-			if(vowel_count < 4)
+if(stressed_syllable == 0)
 			{
-				vowel_stress[vowel_count - 1] = 4;
-				max_stress = 4;
-				break;
+				if(vowel_count < 4)
+				{
+					vowel_stress[vowel_count - 1] = 4;
+					max_stress = 4;
+					break;
+				}
 			}
-		}
-		// drop through to next case
+		/* fall through */
 	case 2:
 		// a language with stress on penultimate vowel
 
