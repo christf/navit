@@ -872,7 +872,7 @@ CHECK_FUNCTION_EXISTS (_atoi64 HAVE__ATOI64)
 CONFIGURE_FILE("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 			   "${CMAKE_CURRENT_BINARY_DIR}/config.h" )
 
-# Compile with -Wall -Wextra. We need all the help we can get from the compiler :-).
+# Compile with -Wall -Wextra -Werror. We need all the help we can get from the compiler :-).
 # Disabled warnings:
 # -Wno-missing-field-initializers: Used a lot, does not seem problematic.
 # -Wno-unused-parameter: Unfortunately occurs frequently because of
@@ -909,6 +909,12 @@ if(NOT WIN32)
 	add_compiler_flag_if_available("-fstack-protector-strong")
 	add_compiler_flag_if_available("-D_FORTIFY_SOURCE=2")
 endif(NOT WIN32)
+
+# -Werror must not go through add_compiler_flag_if_available(): its probe
+# passes the flag as a -D definition, and the macro-name warning this
+# generates would itself be promoted to an error, making the check fail.
+# It is added last so the availability probes above still run as warnings.
+add_compile_options("-Werror")
 
 if (EXTRA_DEFINES)
 	add_definitions("${EXTRA_DEFINES}")
