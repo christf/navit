@@ -21,6 +21,11 @@
 
 #ifdef HAVE_API_WIN32_CE
 #    include "libc.h"
+#    /* cegcc's math.h does not declare the standard math functions */
+#    extern double fabs(double);
+#    extern double atan2(double, double);
+#    extern BOOL ReleasePowerRequirement(HANDLE);
+#    extern HANDLE SetPowerRequirement(LPCTSTR, DWORD, DWORD, void *, DWORD);
 #endif
 
 // #define FAST_TRANSPARENCY 1
@@ -138,7 +143,7 @@ HFONT EzCreateFont(HDC hdc, TCHAR *szFaceName, int iDeciPtHeight, int iDeciPtWid
 #ifndef HAVE_API_WIN32_CE
     DPtoLP(hdc, &pt, 1);
 #endif
-    lf.lfHeight = -(int)(fabs(pt.y) / 10.0 + 0.5);
+    lf.lfHeight = -(int)(fabs((double)pt.y) / 10.0 + 0.5);
     lf.lfWidth = 0;
     lf.lfEscapement = 0;
     lf.lfOrientation = 0;
@@ -163,7 +168,7 @@ HFONT EzCreateFont(HDC hdc, TCHAR *szFaceName, int iDeciPtHeight, int iDeciPtWid
 
         DeleteObject(SelectObject(hdc, hFont));
 
-        lf.lfWidth = (int)(tm.tmAveCharWidth * fabs(pt.x) / fabs(pt.y) + 0.5);
+        lf.lfWidth = (int)(tm.tmAveCharWidth * fabs((double)pt.x) / fabs((double)pt.y) + 0.5);
 
         hFont = CreateFontIndirect(&lf);
     }
@@ -179,28 +184,6 @@ struct graphics_image_priv {
     HBITMAP hBitmap;
     struct point hot;
 };
-
-static void ErrorExit(LPTSTR lpszFunction) {
-    // Retrieve the system error message for the last-error code
-
-    LPVOID lpMsgBuf;
-    LPVOID lpDisplayBuf;
-    DWORD dw = GetLastError();
-
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dw,
-                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf, 0, NULL);
-
-    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40)
-                                                         * sizeof(TCHAR));
-    _tprintf((LPTSTR)lpDisplayBuf, TEXT("%s failed with error %d: %s"), lpszFunction, dw, lpMsgBuf);
-
-    dbg(lvl_error, "%s failed with error %d: %s", lpszFunction, dw, lpMsgBuf);
-    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
-
-    LocalFree(lpMsgBuf);
-    LocalFree(lpDisplayBuf);
-    ExitProcess(dw);
-}
 
 struct graphics_gc_priv {
     HWND hwnd;
@@ -769,7 +752,7 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
     SelectObject(gr->hMemDC, holdpen);
 }
 
-#if HAVE_API_WIN32_CE
+#if defined(HAVE_API_WIN32_CE)
 /*
  * Windows CE doesn't feature GraphicsPath, so in order to draw filled polygons
  * with holes, we need to resort on manual raycasting. The following functions
@@ -1262,7 +1245,7 @@ static int pngdecode(struct graphics_priv *gr, char *name, struct graphics_image
         png_set_palette_to_rgb(png_ptr);
 
     /* expand images to bit-depth 8 (only applicable for grayscale images) */
-    if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA && bit_depth < 8)
+    if (color_type == PNG_COLOR_TYPE_GRAY || (color_type == PNG_COLOR_TYPE_GRAY_ALPHA && bit_depth < 8))
         png_set_expand_gray_1_2_4_to_8(png_ptr);
 
     /* Expand grayscale to rgb */
@@ -1622,7 +1605,7 @@ static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *
 }
 
 static void bind_late(struct graphics_priv *gra_priv) {
-#if HAVE_API_WIN32_CE
+#if defined(HAVE_API_WIN32_CE)
     gra_priv->hCoreDll = LoadLibrary(TEXT("coredll.dll"));
 #else
     gra_priv->hCoreDll = LoadLibrary(TEXT("msimg32.dll"));
@@ -1634,7 +1617,7 @@ static void bind_late(struct graphics_priv *gra_priv) {
         if (!gra_priv->AlphaBlend) {
             dbg(lvl_warning, "AlphaBlend not supported");
         }
-#if HAVE_API_WIN32_CE
+#if defined(HAVE_API_WIN32_CE)
         gra_priv->SetStretchBltMode =
             (FP_SetStretchBltMode)GetProcAddress(gra_priv->hCoreDll, TEXT("SetStretchBltMode"));
 #else
@@ -1649,8 +1632,9 @@ static void bind_late(struct graphics_priv *gra_priv) {
     }
 
     if (gra_priv->hUser32Dll) {
-        gra_priv->ChangeWindowMessageFilterEx = GetProcAddress(gra_priv->hUser32Dll, "ChangeWindowMessageFilterEx");
-        gra_priv->ChangeWindowMessageFilter = GetProcAddress(gra_priv->hUser32Dll, "ChangeWindowMessageFilter");
+        gra_priv->ChangeWindowMessageFilterEx =
+            GetProcAddress(gra_priv->hUser32Dll, TEXT("ChangeWindowMessageFilterEx"));
+        gra_priv->ChangeWindowMessageFilter = GetProcAddress(gra_priv->hUser32Dll, TEXT("ChangeWindowMessageFilter"));
     }
 }
 
