@@ -28,14 +28,15 @@
 #endif
 
 #include "glib.h"
+#include "gatomic.h"
 #include "gthreadprivate.h"
 #include "galias.h"
 
-# if HAVE_API_WIN32_BASE
+# if defined(HAVE_API_WIN32_BASE)
 #include <windows.h>
 #endif
 
-#if USE_POSIX_THREADS
+#if defined(USE_POSIX_THREADS) && USE_POSIX_THREADS
 #include <pthread.h>
 #endif
 
@@ -918,27 +919,27 @@ _g_atomic_thread_init (void)
 gint
 (g_atomic_int_get) (volatile gint *atomic)
 {
-  return g_atomic_int_get (atomic);
+  return *atomic;
 }
 
 void
 (g_atomic_int_set) (volatile gint *atomic,
 		    gint           newval)
 {
-  g_atomic_int_set (atomic, newval);
+  *atomic = newval;
 }
 
 gpointer
 (g_atomic_pointer_get) (volatile gpointer *atomic)
 {
-  return g_atomic_pointer_get (atomic);
+  return *atomic;
 }
 
 void
 (g_atomic_pointer_set) (volatile gpointer *atomic,
 			gpointer           newval)
 {
-  g_atomic_pointer_set (atomic, newval);
+  *atomic = newval;
 }
 #endif /* G_ATOMIC_OP_MEMORY_BARRIER_NEEDED */
 
