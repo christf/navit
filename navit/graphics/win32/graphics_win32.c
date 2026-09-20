@@ -621,7 +621,7 @@ static HANDLE CreateGraphicsWindows(struct graphics_priv *gr, HMENU hMenu) {
                                  gr->wnd_parent_handle, hMenu, GetModuleHandle(NULL), NULL);
 #endif
     if (hwnd == NULL) {
-        dbg(lvl_error, "Window creation failed: %d", GetLastError());
+        dbg(lvl_error, "Window creation failed: %lu", (unsigned long)GetLastError());
         return NULL;
     }
     /* For Vista, we need here ChangeWindowMessageFilter(WM_COPYDATA,MSGFLT_ADD); since Win7 we need above one or
@@ -1015,7 +1015,7 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
 }
 
 static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
-    dbg(lvl_debug, "set draw_mode to %x, %d", gr, (int)mode);
+    dbg(lvl_debug, "set draw_mode to %p, %d", (void *)gr, (int)mode);
 
     if (mode == draw_mode_begin) {
         if (gr->wnd_handle == NULL) {
@@ -1023,7 +1023,8 @@ static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
         }
         if (gr->mode != draw_mode_begin) {
             if (gr->hMemDC) {
-                dbg(lvl_debug, "Erase dc: %x, w: %d, h: %d, bg_color: %x", gr, gr->width, gr->height, gr->bg_color);
+                dbg(lvl_debug, "Erase dc: %p, w: %d, h: %d, bg_color: %lx", (void *)gr, gr->width, gr->height,
+                    (unsigned long)gr->bg_color);
 #ifdef FAST_TRANSPARENCY
                 if (gr->hPrebuildDC) {
                     (void)SelectBitmap(gr->hPrebuildDC, gr->hOldPrebuildBitmap);
@@ -1497,7 +1498,8 @@ static void draw_image(struct graphics_priv *gr, struct graphics_gc_priv *fg, st
 static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *meth);
 
 static void overlay_resize(struct graphics_priv *gr, struct point *p, int w, int h, int wraparound) {
-    dbg(lvl_debug, "resize overlay: %x, x: %d, y: %d, w: %d, h: %d, wraparound: %d", gr, p->x, p->y, w, h, wraparound);
+    dbg(lvl_debug, "resize overlay: %p, x: %d, y: %d, w: %d, h: %d, wraparound: %d", (void *)gr, p->x, p->y, w, h,
+        wraparound);
 
     if (gr->width != w || gr->height != h) {
         gr->width = w;
@@ -1511,7 +1513,8 @@ static void overlay_resize(struct graphics_priv *gr, struct point *p, int w, int
 static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphics_methods *meth, struct point *p,
                                          int w, int h, int wraparound) {
     struct graphics_priv *this = graphics_win32_new_helper(meth);
-    dbg(lvl_debug, "overlay: %x, x: %d, y: %d, w: %d, h: %d, wraparound: %d", this, p->x, p->y, w, h, wraparound);
+    dbg(lvl_debug, "overlay: %p, x: %d, y: %d, w: %d, h: %d, wraparound: %d", (void *)this, p->x, p->y, w, h,
+        wraparound);
     this->width = w;
     this->height = h;
     this->parent = gr;
@@ -1541,7 +1544,7 @@ static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphi
 }
 
 static void overlay_disable(struct graphics_priv *gr, int disable) {
-    dbg(lvl_debug, "overlay: %x, disable: %d", gr, disable);
+    dbg(lvl_debug, "overlay: %p, disable: %d", (void *)gr, disable);
     gr->disabled = disable;
 }
 
