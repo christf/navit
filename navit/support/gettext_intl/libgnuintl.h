@@ -325,7 +325,7 @@ extern int vsnprintf (char *, size_t, const char *, va_list);
 
 #endif
 
-#if HAVE_ASPRINTF
+#if defined(HAVE_ASPRINTF) && HAVE_ASPRINTF
 
 #undef asprintf
 #define asprintf libintl_asprintf
@@ -336,7 +336,7 @@ extern int vasprintf (char **, const char *, va_list);
 
 #endif
 
-#if HAVE_WPRINTF
+#if defined(HAVE_WPRINTF) && HAVE_WPRINTF
 
 #undef fwprintf
 #define fwprintf libintl_fwprintf
