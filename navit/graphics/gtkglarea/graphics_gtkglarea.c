@@ -289,55 +289,52 @@ static void mvp_ortho(float *m, float l, float r, float b, float t, float n, flo
     m[15] = 1.0f;
 }
 
+/* out = a * b for column-major 4x4 matrices. out must not alias a or b. */
+static void mvp_mul(float *out, const float *a, const float *b) {
+    for (int col = 0; col < 4; col++) {
+        for (int row = 0; row < 4; row++) {
+            out[col * 4 + row] = a[row] * b[col * 4] + a[4 + row] * b[col * 4 + 1] + a[8 + row] * b[col * 4 + 2]
+                                 + a[12 + row] * b[col * 4 + 3];
+        }
+    }
+}
+
 static void compute_mvp(struct graphics_priv *gr) {
+    float tmp[16], tmp2[16];
+
     mvp_ortho(gr->mvp, 0, gr->width, (float)gr->height, 0, -1.0f, 1.0f);
 
-    /* Apply drag offset */
-    gr->mvp[12] += gr->dx * (2.0f / gr->width);
-    gr->mvp[13] -= gr->dy * (2.0f / gr->height);
+    /* Drag offset is a pure screen-space translation */
+    if (gr->dx || gr->dy) {
+        float d[16];
+        mvp_identity(d);
+        d[12] = gr->dx;
+        d[13] = gr->dy;
+        mvp_mul(tmp, gr->mvp, d);
+        memcpy(gr->mvp, tmp, sizeof(tmp));
+    }
 
-    /* Apply display rotation around center */
+    /* Rotate the projected scene around the vehicle cursor, matching the cairo backend:
+     * p' = R(-angle) * (p - center) + center. */
     if (gr->display_rotation != 0.0f && !gr->parent) {
-        float cx = gr->width / 2.0f;
-        float cy = gr->height / 2.0f;
-        /* Translate to origin, rotate, translate back */
-        float t1[16], t2[16], tmp[16];
-        mvp_identity(t1);
-        t1[12] = -cx;
-        t1[13] = -cy;
-        mvp_identity(t2);
-        t2[12] = cx;
-        t2[13] = cy;
-
-        /* tmp = t2 * rot */
-        float rot_angle = gr->display_rotation * G_PI / 180.0f;
+        float cx = gr->rotation_center_x;
+        float cy = gr->rotation_center_y;
+        float rot_angle = -gr->display_rotation * G_PI / 180.0f;
         float cr = cosf(rot_angle);
         float sr = sinf(rot_angle);
-        float rot_mat[16] = {cr, sr, 0, 0, -sr, cr, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-        /* tmp = t2 * rot * t1 * mvp */
-        /* Step 1: rot * t1 */
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
-                tmp[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
-                    tmp[i * 4 + j] += rot_mat[i * 4 + k] * t1[k * 4 + j];
-            }
-        /* Step 2: t2 * (rot * t1) */
-        float tmp2[16];
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
-                tmp2[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
-                    tmp2[i * 4 + j] += t2[i * 4 + k] * tmp[k * 4 + j];
-            }
-        /* Step 3: (t2 * rot * t1) * mvp */
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) {
-                tmp[i * 4 + j] = 0;
-                for (int k = 0; k < 4; k++)
-                    tmp[i * 4 + j] += tmp2[i * 4 + k] * gr->mvp[k * 4 + j];
-            }
-        memcpy(gr->mvp, tmp, sizeof(tmp));
+        float rot[16] = {cr, sr, 0, 0, -sr, cr, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        float to_center[16], from_center[16];
+
+        mvp_identity(to_center);
+        to_center[12] = cx;
+        to_center[13] = cy;
+        mvp_identity(from_center);
+        from_center[12] = -cx;
+        from_center[13] = -cy;
+
+        mvp_mul(tmp, gr->mvp, to_center);
+        mvp_mul(tmp2, tmp, rot);
+        mvp_mul(gr->mvp, tmp2, from_center);
     }
 }
 
@@ -1382,8 +1379,13 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     if (gr->draw_depth > 0)
         return TRUE;
 
-    /* Clear to black — the background rectangle from the vertex buffer covers the viewport */
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    /* Clear to the map backdrop. The background rectangle from the vertex buffer covers the
+     * viewport, but display rotation leaves the corners outside it, so clearing to black would
+     * expose black wedges there. */
+    if (gr->bg_gc)
+        glClearColor(gr->bg_gc->c.r / 65535.0f, gr->bg_gc->c.g / 65535.0f, gr->bg_gc->c.b / 65535.0f, 1.0f);
+    else
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     /* Render root draw commands — data persists between renders until overwritten */
