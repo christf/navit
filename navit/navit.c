@@ -1160,7 +1160,7 @@ static void navit_motion_timeout(struct navit *this_) {
         update_transformation(tr, &this_->pressed, &this_->current);
         graphics_draw_cancel(this_->gra, this_->displaylist);
         graphics_displaylist_draw(this_->gra, this_->displaylist, tr, this_->layout_current,
-                                  this_->graphics_flags | 512);
+                                  this_->graphics_flags | GRAPHICS_DRAW_COARSE_MINDIST);
         transform_destroy(tr);
         this_->moved = 1;
     }
