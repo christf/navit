@@ -63,6 +63,7 @@ int transform_point(struct transformation *t, enum projection pro, struct coord 
 int transform_point_buf(struct transformation *t, enum projection pro, struct coord *c, struct point *p,
                         long result_size, int count, int mindist, int width, int *width_return);
 int transform_reverse(struct transformation *t, struct point *p, struct coord *c);
+int transform_recenter(struct transformation *t, struct point *from, struct point *to, struct coord *new_center);
 double transform_pixels_to_map_distance(struct transformation *transformation, int pixels);
 enum projection transform_get_projection(struct transformation *this_);
 void transform_set_projection(struct transformation *this_, enum projection pro);
