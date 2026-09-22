@@ -941,15 +941,10 @@ static void navit_restrict_map_center_to_world_boundingbox(struct transformation
  */
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new) {
     /* Code for rotation was removed in rev. 5252; see Trac #1078. */
-    struct coord coord_old, coord_new;
     struct coord center_new, *center_old;
-    if (!transform_reverse(tr, old, &coord_old))
-        return;
-    if (!transform_reverse(tr, new, &coord_new))
+    if (!transform_recenter(tr, old, new, &center_new))
         return;
     center_old = transform_get_center(tr);
-    center_new.x = center_old->x + coord_old.x - coord_new.x;
-    center_new.y = center_old->y + coord_old.y - coord_new.y;
     navit_restrict_map_center_to_world_boundingbox(tr, &center_new);
     dbg(lvl_debug, "change center from 0x%x,0x%x to 0x%x,0x%x", center_old->x, center_old->y, center_new.x,
         center_new.y);
