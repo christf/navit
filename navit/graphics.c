@@ -1471,6 +1471,10 @@ struct displayitem {
     struct displayitem_poly_holes *holes;
     int z_order;
     int flags;
+    /* Index of the polyline segment the label was last placed on, or -1. Persists across
+     * redraws so repeated labels stay attached to the same road segment while the map is
+     * re-projected during a smooth scroll. */
+    int label_anchor;
     int count;
     struct coord c[0];
 };
@@ -1581,6 +1585,7 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
     di->z_order = 0;
     di->flags = flags;
     di->holes = NULL;
+    di->label_anchor = -1;
     if (hole_count > 0) {
         di->holes = display_add_holes(item, hole_count, &p);
     }
@@ -1762,8 +1767,9 @@ static void label_record(struct graphics *gra, const char *label, struct label_p
  * @author Martin Schaller (04/2008)
  */
 static void label_line(struct graphics *gra, struct graphics_gc *fg, struct graphics_gc *bg, struct graphics_font *font,
-                       struct point *p, int count, char *label, int text_size) {
-    int i, x, y, tl, tlm, th, thm, tlsq, l;
+                       struct point *p, int count, char *label, int text_size, int *anchor) {
+    int n, i, start, placed, x, y, tl, tlm, th, thm, tlsq, l;
+    int segments = count - 1;
     float lsq;
     float dirx, diry;
     double dx, dy;
@@ -1773,6 +1779,11 @@ static void label_line(struct graphics *gra, struct graphics_gc *fg, struct grap
 
     if (!label)
         return;
+    if (segments < 1) {
+        if (anchor)
+            *anchor = -1;
+        return;
+    }
     if (gra->meth.get_text_bbox) {
         graphics_get_text_bbox(gra, font, label, 0x10000, 0, pb, 1);
         tl = (pb[2].x - pb[0].x);
@@ -1784,7 +1795,15 @@ static void label_line(struct graphics *gra, struct graphics_gc *fg, struct grap
     tlm = tl * 32;
     thm = th * 36;
     tlsq = tlm * tlm;
-    for (i = 0; i < count - 1; i++) {
+    /* Start scanning at the segment the label was placed on in an earlier frame, so the
+     * label stays attached to the same road segment instead of jumping to whichever
+     * segment first exceeds the label width after a small projection change. */
+    start = (anchor && *anchor >= 0 && *anchor < segments) ? *anchor : 0;
+    placed = 0;
+    for (n = 0; n < segments; n++) {
+        i = start + n;
+        if (i >= segments)
+            i -= segments;
         dx = p[i + 1].x - p[i].x;
         dx *= 32;
         dy = p[i + 1].y - p[i].y;
@@ -1815,9 +1834,15 @@ static void label_line(struct graphics *gra, struct graphics_gc *fg, struct grap
                     continue;
                 graphics_draw_text(gra, fg, bg, font, label, &p_t, dx * 0x10000 / l, dy * 0x10000 / l);
                 label_record(gra, label, bbox);
+                if (anchor && !placed) {
+                    *anchor = i;
+                    placed = 1;
+                }
             }
         }
     }
+    if (anchor && !placed)
+        *anchor = -1;
 }
 
 static void display_draw_arrow(struct point *p, navit_float dx, navit_float dy, navit_float width,
@@ -3089,11 +3114,11 @@ static inline void displayitem_draw_text(struct displayitem *di, struct display_
         }
         if (font) {
             int a;
-            label_line(gra, dc->gc, gc_background, font, pa, count, di->label, e->text_size);
+            label_line(gra, dc->gc, gc_background, font, pa, count, di->label, e->text_size, &di->label_anchor);
             if (holes != NULL) {
                 for (a = 0; a < holes->count; a++)
                     label_line(gra, dc->gc, gc_background, font, (struct point *)holes->coords[a], holes->ccount[a],
-                               di->label, e->text_size);
+                               di->label, e->text_size, NULL);
             }
         } else
             dbg(lvl_error, "Failed to get font with size %d", e->text_size);
@@ -3161,6 +3186,14 @@ static inline void displayitem_draw_image(struct displayitem *di, struct display
         dbg(lvl_error, "draw_image_warp not supported by graphics driver drawing '%s'", di->label);
 }
 
+int graphics_element_mindist(int mindist, int element_type) {
+    /* Area polygons are projected vertex-exact: decimating them makes their outline unstable under
+     * a tilted view and drops concave notches. */
+    if (element_type == element_polygon)
+        return 0;
+    return mindist;
+}
+
 /**
  * @brief Draw a displayitem element
  *
@@ -3225,12 +3258,16 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
         if (item_type_is_area(dc->type) && (dc->e->type == element_polyline || dc->e->type == element_text))
             limit = 0;
 
+        /* Polygons and their holes must not be decimated in screen space. Under a tilted view the
+         * ground compresses towards the horizon, so edges cross the distance threshold
+         * non-deterministically and vertices get dropped; the shape then flickers and concave
+         * notches disappear. */
+        mindist = graphics_element_mindist(mindist, dc->e->type);
+
         displayitem_transform_holes(dc->trans, dc->pro, di->holes, &t_holes, mindist);
 
         if (limit)
             count = limit_count(di->c, count);
-        if (dc->type == type_poly_water_tiled)
-            mindist = 0;
         if (dc->e->type == element_polyline)
             count = transform_point_buf(dc->trans, dc->pro, di->c, pa, pa_buf_size, count, mindist, e->u.polyline.width,
                                         width);
@@ -3338,6 +3375,7 @@ void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct tra
     di->z_order = 0;
     di->label = label;
     di->holes = NULL;
+    di->label_anchor = -1;
     dc.gra = gra;
     dc.gc = NULL;
     dc.gc_background = NULL;
@@ -3687,7 +3725,7 @@ void graphics_displaylist_draw(struct graphics *gra, struct displaylist *display
     if (displaylist->dc.trans != trans)
         displaylist->dc.trans = transform_dup(trans);
     displaylist->dc.gra = gra;
-    displaylist->dc.mindist = flags & 512 ? 15 : 2;
+    displaylist->dc.mindist = flags & GRAPHICS_DRAW_COARSE_MINDIST ? GRAPHICS_MINDIST_COARSE : GRAPHICS_MINDIST_FINE;
     // FIXME find a better place to set the background color
     if (l) {
         graphics_gc_set_background(gra->gc[0], &l->color);

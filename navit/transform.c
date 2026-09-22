@@ -692,6 +692,18 @@ int transform_reverse(struct transformation *t, struct point *p, struct coord *c
     return transform_reverse_near_far(t, p, c, t->znear, t->zfar);
 }
 
+int transform_recenter(struct transformation *t, struct point *from, struct point *to, struct coord *new_center) {
+    struct coord coord_from, coord_to, *center;
+    if (!transform_reverse(t, from, &coord_from))
+        return 0;
+    if (!transform_reverse(t, to, &coord_to))
+        return 0;
+    center = transform_get_center(t);
+    new_center->x = center->x + coord_from.x - coord_to.x;
+    new_center->y = center->y + coord_from.y - coord_to.y;
+    return 1;
+}
+
 double transform_pixels_to_map_distance(struct transformation *transformation, int pixels) {
     struct point line_in_map_center[2];
     struct coord c[2];
@@ -855,7 +867,39 @@ void transform_get_size(struct transformation *t, int *width, int *height) {
     }
 }
 
-void transform_setup_source_rect(struct transformation *t) {
+/* Project a screen-space rectangle onto the ground plane (ddd only) and return the
+ * resulting map rectangle. Returns 0 if the rectangle does not intersect the ground
+ * plane at all (i.e. it lies entirely above the horizon). */
+static int transform_screen_rect_to_ground(struct transformation *t, struct point screen_pnt[4],
+                                           struct coord_rect *rect) {
+    struct coord_geo_cart tmp, cg[8];
+    struct coord c;
+    int i, valid = 0;
+    unsigned char edgenodes[] = {0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7};
+
+    for (i = 0; i < 8; i++) {
+        transform_screen_to_3d(t, &screen_pnt[i % 4], (i >= 4 ? t->zfar : t->znear), &tmp);
+        transform_apply_inverse_matrix(t, &tmp, &cg[i]);
+    }
+    for (i = 0; i < 12; i++) {
+        if (transform_zplane_intersection(&cg[edgenodes[i * 2]], &cg[edgenodes[i * 2 + 1]], HOG(*t), &tmp) == 1) {
+            c.x = tmp.x * (1 << t->scale_shift) + t->map_center.x;
+            c.y = tmp.y * (1 << t->scale_shift) + t->map_center.y;
+            dbg(lvl_debug, "intersection with edge %d at 0x%x,0x%x", i, c.x, c.y);
+            if (valid)
+                coord_rect_extend(rect, &c);
+            else {
+                rect->lu = c;
+                rect->rl = c;
+                valid = 1;
+            }
+            dbg(lvl_debug, "rect 0x%x,0x%x - 0x%x,0x%x", rect->lu.x, rect->lu.y, rect->rl.x, rect->rl.y);
+        }
+    }
+    return valid;
+}
+
+static void transform_setup_source_rect_internal(struct transformation *t, int margin) {
     int i;
     struct coord screen[4];
     struct point screen_pnt[4];
@@ -874,44 +918,20 @@ void transform_setup_source_rect(struct transformation *t) {
         msm = g_new0(struct map_selection, 1);
         *msm = *ms;
         pr = &ms->u.p_rect;
-        screen_pnt[0].x = pr->lu.x; /* left upper */
-        screen_pnt[0].y = pr->lu.y;
-        screen_pnt[1].x = pr->rl.x; /* right upper */
-        screen_pnt[1].y = pr->lu.y;
-        screen_pnt[2].x = pr->rl.x; /* right lower */
-        screen_pnt[2].y = pr->rl.y;
-        screen_pnt[3].x = pr->lu.x; /* left lower */
-        screen_pnt[3].y = pr->rl.y;
+        screen_pnt[0].x = pr->lu.x - margin; /* left upper */
+        screen_pnt[0].y = pr->lu.y - margin;
+        screen_pnt[1].x = pr->rl.x + margin; /* right upper */
+        screen_pnt[1].y = pr->lu.y - margin;
+        screen_pnt[2].x = pr->rl.x + margin; /* right lower */
+        screen_pnt[2].y = pr->rl.y + margin;
+        screen_pnt[3].x = pr->lu.x - margin; /* left lower */
+        screen_pnt[3].y = pr->rl.y + margin;
         if (t->ddd) {
-            struct coord_geo_cart tmp, cg[8];
-            struct coord c;
-            int valid = 0;
-            unsigned char edgenodes[] = {0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7};
-            for (i = 0; i < 8; i++) {
-                transform_screen_to_3d(t, &screen_pnt[i % 4], (i >= 4 ? t->zfar : t->znear), &tmp);
-                transform_apply_inverse_matrix(t, &tmp, &cg[i]);
-            }
             msm->u.c_rect.lu.x = 0;
             msm->u.c_rect.lu.y = 0;
             msm->u.c_rect.rl.x = 0;
             msm->u.c_rect.rl.y = 0;
-            for (i = 0; i < 12; i++) {
-                if (transform_zplane_intersection(&cg[edgenodes[i * 2]], &cg[edgenodes[i * 2 + 1]], HOG(*t), &tmp)
-                    == 1) {
-                    c.x = tmp.x * (1 << t->scale_shift) + t->map_center.x;
-                    c.y = tmp.y * (1 << t->scale_shift) + t->map_center.y;
-                    dbg(lvl_debug, "intersection with edge %d at 0x%x,0x%x", i, c.x, c.y);
-                    if (valid)
-                        coord_rect_extend(&msm->u.c_rect, &c);
-                    else {
-                        msm->u.c_rect.lu = c;
-                        msm->u.c_rect.rl = c;
-                        valid = 1;
-                    }
-                    dbg(lvl_debug, "rect 0x%x,0x%x - 0x%x,0x%x", msm->u.c_rect.lu.x, msm->u.c_rect.lu.y,
-                        msm->u.c_rect.rl.x, msm->u.c_rect.rl.y);
-                }
-            }
+            transform_screen_rect_to_ground(t, screen_pnt, &msm->u.c_rect);
         } else {
             for (i = 0; i < 4; i++) {
                 transform_reverse(t, &screen_pnt[i], &screen[i]);
@@ -928,6 +948,10 @@ void transform_setup_source_rect(struct transformation *t) {
         msm_last = &msm->next;
         ms = ms->next;
     }
+}
+
+void transform_setup_source_rect(struct transformation *t) {
+    transform_setup_source_rect_internal(t, 0);
 }
 
 void transform_setup_source_rect_scale(struct transformation *t, int scale_factor) {
@@ -958,6 +982,13 @@ void transform_setup_source_rect_scale(struct transformation *t, int scale_facto
 
 void transform_setup_source_rect_margin(struct transformation *t, int w, int h, int margin) {
     struct map_selection *ms;
+
+    if (t->ddd) {
+        /* Under perspective the ground rectangle must be derived from the inflated screen
+         * rectangle; scaling it in map space would over- or under-estimate near the horizon. */
+        transform_setup_source_rect_internal(t, margin > 0 ? margin : 0);
+        return;
+    }
 
     transform_setup_source_rect(t);
 
@@ -990,7 +1021,7 @@ int transform_covers_screen(struct transformation *t, int w, int h) {
     struct coord coord;
     int i, first;
 
-    if (!t || !t->map_sel || t->ddd || w <= 0 || h <= 0)
+    if (!t || !t->map_sel || w <= 0 || h <= 0)
         return 0;
 
     ms = t->map_sel;
@@ -1000,17 +1031,31 @@ int transform_covers_screen(struct transformation *t, int w, int h) {
         coord_rect_extend(&cover, &ms->u.c_rect.rl);
     }
 
-    first = 1;
-    for (i = 0; i < 4; i++) {
-        pnt.x = (i & 1) ? w : 0;
-        pnt.y = (i & 2) ? h : 0;
-        transform_reverse(t, &pnt, &coord);
-        if (first) {
-            mapped.lu = coord;
-            mapped.rl = coord;
-            first = 0;
-        } else {
-            coord_rect_extend(&mapped, &coord);
+    if (t->ddd) {
+        struct point screen_pnt[4];
+        screen_pnt[0].x = 0;
+        screen_pnt[0].y = 0;
+        screen_pnt[1].x = w;
+        screen_pnt[1].y = 0;
+        screen_pnt[2].x = w;
+        screen_pnt[2].y = h;
+        screen_pnt[3].x = 0;
+        screen_pnt[3].y = h;
+        if (!transform_screen_rect_to_ground(t, screen_pnt, &mapped))
+            return 0;
+    } else {
+        first = 1;
+        for (i = 0; i < 4; i++) {
+            pnt.x = (i & 1) ? w : 0;
+            pnt.y = (i & 2) ? h : 0;
+            transform_reverse(t, &pnt, &coord);
+            if (first) {
+                mapped.lu = coord;
+                mapped.rl = coord;
+                first = 0;
+            } else {
+                coord_rect_extend(&mapped, &coord);
+            }
         }
     }
 

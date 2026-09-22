@@ -52,6 +52,13 @@ enum draw_mode_num {
     draw_mode_begin_clear
 };
 
+/* graphics_displaylist_draw flag: decimate points coarser, for redrawing while scrolling. */
+#define GRAPHICS_DRAW_COARSE_MINDIST 512
+
+/* Screen-space vertex decimation distances: fine for static redraws, coarse while scrolling. */
+#define GRAPHICS_MINDIST_FINE 2
+#define GRAPHICS_MINDIST_COARSE 15
+
 struct graphics_priv;
 struct graphics_font_priv;
 struct graphics_image_priv;
@@ -285,6 +292,7 @@ void graphics_draw_text_std(struct graphics *this_, int text_size, char *text, s
 char *graphics_icon_path(const char *icon);
 char *graphics_texture_path(const char *texture);
 void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct transformation *t, char *label);
+int graphics_element_mindist(int mindist, int element_type);
 void graphics_displaylist_draw(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
                                struct layout *l, int flags);
 void graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
