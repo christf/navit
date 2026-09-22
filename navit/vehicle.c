@@ -496,6 +496,15 @@ void vehicle_reset_map_scroll(struct vehicle *this_) {
     this_->interpolating = 0;
 }
 
+void vehicle_advance_map_scroll(struct vehicle *this_, int dx, int dy) {
+    this_->drag_pnt.x -= dx;
+    this_->drag_pnt.y -= dy;
+    this_->interp_prev.x -= dx;
+    this_->interp_prev.y -= dy;
+    this_->interp_target.x -= dx;
+    this_->interp_target.y -= dy;
+}
+
 void vehicle_request_resize(struct vehicle *this_) {
     this_->need_resize = 1;
 }

@@ -90,6 +90,10 @@ struct vehicle;
 /* Fraction of the render margin beyond which the map is re-centered. */
 #define RECENTER_THRESHOLD_FRACTION 3
 #define RECENTER_THRESHOLD_DIVISOR 4
+/* Under perspective the affine drag shift and the re-projection of the map do not agree,
+ * so a threshold snap would jump the map. Applying the shift to the map center instead
+ * re-projects the map with the correct perspective, and the display list is reused
+ * whenever it still covers the screen. */
 
 /**
  * @defgroup navit The navit core instance
@@ -231,6 +235,7 @@ static int navit_cmd_announcer_toggle(struct navit *this_, char *function, struc
 static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
 static int navit_displaylist_covers(struct navit *this_);
+static void update_transformation(struct transformation *tr, struct point *old, struct point *new);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -604,6 +609,33 @@ static int navit_animation_tick(void *data) {
                 vehicle_reset_map_scroll(nv->vehicle);
                 offset.x = 0;
                 offset.y = 0;
+            } else if (transform_get_pitch(this_->trans) && (offset.x || offset.y)) {
+                enum projection pro = transform_get_projection(this_->trans);
+                int step_x = offset.x;
+                int step_y = offset.y;
+                struct point from, to;
+                if (pro && transform_point(this_->trans, pro, scroll_coord, &from)) {
+                    to.x = from.x + step_x;
+                    to.y = from.y + step_y;
+                    dbg(lvl_debug, "scroll_tick: 3d recenter (%d,%d)", step_x, step_y);
+                    transform_set_yaw(this_->trans, yaw);
+                    transform_set_yaw(this_->trans_cursor, yaw);
+                    update_transformation(this_->trans, &from, &to);
+                    transform_copy(this_->trans, this_->trans_cursor);
+                    vehicle_advance_map_scroll(nv->vehicle, step_x, step_y);
+                    if (navit_displaylist_covers(this_))
+                        /* Re-project coarsely while following, like a manual drag, to keep the per-tick cost
+                         * down. */
+                        graphics_displaylist_draw(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
+                                                  this_->graphics_flags | 1 | GRAPHICS_DRAW_COARSE_MINDIST);
+                    else
+                        navit_draw(this_);
+                    this_->anim_last_redraw_yaw = yaw;
+                    this_->anim_last_displayed_yaw = yaw;
+                    graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed.x, cursor_fixed.y);
+                    offset.x -= step_x;
+                    offset.y -= step_y;
+                }
             }
         }
         if (offset.x < -2 * w)
@@ -896,15 +928,10 @@ static void navit_restrict_map_center_to_world_boundingbox(struct transformation
  */
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new) {
     /* Code for rotation was removed in rev. 5252; see Trac #1078. */
-    struct coord coord_old, coord_new;
     struct coord center_new, *center_old;
-    if (!transform_reverse(tr, old, &coord_old))
-        return;
-    if (!transform_reverse(tr, new, &coord_new))
+    if (!transform_recenter(tr, old, new, &center_new))
         return;
     center_old = transform_get_center(tr);
-    center_new.x = center_old->x + coord_old.x - coord_new.x;
-    center_new.y = center_old->y + coord_old.y - coord_new.y;
     navit_restrict_map_center_to_world_boundingbox(tr, &center_new);
     dbg(lvl_debug, "change center from 0x%x,0x%x to 0x%x,0x%x", center_old->x, center_old->y, center_new.x,
         center_new.y);
@@ -1004,7 +1031,9 @@ static void navit_button(void *data, int pressed, int button, struct point *p) {
 static void navit_motion_timeout(struct navit *this_) {
     int dx, dy;
 
-    if (this_->drag_bitmap) {
+    /* The bitmap drag paths shift the already projected frame rigidly. That is only valid for
+     * an affine (top-down) view; under perspective the scene must be re-projected instead. */
+    if (this_->drag_bitmap && !transform_get_pitch(this_->trans)) {
         struct point point;
         point.x = (this_->current.x - this_->pressed.x);
         point.y = (this_->current.y - this_->pressed.y);
@@ -1072,7 +1101,7 @@ static void navit_motion_timeout(struct navit *this_) {
         update_transformation(tr, &this_->pressed, &this_->current);
         graphics_draw_cancel(this_->gra, this_->displaylist);
         graphics_displaylist_draw(this_->gra, this_->displaylist, tr, this_->layout_current,
-                                  this_->graphics_flags | 512);
+                                  this_->graphics_flags | GRAPHICS_DRAW_COARSE_MINDIST);
         transform_destroy(tr);
         this_->moved = 1;
     }
