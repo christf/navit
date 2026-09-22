@@ -13,6 +13,7 @@
 #include "gui.h"
 #include "item.h"
 #include "kalman.h"
+#include "layout.h"
 #include "linguistics.h"
 #include "main.h"
 #include "map.h"
@@ -597,6 +598,353 @@ static int scenario_kalman_scroll(void) {
     return 0;
 }
 
+#define COV_W 800
+#define COV_H 480
+#define COV_ZOOM 32
+#define COV_PITCH 30
+#define COV_MARGIN 128
+#define COV_SHIFT_PX 8
+
+static struct transformation *covers_trans_new(struct coord *center) {
+    struct pcoord pc = {projection_mg, center->x, center->y};
+    struct map_selection sel;
+    struct transformation *t = transform_new(&pc, COV_ZOOM, 0);
+    memset(&sel, 0, sizeof(sel));
+    sel.u.p_rect.rl.x = COV_W;
+    sel.u.p_rect.rl.y = COV_H;
+    transform_set_screen_selection(t, &sel);
+    transform_set_pitch(t, COV_PITCH);
+    return t;
+}
+
+static void covers_shift_center(struct transformation *t, int dx, int dy) {
+    struct point a = {COV_W / 2, COV_H / 2};
+    struct point b = {COV_W / 2 + dx, COV_H / 2 + dy};
+    struct coord ca, cb, c;
+    transform_reverse(t, &a, &ca);
+    transform_reverse(t, &b, &cb);
+    c = *transform_get_center(t);
+    c.x += cb.x - ca.x;
+    c.y += cb.y - ca.y;
+    transform_set_center(t, &c);
+}
+
+/* transform_covers_screen() must work under perspective: a display list covers the
+ * viewport it was built from, goes stale once the center moves, and the prefetch margin
+ * extends its coverage by roughly the given number of screen pixels. */
+static int scenario_covers_screen_3d(void) {
+    struct coord center = geo_to_mg(52.4, 10.35);
+    struct transformation *t = covers_trans_new(&center);
+
+    transform_setup_source_rect(t);
+    CHECK(transform_covers_screen(t, COV_W, COV_H), "3d: viewport must be covered by its own source rect");
+
+    covers_shift_center(t, COV_W * 4, 0);
+    CHECK(!transform_covers_screen(t, COV_W, COV_H), "3d: moving the center must uncover the stale rect");
+
+    transform_setup_source_rect_margin(t, COV_W, COV_H, COV_MARGIN);
+    CHECK(transform_covers_screen(t, COV_W, COV_H), "3d: prefetch margin must cover the viewport");
+
+    covers_shift_center(t, COV_SHIFT_PX, 0);
+    CHECK(transform_covers_screen(t, COV_W, COV_H), "3d: prefetch margin must cover a small center shift");
+
+    covers_shift_center(t, COV_W * 4, 0);
+    CHECK(!transform_covers_screen(t, COV_W, COV_H), "3d: shift beyond the margin must uncover the rect");
+
+    transform_destroy(t);
+    return 0;
+}
+
+#define RJ_W 800
+#define RJ_H 480
+#define RJ_ZOOM 32
+#define RJ_PITCH 30
+#define RJ_LAG_Y 40 /* how far the vehicle is allowed to lag behind the cursor, px */
+#define RJ_TOP_Y (RJ_H * 5 / 12)
+#define RJ_NX 5
+#define RJ_NY 4
+#define RJ_FEATURES (RJ_NX * RJ_NY)
+#define RJ_SMOOTH_STEP_PX 1.0 /* worst per-step drift still perceived as smooth */
+#define RJ_COARSE_STEP_PX 4.0
+#define RJ_TICK_OFFSET_PX 1 /* leftover drag a single animation tick may carry, px */
+
+struct rj_feature {
+    struct coord c;
+};
+
+static struct transformation *rj_trans_new(struct coord *center) {
+    struct pcoord pc = {projection_mg, center->x, center->y};
+    struct map_selection sel;
+    struct transformation *t = transform_new(&pc, RJ_ZOOM, 0);
+    memset(&sel, 0, sizeof(sel));
+    sel.u.p_rect.rl.x = RJ_W;
+    sel.u.p_rect.rl.y = RJ_H;
+    transform_set_screen_selection(t, &sel);
+    transform_set_pitch(t, RJ_PITCH);
+    return t;
+}
+
+/* Applies a re-center exactly as the animation tick does: transform_recenter() computes the
+ * new center so the ground point drawn at `from` is drawn at `to`. */
+static void rj_recenter(struct transformation *t, struct point *from, struct point *to) {
+    struct coord new_center;
+    if (transform_recenter(t, from, to, &new_center))
+        transform_set_center(t, &new_center);
+}
+
+/* Ground features currently on screen. A band near the horizon is left out, where ground
+ * magnification diverges and the projection is arbitrarily sensitive. */
+static int rj_visible_features(struct transformation *t, struct rj_feature *feat) {
+    int gx, gy, n = 0;
+    for (gy = 0; gy < RJ_NY; gy++) {
+        for (gx = 0; gx < RJ_NX; gx++) {
+            struct point s;
+            s.x = (RJ_W - 1) * gx / (RJ_NX - 1);
+            s.y = RJ_TOP_Y + (RJ_H - 1 - RJ_TOP_Y) * gy / (RJ_NY - 1);
+            if (s.y < RJ_H / 3)
+                continue; /* too close to the horizon to project stably */
+            if (!transform_reverse(t, &s, &feat[n].c))
+                continue;
+            n++;
+        }
+    }
+    return n;
+}
+
+/* Worst distance between a scene drawn by shifting the map rigidly by `off_px` and the
+ * perspective-correct scene obtained by applying the same offset to the map center. This is the
+ * residual a pending rigid drag leaves behind and that snaps away when the map is re-centered,
+ * growing with the depth spread of the visible ground. */
+static double rj_residual(struct coord *center, int off_px) {
+    struct transformation *t = rj_trans_new(center);
+    struct transformation *t_correct = transform_dup(t);
+    struct rj_feature feat[RJ_FEATURES];
+    struct point ref, to;
+    int n, i;
+    double worst = 0.0;
+
+    n = rj_visible_features(t, feat);
+    transform_point(t, projection_mg, center, &ref);
+    to.x = ref.x;
+    to.y = ref.y + off_px;
+    rj_recenter(t_correct, &ref, &to);
+
+    for (i = 0; i < n; i++) {
+        struct point pf, pd;
+        double dx, dy, d;
+        transform_point(t_correct, projection_mg, &feat[i].c, &pf);
+        transform_point(t, projection_mg, &feat[i].c, &pd);
+        pd.y += off_px;
+        dx = pd.x - pf.x;
+        dy = pd.y - pf.y;
+        d = sqrt(dx * dx + dy * dy);
+        if (d > worst)
+            worst = d;
+    }
+    transform_destroy(t);
+    transform_destroy(t_correct);
+    return worst;
+}
+
+/* A lagging map is re-centered by moving the window. Under perspective a rigid drag shift and the
+ * re-projection of the map disagree, so any pending drag snaps visibly when the map is finally
+ * re-centered. The animation tick avoids this by applying the full offset every tick, leaving no
+ * pending drag; this test makes the residual of a pending drag measurable. */
+static int scenario_recenter_jump_3d(void) {
+    struct coord center = geo_to_mg(52.4, 10.35);
+    double none = rj_residual(&center, 0);
+    double tick = rj_residual(&center, RJ_TICK_OFFSET_PX);
+    double drain = rj_residual(&center, RJ_W / 32);
+    double lag = rj_residual(&center, RJ_LAG_Y);
+
+    printf("3d recenter residual: none %.2fpx, %dpx %.2fpx, %dpx %.2fpx, %dpx %.2fpx\n", none, RJ_TICK_OFFSET_PX, tick,
+           RJ_W / 32, drain, RJ_LAG_Y, lag);
+
+    CHECK(none < RJ_SMOOTH_STEP_PX, "3d: no pending drag must leave no residual (%.2f px)", none);
+    CHECK(tick > none && drain > tick && lag > drain, "3d: residual must grow with the pending drag");
+    CHECK(lag > RJ_COARSE_STEP_PX, "3d: a full lag leaves a visible rigid-drag residual (%.2f px)", lag);
+
+    return 0;
+}
+
+#define PF_N 7
+#define PF_W 800
+#define PF_H 480
+#define PF_ZOOM 16
+#define PF_PITCH 30
+#define PF_MAX_FRAMES 240
+#define PF_FULL_MARGIN 8
+#define PF_JITTER_PX 2
+
+static struct transformation *pf_trans_new(struct coord *center) {
+    struct pcoord pc = {projection_mg, center->x, center->y};
+    struct map_selection sel;
+    struct transformation *t = transform_new(&pc, PF_ZOOM, 0);
+    memset(&sel, 0, sizeof(sel));
+    sel.u.p_rect.rl.x = PF_W;
+    sel.u.p_rect.rl.y = PF_H;
+    transform_set_screen_selection(t, &sel);
+    transform_set_pitch(t, PF_PITCH);
+    return t;
+}
+
+/* A rectangle with a shallow, narrow notch cut into its top edge. Both notch edges are shorter
+ * than the coarse decimation distance, so screen-space decimation removes the whole notch and
+ * turns the concave outline convex. */
+static const struct point pf_shape[PF_N] = {
+    {380, 280},
+    {420, 280},
+    {424, 290},
+    {428, 280},
+    {460, 280},
+    {460, 360},
+    {380, 360},
+};
+
+static int pf_build(struct transformation *t, struct coord *poly) {
+    int i;
+    for (i = 0; i < PF_N; i++) {
+        struct point p = pf_shape[i];
+        if (!transform_reverse(t, &p, &poly[i]))
+            return 0;
+    }
+    return 1;
+}
+
+/* A simple polygon is concave iff its turn directions have both signs. */
+static int pf_concave(struct point *p, int n) {
+    int pos = 0, neg = 0, i;
+    for (i = 0; i < n; i++) {
+        struct point a = p[i], b = p[(i + 1) % n], c = p[(i + 2) % n];
+        long cross = (long)(b.x - a.x) * (c.y - b.y) - (long)(b.y - a.y) * (c.x - b.x);
+        if (cross > 0)
+            pos = 1;
+        else if (cross < 0)
+            neg = 1;
+    }
+    return pos && neg;
+}
+
+static int pf_inside(struct point *p, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (p[i].x < PF_FULL_MARGIN || p[i].x >= PF_W - PF_FULL_MARGIN)
+            return 0;
+        if (p[i].y < PF_FULL_MARGIN || p[i].y >= PF_H - PF_FULL_MARGIN)
+            return 0;
+    }
+    return 1;
+}
+
+static void pf_shift_center(struct transformation *t, int dx, int dy) {
+    struct point a = {PF_W / 2, PF_H / 2};
+    struct point b = {PF_W / 2 + dx, PF_H / 2 + dy};
+    struct coord ca, cb, c;
+    transform_reverse(t, &a, &ca);
+    transform_reverse(t, &b, &cb);
+    c = *transform_get_center(t);
+    c.x += cb.x - ca.x;
+    c.y += cb.y - ca.y;
+    transform_set_center(t, &c);
+}
+
+/* Reads lat/lon pairs from an NMEA log (GGA and RMC). Returns the number of fixes read. */
+static int pf_load_nmea(const char *path, GArray *lat, GArray *lon) {
+    gchar *content = NULL;
+    gsize len = 0;
+    int n = 0;
+    if (!g_file_get_contents(path, &content, &len, NULL))
+        return 0;
+    gchar **lines = g_strsplit(content, "\n", -1);
+    for (int i = 0; lines[i]; i++) {
+        gchar *line = lines[i];
+        int lat_idx, lon_idx;
+        if (!strncmp(line, "$GPGGA", 6) || !strncmp(line, "$GNGGA", 6)) {
+            lat_idx = 2;
+            lon_idx = 4;
+        } else if (!strncmp(line, "$GPRMC", 6) || !strncmp(line, "$GNRMC", 6)) {
+            lat_idx = 3;
+            lon_idx = 5;
+        } else {
+            continue;
+        }
+        gchar **f = g_strsplit(line, ",", -1);
+        if (f[lat_idx] && f[lat_idx][0] && f[lon_idx] && f[lon_idx][0]) {
+            double la = strtod(f[lat_idx], NULL);
+            double lo = strtod(f[lon_idx], NULL);
+            double lad = (int)(la / 100) + fmod(la, 100) / 60.0;
+            double lod = (int)(lo / 100) + fmod(lo, 100) / 60.0;
+            if (f[lat_idx + 1] && f[lat_idx + 1][0] == 'S')
+                lad = -lad;
+            if (f[lon_idx + 1] && f[lon_idx + 1][0] == 'W')
+                lod = -lod;
+            g_array_append_val(lat, lad);
+            g_array_append_val(lon, lod);
+            n++;
+        }
+        g_strfreev(f);
+    }
+    g_strfreev(lines);
+    g_free(content);
+    return n;
+}
+
+/* Replays a track through a tilted view. At every fix a concave polygon is placed on the ground
+ * and projected after a small relative shift - the sub-pixel drag the vehicle carries between
+ * fixes. It must keep all of its vertices and stay concave. Screen-space decimation of polygons
+ * (the coarse `mindist` used while scrolling) violates this: short edges are dropped and concave
+ * notches turn convex - the flicker seen while following a route. */
+static int scenario_polygon_flicker(void) {
+    GArray *lat = g_array_new(FALSE, FALSE, sizeof(double));
+    GArray *lon = g_array_new(FALSE, FALSE, sizeof(double));
+    const char *track = getenv("NAVIT_TEST_TRACK");
+    if (!(track && pf_load_nmea(track, lat, lon) > 1)) {
+        for (int i = 0; i < PF_MAX_FRAMES; i++) {
+            double la = 52.4 + i * 2e-5;
+            double lo = 10.35 + i * 3e-5;
+            g_array_append_val(lat, la);
+            g_array_append_val(lon, lo);
+        }
+    }
+
+    int effective = graphics_element_mindist(GRAPHICS_MINDIST_COARSE, element_polygon);
+    CHECK(effective == 0, "3d flicker: polygons must not be decimated (effective mindist %d)", effective);
+
+    int frames = lat->len < PF_MAX_FRAMES ? lat->len : PF_MAX_FRAMES;
+    int visible = 0, lost_prod = 0, lost_raw = 0;
+    for (int i = 0; i < frames; i++) {
+        struct coord center = geo_to_mg(g_array_index(lat, double, i), g_array_index(lon, double, i));
+        struct transformation *t = pf_trans_new(&center);
+        struct coord poly[PF_N];
+        if (!pf_build(t, poly))
+            continue;
+        pf_shift_center(t, (i % (PF_JITTER_PX + 1)) - 1, ((i / (PF_JITTER_PX + 1)) % 2) - 1);
+
+        struct point pp[PF_N], pr[PF_N];
+        int cnt = transform_point_buf(t, projection_mg, poly, pp, sizeof(pp), PF_N, effective, 0, NULL);
+        int raw = transform_point_buf(t, projection_mg, poly, pr, sizeof(pr), PF_N, GRAPHICS_MINDIST_COARSE, 0, NULL);
+        transform_destroy(t);
+
+        if (cnt < 3 || !pf_inside(pp, cnt))
+            continue;
+        visible++;
+        if (cnt != PF_N || !pf_concave(pp, cnt))
+            lost_prod++;
+        if (raw < 3 || raw != PF_N || !pf_concave(pr, raw))
+            lost_raw++;
+    }
+
+    printf("3d polygon flicker: %d/%d frames visible, coarse decimation breaks %d, projected %d\n", visible, frames,
+           lost_raw, lost_prod);
+    CHECK(visible > 0, "3d flicker: test polygon was never fully visible");
+    CHECK(lost_prod == 0, "3d flicker: %d/%d visible frames lost polygon vertices or concavity", lost_prod, visible);
+    CHECK(lost_raw > 0, "3d flicker: test no longer reproduces the coarse-decimation flicker (vacuous)");
+
+    g_array_free(lat, TRUE);
+    g_array_free(lon, TRUE);
+    return 0;
+}
+
 struct scenario {
     const char *name;
     int (*fn)(void);
@@ -611,6 +959,9 @@ static struct scenario scenarios[] = {
     {"route_turn_restriction", scenario_route_turn_restriction},
     {"search_town_street",     scenario_search_town_street    },
     {"kalman_scroll",          scenario_kalman_scroll         },
+    {"covers_screen_3d",       scenario_covers_screen_3d      },
+    {"recenter_jump_3d",       scenario_recenter_jump_3d      },
+    {"polygon_flicker",        scenario_polygon_flicker       },
 };
 
 int main(int argc, char **argv) {
