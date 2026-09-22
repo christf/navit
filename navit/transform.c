@@ -983,6 +983,13 @@ void transform_setup_source_rect_scale(struct transformation *t, int scale_facto
 void transform_setup_source_rect_margin(struct transformation *t, int w, int h, int margin) {
     struct map_selection *ms;
 
+    if (t->ddd) {
+        /* Under perspective the ground rectangle must be derived from the inflated screen
+         * rectangle; scaling it in map space would over- or under-estimate near the horizon. */
+        transform_setup_source_rect_internal(t, margin > 0 ? margin : 0);
+        return;
+    }
+
     transform_setup_source_rect(t);
 
     if (margin <= 0 || w <= 0 || h <= 0)
@@ -1014,7 +1021,7 @@ int transform_covers_screen(struct transformation *t, int w, int h) {
     struct coord coord;
     int i, first;
 
-    if (!t || !t->map_sel || t->ddd || w <= 0 || h <= 0)
+    if (!t || !t->map_sel || w <= 0 || h <= 0)
         return 0;
 
     ms = t->map_sel;
@@ -1024,17 +1031,31 @@ int transform_covers_screen(struct transformation *t, int w, int h) {
         coord_rect_extend(&cover, &ms->u.c_rect.rl);
     }
 
-    first = 1;
-    for (i = 0; i < 4; i++) {
-        pnt.x = (i & 1) ? w : 0;
-        pnt.y = (i & 2) ? h : 0;
-        transform_reverse(t, &pnt, &coord);
-        if (first) {
-            mapped.lu = coord;
-            mapped.rl = coord;
-            first = 0;
-        } else {
-            coord_rect_extend(&mapped, &coord);
+    if (t->ddd) {
+        struct point screen_pnt[4];
+        screen_pnt[0].x = 0;
+        screen_pnt[0].y = 0;
+        screen_pnt[1].x = w;
+        screen_pnt[1].y = 0;
+        screen_pnt[2].x = w;
+        screen_pnt[2].y = h;
+        screen_pnt[3].x = 0;
+        screen_pnt[3].y = h;
+        if (!transform_screen_rect_to_ground(t, screen_pnt, &mapped))
+            return 0;
+    } else {
+        first = 1;
+        for (i = 0; i < 4; i++) {
+            pnt.x = (i & 1) ? w : 0;
+            pnt.y = (i & 2) ? h : 0;
+            transform_reverse(t, &pnt, &coord);
+            if (first) {
+                mapped.lu = coord;
+                mapped.rl = coord;
+                first = 0;
+            } else {
+                coord_rect_extend(&mapped, &coord);
+            }
         }
     }
 
