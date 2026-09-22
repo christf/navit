@@ -3161,6 +3161,14 @@ static inline void displayitem_draw_image(struct displayitem *di, struct display
         dbg(lvl_error, "draw_image_warp not supported by graphics driver drawing '%s'", di->label);
 }
 
+int graphics_element_mindist(int mindist, int element_type) {
+    /* Area polygons are projected vertex-exact: decimating them makes their outline unstable under
+     * a tilted view and drops concave notches. */
+    if (element_type == element_polygon)
+        return 0;
+    return mindist;
+}
+
 /**
  * @brief Draw a displayitem element
  *
@@ -3225,12 +3233,16 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
         if (item_type_is_area(dc->type) && (dc->e->type == element_polyline || dc->e->type == element_text))
             limit = 0;
 
+        /* Polygons and their holes must not be decimated in screen space. Under a tilted view the
+         * ground compresses towards the horizon, so edges cross the distance threshold
+         * non-deterministically and vertices get dropped; the shape then flickers and concave
+         * notches disappear. */
+        mindist = graphics_element_mindist(mindist, dc->e->type);
+
         displayitem_transform_holes(dc->trans, dc->pro, di->holes, &t_holes, mindist);
 
         if (limit)
             count = limit_count(di->c, count);
-        if (dc->type == type_poly_water_tiled)
-            mindist = 0;
         if (dc->e->type == element_polyline)
             count = transform_point_buf(dc->trans, dc->pro, di->c, pa, pa_buf_size, count, mindist, e->u.polyline.width,
                                         width);
@@ -3694,7 +3706,7 @@ void graphics_displaylist_draw(struct graphics *gra, struct displaylist *display
     if (displaylist->dc.trans != trans)
         displaylist->dc.trans = transform_dup(trans);
     displaylist->dc.gra = gra;
-    displaylist->dc.mindist = flags & 512 ? 15 : 2;
+    displaylist->dc.mindist = flags & GRAPHICS_DRAW_COARSE_MINDIST ? GRAPHICS_MINDIST_COARSE : GRAPHICS_MINDIST_FINE;
     // FIXME find a better place to set the background color
     if (l) {
         graphics_gc_set_background(gra->gc[0], &l->color);
