@@ -6,9 +6,6 @@ Basics
 
 This page aims to point out the most common options which a first-time user may want to change - power users may want to consult the :doc:`advanced`.
 
-.. todo::
-    It is also possible to edit the navit.xml file for your Android device under Windows and Linux (Debian/Ubuntu derivates) with a third party application called [[NavitConfigurator]].
-
 Setting up Navit is done by editing a configuration file called "**navit.xml**".
 
 Navit comes **shipped** with a default ``navit.xml`` together with ``navit_layout_*.xml`` files that are stored at various locations (depending on your system).
@@ -86,6 +83,14 @@ Basic Configuration
 
 Currently Navit doesn't provide a graphical tool to change settings, so you have to do the changes manually using a texteditor.
 Please open your current **navit.xml** file and do the following steps:
+
+.. hint::
+    If you prefer a graphical editor, the third-party application
+    `NavitConfigurator
+    <https://sourceforge.net/projects/navitconfigurat/>`__ can edit
+    ``navit.xml`` on Windows and Linux. It provides a "Map View Editor"
+    to position OSD items and lets you test the result directly on an
+    Android device.
 
 
 Setup proper startup-position
