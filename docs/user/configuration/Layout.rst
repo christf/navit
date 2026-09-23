@@ -155,22 +155,6 @@ Shops for food, Peaks (with names), Unknown (points with names). Tracks,
 Paths, hiking paths and so on have different colors to distinguish them.
 See :doc:`Layout_detailedcampingbike` for the full description and XML.
 
-bike
-~~~~
-
-A simple layout that avoids dashed lines for compatibility with the
-winCE renderer and favours bike paths. It ships with Navit and can be
-selected from the GUI (Internal GUI -> Settings -> Display -> Layout).
-See :doc:`Layout_bike` for details.
-
-Features
-^^^^^^^^
-
--  bike paths visible green
--  less comfortable but still fine roads are visible in brown
--  everything else is much like car layout
--  no dashed lines - suitable for winCE
-
 Alternate Cursors
 -----------------
 
@@ -556,4 +540,3 @@ pages:
    Layout_snow
    Layout_hi_vis
    Layout_detailedcampingbike
-   Layout_bike
