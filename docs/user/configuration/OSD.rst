@@ -6,10 +6,6 @@ blended directly onto the map. These can be implemented using the ``<osd
 ... />`` tag inside ``navit.xml`` (see the :doc:`configuration section
 </user/configuration/advanced>`).
 
-You might try `NavitConfigurator
-<https://sourceforge.net/projects/navitconfigurat/>`__ as a WYSIWYG
-testing environment for customizing your screen setup.
-
 Examples
 ========
 
