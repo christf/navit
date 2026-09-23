@@ -19,9 +19,8 @@ Notes
 -  If you would like instructions on how to modify OSD layouts you can
    refer to the :doc:`OSD page </user/configuration/OSD>`.
 
--  If you would like to share your own layout please contact us on the
-   IRC Freenode Channel #navit and let us know. You can also try the
-   `web-based chat <http://webchat.freenode.net/?channels=navit>`__
+-  If you would like to share your own layout please let us know via the
+   channels listed on the :doc:`Contacts </user/community/contacts>` page.
 
 Tip
 ---
@@ -39,8 +38,9 @@ hand edit their navit.xml files. The same trick will work for any subset
 part of the navit.xml file. Remember to begin your file with and end it
 with , otherwise Navit won't be able to parse it properly.
 
-This trick was contributed by Daniel Would on the NSeries
-wiki page.
+This trick was contributed by Daniel Would.
+
+.. _layout-scaler:
 
 Layout scaler for different screen sizes
 ----------------------------------------
@@ -71,15 +71,11 @@ Usage: Create scaled layout with:
 
 then include the -scaled-XX xml file instead of the original.
 
-get it `here <http://www.wandersleb.net/navit/scale-0.1.tar.gz>`__
-
-get it `here <http://www.wandersleb.net/navit/scale-0.1.tar.gz>`__
-
 Nokia NSeries Tablets
 ---------------------
 
 For tips and advice on Nokia layouts please reference the
-NSeries specific page.
+NSeries layouts below.
 
 NSeries Layout 1
 ~~~~~~~~~~~~~~~~
@@ -170,7 +166,7 @@ NSeries Layout 4
 ~~~~~~~~~~~~~~~~~~
 
 Tested on N900 but should work on any display, as it works nicely on my
-laptop as well. See the Nokia specific page for further configuration.
+laptop as well. See the NSeries layouts above for further configuration.
 
 .. figure:: N900-OSD.png
    :alt: N900-OSD.png
@@ -578,9 +574,6 @@ solved the problem. Actually I do use now
 
    nibbler01-0.2.png
 
--  `Download
-   skin <http://www.wandersleb.net/navit/nibbler01-0.2.tar.gz>`__
-
 To install just add
 
 to your navit.xml (just where all the default/deactivated osd elements
@@ -591,14 +584,14 @@ From version 0.2 on: For the buttons to work, you need to copy the
 empty.svg to your image directory (/usr/share/navit/xpm/ in my case) or
 fix the path to them in the nibbler01.xml.
 
-The .cxf files are now included in the download, so feel free to alter
-them under the terms of CC-SA.
+The .cxf files are included, so feel free to alter them under the terms
+of CC-SA.
 
 LCARS v0.1 (Startrek TNG)
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This OSD does not scale so well, so use the
-resizer
+:ref:`layout scaler <layout-scaler>`
 if you need to. It also makes use of empty.svg which it expects in the
 default image location of navit (included in lcars directory of the tar)
 
@@ -610,8 +603,6 @@ button was avoiding users to actually click/drag the map.
    :width: 600px
 
    lcars-0.1.png
-
--  `Download skin <http://www.wandersleb.net/navit/lcars-0.2.tar.gz>`__
 
 To install just add
 
@@ -836,7 +827,6 @@ following screenshots can be found at :doc:`OSM Mapnik layout style </user/confi
 The following screenshots show the two main OSD modes. The left layout
 is during tracking mode (i.e. no destination set), whilst the right
 layout shows the OSD layout during routing. The OSD items are almost
-exactly the same as Netbook Layout 1, with the
 exactly the same as Netbook Layout 1, with the exception of the removal
 of the :ref:`speed cam <osd_speed_cam>` OSD and the :ref:`compass <osd_compass>` OSD.
 
@@ -906,7 +896,7 @@ the png versions, make sure you change the path.
 
 .. code:: xml
 
-   .. code::<!-- TOP LEFT --> 
+   <!-- TOP LEFT --> 
    <!-- Distance to Next Manoeuvre --> 
    <osd enabled="yes" type="text" label="${navigation.item[1].length[named]}" x="0" y="0" font_size="350" w="75" h="30" align="0" background_color="#000000c8" osd_configuration="2" />
    <!-- Next Manoeuvre Icon --> 
