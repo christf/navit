@@ -3,7 +3,8 @@ OSD
 
 The On Screen Display (OSD) provides status information and controls
 blended directly onto the map. These can be implemented using the ``<osd
-... />`` tag inside navit.xml `Configuration <Configuration>`__.
+... />`` tag inside ``navit.xml`` (see the :doc:`configuration section
+</user/configuration/advanced>`).
 
 You might try `NavitConfigurator
 <https://sourceforge.net/projects/navitconfigurat/>`__ as a WYSIWYG
@@ -13,7 +14,7 @@ Examples
 ========
 
 To see example layouts for a variety of platforms and screen sizes, see
-`OSD_Layouts <OSD_Layouts>`__.
+:doc:`OSD layouts </user/configuration/OSD_Layouts>`.
 
 Enable/Disable
 ==============
@@ -86,7 +87,7 @@ Example 2:
 This will create an item of width 50% of the screen width and height 10%
 of the screen height from the top-left corner of the item.
 
-Example `Configuration <Configuration>`__ contents, based on osd items
+Example configuration contents, based on osd items
 mentioned so far:
 
 .. code:: xml
@@ -255,7 +256,7 @@ auxmap
 
 The auxmap creates an additional map on the screen.
 
-Example `Configuration <Configuration>`__ contents:
+Example configuration contents:
 
 .. code:: xml
 
@@ -270,7 +271,7 @@ button
 specified image is clickable; this is usually accompanied by a
 :ref:`command <osd_command>`.
 
-Example `Configuration <Configuration>`__ contents:
+Example configuration contents:
 
 .. code:: xml
 
@@ -385,7 +386,7 @@ layouts or for displaying status icons (which can be updated using a
 :ref:`cmd_interface <osd_cmd_interface>` control). It behaves like a
 :ref:`button <osd_button>` but without the ability to run a command on click.
 
-Example `Configuration <Configuration>`__ contents:
+Example configuration contents:
 
 .. code:: xml
 
@@ -415,13 +416,13 @@ further in the route :
 
    <osd x="0" y="120"  w="80" h="80" type="navigation_next_turn" level="1" />
 
-`WinCE <WinCE>`__ users require a slightly more verbose line:
+:doc:`WinCE </user/platforms/maintained/wince>` users require a slightly more verbose line:
 
 .. code:: xml
 
    <osd enabled="yes" type="navigation_next_turn" x="0" y="-75" icon_src="%s_wh_32_32.png" />
 
-`Android <Android>`__ users may need to explicitly specify the size of
+:doc:`Android </user/platforms/maintained/android>` users may need to explicitly specify the size of
 the images for this osd item.
 
 .. code:: xml
@@ -629,7 +630,7 @@ or (perhaps the easiest) directly from IGO8 files themselves.
 IGO8 Format
 ~~~~~~~~~~~
 
-An `IGO8 <IGO8>`__ file is a type of `csv <csv>`__. The format defines
+An IGO8 file is a type of csv. The format defines
 the latitude and longitude of a speed camera, the type of camera,
 speed-limit and direction in which the camera is facing.
 Country-specific IGO8 files can be downloaded from
@@ -1368,7 +1369,7 @@ An example implementation is shown below.
    label="${navigation.item.destination_time[arrival]}" and
    label="${navigation.item.destination_length[named]}"
 
-More osd layouts can be found at `OSD_Layouts <OSD_Layouts>`__.
+More osd layouts can be found at :doc:`OSD_Layouts </user/configuration/OSD_Layouts>`.
 
 .. _toggle_daynight_layout:
 
@@ -1511,9 +1512,7 @@ items), prefix them with **navit.** (e.g. **navit.zoom_in()**):
        **not** interpolate of navit,
        vehicle, and position
        attributes.
-       --`Nezmi <User:Nezmi>`__
-       (`talk <User_talk:Nezmi>`__)
-       18:43, 15 July 2014 (CEST))
+       -- Nezmi, 18:43, 15 July 2014 (CEST)
    * - **set_center()**
      - center the map view to the given
        coordinates, see coord_parse()
@@ -1559,7 +1558,7 @@ items), prefix them with **navit.** (e.g. **navit.zoom_in()**):
        If you want the layer to be
        hidden by default, set the
        active="0" tag in the layer
-       opening tag of the targeted                                               |
+       opening tag of the targeted
        layer.
 
        .. code:: xml
@@ -2010,7 +2009,7 @@ elsewhere (e.g. in internal GUI menu items), prefix them with
    * - Attribute
      - Description
    * - **layout_name**
-     - Change the map `layout <layout>`__
+     - Change the map :doc:`layout <Layout>`
        and/or cursor configuration. The
        following command changes the layout
        to Car-dark.
