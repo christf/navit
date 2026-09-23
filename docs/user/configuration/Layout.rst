@@ -158,11 +158,10 @@ See :doc:`Layout_detailedcampingbike` for the full description and XML.
 bike
 ~~~~
 
-Because all other layouts are not displaying bike paths properly on
-winCE devices, this layout was rolled on its own. It is simple and needs
-fixing and refining. Most POIs are hidden - this is one of the things
-which should be changed. It is also not independent from the car layout
-- another problem. See :doc:`Layout_bike` for the full XML.
+A simple layout that avoids dashed lines for compatibility with the
+winCE renderer and favours bike paths. It ships with Navit and can be
+selected from the GUI (Internal GUI -> Settings -> Display -> Layout).
+See :doc:`Layout_bike` for details.
 
 Features
 ^^^^^^^^
