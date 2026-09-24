@@ -124,7 +124,7 @@ jobs:
       image: debian:latest
     steps:
       - uses: actions/checkout@v7
-      - run: apt-get update && apt-get install -y git wget
+      - run: apt-get update && apt-get install -y git jq wget
       - uses: crate-ci/typos@v1.50.2
         with:
           files: docs/
@@ -133,6 +133,8 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
+      - name: Install git for checkout
+        run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -151,6 +153,8 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
+      - name: Install git for checkout
+        run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v7
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install Sphinx toolchain
