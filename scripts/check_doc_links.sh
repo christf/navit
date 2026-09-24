@@ -21,6 +21,19 @@ log="$build_root/warnings.log"
 
 cd "$root"
 
+# The diff base must be a commit that exists in this clone. On push events
+# the workflow passes github.event.before, which is the previously pushed
+# branch tip; right after a force-push that SHA may no longer be reachable
+# from any ref and is not fetched. Fall back to the upstream trunk in that
+# case.
+if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+    echo "Base ref $base is not available in this clone, falling back to origin/trunk." >&2
+    if ! git rev-parse --verify --quiet refs/remotes/origin/trunk >/dev/null 2>&1; then
+        git fetch --no-tags origin trunk:refs/remotes/origin/trunk >/dev/null 2>&1 || true
+    fi
+    base=origin/trunk
+fi
+
 changed="$(git diff --name-only "$base"...HEAD -- '*.rst')"
 if [ $? -ne 0 ]; then
     echo "Unable to determine changed files against $base." >&2
