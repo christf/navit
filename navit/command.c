@@ -1695,18 +1695,23 @@ static void command_saved_evaluate(struct command_saved *cs) {
  *
  * @param cs The saved command
  */
-static void command_saved_callbacks_changed(struct command_saved *cs) {
-    // For now, we delete each and every callback and then re-create them
+/**
+ * @brief Removes all callbacks registered on other objects for a saved command
+ *
+ * Detaches every callback listed in {@code cs->cbs} from the object it was
+ * registered on, destroys it, and releases the list itself. The callbacks must
+ * not be left registered on foreign objects, because they reference {@code cs}
+ * and would be invoked after it has been freed.
+ *
+ * @param cs The saved command
+ */
+static void command_saved_unregister_callbacks(struct command_saved *cs) {
     int i;
     struct object_func *func;
     struct attr attr;
 
-    dbg(lvl_debug, "enter: cs=%p, cs->async=%d, cs->command=%s", cs, cs->async, cs->command);
-
-    if (cs->register_ev) {
-        event_remove_idle(cs->register_ev);
-        cs->register_ev = NULL;
-    }
+    if (!cs->num_cbs)
+        return;
 
     attr.type = attr_callback;
 
@@ -1716,18 +1721,30 @@ static void command_saved_callbacks_changed(struct command_saved *cs) {
         if (!func->remove_attr) {
             dbg(lvl_error, "Could not remove command-evaluation callback because remove_attr is missing for type %i!",
                 cs->cbs[i].attr.type);
-            continue;
+        } else {
+            attr.u.callback = cs->cbs[i].cb;
+
+            func->remove_attr(cs->cbs[i].attr.u.data, &attr);
         }
 
-        attr.u.callback = cs->cbs[i].cb;
-
-        func->remove_attr(cs->cbs[i].attr.u.data, &attr);
         callback_destroy(cs->cbs[i].cb);
     }
 
     g_free(cs->cbs);
     cs->cbs = NULL;
     cs->num_cbs = 0;
+}
+
+static void command_saved_callbacks_changed(struct command_saved *cs) {
+    dbg(lvl_debug, "enter: cs=%p, cs->async=%d, cs->command=%s", cs, cs->async, cs->command);
+
+    if (cs->register_ev) {
+        event_remove_idle(cs->register_ev);
+        cs->register_ev = NULL;
+    }
+
+    // For now, we delete each and every callback and then re-create them
+    command_saved_unregister_callbacks(cs);
 
     // Now, re-create all the callbacks
     command_register_callbacks(cs);
@@ -1861,7 +1878,37 @@ struct command_saved *command_saved_new(char *command, struct navit *navit, stru
     return command_saved_attr_new(command, &attr, cb, async);
 }
 
+/**
+ * @brief Destroys a saved command
+ *
+ * Cancels any pending idle work, detaches all callbacks registered on other
+ * objects and releases the command itself.
+ *
+ * Note that the callback in {@code cs->cb} is *not* owned by the saved command
+ * and must be destroyed by the caller.
+ *
+ * @param cs The saved command
+ */
 void command_saved_destroy(struct command_saved *cs) {
+    if (!cs)
+        return;
+
+    if (cs->register_ev) {
+        event_remove_idle(cs->register_ev);
+        cs->register_ev = NULL;
+    }
+    callback_destroy(cs->register_cb);
+    cs->register_cb = NULL;
+
+    if (cs->idle_ev) {
+        event_remove_idle(cs->idle_ev);
+        cs->idle_ev = NULL;
+    }
+    callback_destroy(cs->idle_cb);
+    cs->idle_cb = NULL;
+
+    command_saved_unregister_callbacks(cs);
+
     g_free(cs->command);
     g_free(cs);
 }
