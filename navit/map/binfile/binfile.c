@@ -1065,6 +1065,43 @@ static int binmap_search_by_index(struct map_priv *map, struct item *item, struc
     return 0;
 }
 
+static void binmap_search_town_index_selection(struct map_selection *sel, struct coord *c) {
+    sel->range = item_range_all;
+    sel->order = 18;
+    sel->next = NULL;
+    sel->u.c_rect.lu = *c;
+    sel->u.c_rect.rl = *c;
+}
+
+/* maptool resolves the town of a district from its is_in relation and stores that
+   town name in attr_town_name, so the town can be looked up by it in the town index. */
+static int binmap_find_town_of_district(struct map_priv *map, struct item *district, struct coord *c, int *id_hi,
+                                        int *id_lo, struct coord *tc) {
+    struct attr district_town_name, town_name;
+    struct map_selection sel;
+    struct map_rect_priv *map_rec;
+    struct item *town;
+    int found = 0;
+
+    if (!item_attr_get(district, attr_town_name, &district_town_name) || !district_town_name.u.str)
+        return 0;
+    binmap_search_town_index_selection(&sel, c);
+    map_rec = map_rect_new_binfile(map, &sel);
+    while ((town = map_rect_get_item_binfile(map_rec))) {
+        if (!item_is_town(*town) || item_is_district(*town) || !item_attr_get(town, attr_town_name, &town_name)
+            || !town_name.u.str || strcmp(town_name.u.str, district_town_name.u.str))
+            continue;
+        if (!item_coord_get(town, tc, 1))
+            continue;
+        *id_hi = town->id_hi;
+        *id_lo = town->id_lo;
+        found = 1;
+        break;
+    }
+    map_rect_destroy_binfile(map_rec);
+    return found;
+}
+
 static struct map_rect_priv *binmap_search_street_by_place(struct map_priv *map, struct item *town, struct coord *c,
                                                            struct map_selection *sel, GList **boundaries) {
     struct attr town_name, poly_town_name;
@@ -1074,11 +1111,7 @@ static struct map_rect_priv *binmap_search_street_by_place(struct map_priv *map,
 
     if (!item_attr_get(town, attr_label, &town_name))
         return NULL;
-    sel->range = item_range_all;
-    sel->order = 18;
-    sel->next = NULL;
-    sel->u.c_rect.lu = *c;
-    sel->u.c_rect.rl = *c;
+    binmap_search_town_index_selection(sel, c);
     map_rec2 = map_rect_new_binfile(map, sel);
     while ((place = map_rect_get_item_binfile(map_rec2))) {
         if (item_is_poly_place(*place) && item_attr_get(place, attr_label, &poly_town_name)
@@ -1253,10 +1286,27 @@ static struct map_search_priv *binmap_search_new(struct map_priv *map, struct it
                 map->last_searched_town_id_hi = town->id_hi;
                 map->last_searched_town_id_lo = town->id_lo;
                 if (item_coord_get(town, &c, 1)) {
-                    if ((msp->mr = binmap_search_street_by_place(map, town, &c, &msp->ms, &msp->boundaries)))
+                    struct coord tc;
+                    struct item *place = town;
+                    struct coord *center = &c;
+                    int id_hi = 0, id_lo = 0;
+
+                    msp->mr = binmap_search_street_by_place(map, place, center, &msp->ms, &msp->boundaries);
+                    /* Almost no district has a boundary, as maptool only writes one for the few
+                       place=suburb nodes that come with a boundary relation. The label of a district
+                       sits in the middle of it, so an estimate around it misses the streets of the
+                       rest of the town. Search the town the district belongs to instead. */
+                    if (!msp->mr && binmap_find_town_of_district(map, town, &c, &id_hi, &id_lo, &tc)) {
+                        place = map_rect_get_item_byid_binfile(map_rec, id_hi, id_lo);
+                        center = &tc;
+                        map->last_searched_town_id_hi = id_hi;
+                        map->last_searched_town_id_lo = id_lo;
+                        msp->mr = binmap_search_street_by_place(map, place, center, &msp->ms, &msp->boundaries);
+                    }
+                    if (msp->mr)
                         msp->mode = 2;
                     else {
-                        msp->mr = binmap_search_street_by_estimate(map, town, &c, &msp->ms);
+                        msp->mr = binmap_search_street_by_estimate(map, place, center, &msp->ms);
                         msp->mode = 3;
                     }
                 }
