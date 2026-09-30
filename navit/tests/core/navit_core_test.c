@@ -945,6 +945,78 @@ static int scenario_polygon_flicker(void) {
     return 0;
 }
 
+/* Regression: transform_point_buf wrote into result/width_result without any bounds check in 2D
+ * mode. The only capacity guard lived on the ddd retry path, so a caller passing a buffer smaller
+ * than count overflowed it. displayitem_draw hit this while following the demo vehicle: it sized
+ * pa/width from displaylist->dc.maxlen, but maxlen is remembered across redraws and shrunk at the
+ * end of a frame, so a displayitem added while maxlen was larger was projected into a buffer too
+ * small for its own vertex count. The overflow was only noticed much later, when an unrelated
+ * graphics_gc was freed and glibc found its heap neighbour damaged ("free(): invalid next size").
+ *
+ * A guardless transform would scribble over the guard regions and be reported by the allocator,
+ * so this asserts the documented failure instead: TRANSFORM_ERR_BUF_SPACE and nothing written
+ * past the buffer. */
+static int scenario_transform_buf_overflow(void) {
+    struct coord center = geo_to_mg(52.13, 11.63);
+    struct pcoord pc = {projection_mg, center.x, center.y};
+    /* Flat transform on purpose. In ddd mode the pre-existing retry guard in transform_point_buf
+     * already returns TRANSFORM_ERR_BUF_SPACE, which would mask the 2D path that actually
+     * overflowed here: the crash happened on a non-pitched map projection. */
+    struct transformation *t = transform_new(&pc, PF_ZOOM, 0);
+
+    enum { BUF_N = 4, SRC_N = 64 };
+    struct coord src[SRC_N];
+    struct point guard_lo[2];
+    int i;
+
+    for (i = 0; i < SRC_N; i++) {
+        /* Spread the points far enough apart that decimation cannot drop any of them. */
+        src[i].x = center.x + (i - SRC_N / 2) * 5000;
+        src[i].y = center.y + ((i % 2) ? 400 : -400);
+    }
+    for (i = 0; i < 2; i++) {
+        guard_lo[i].x = 0x5a5a5a5a;
+        guard_lo[i].y = 0x5a5a5a5a;
+    }
+
+    struct point guarded[BUF_N + 4];
+    for (i = 0; i < BUF_N + 4; i++)
+        guarded[i] = guard_lo[i % 2];
+
+    int count = transform_point_buf(t, projection_mg, src, guarded, sizeof(struct point) * BUF_N, SRC_N, 0, 0, NULL);
+
+    CHECK(count == TRANSFORM_ERR_BUF_SPACE, "overflowing transform must report TRANSFORM_ERR_BUF_SPACE, got %d", count);
+    CHECK(guarded[BUF_N].x == guard_lo[0].x && guarded[BUF_N].y == guard_lo[0].y,
+          "transform wrote past the end of the result buffer (x %d, y %d)", guarded[BUF_N].x, guarded[BUF_N].y);
+    CHECK(guarded[BUF_N + 1].x == guard_lo[1].x && guarded[BUF_N + 1].y == guard_lo[1].y,
+          "transform wrote past the end of the result buffer (x %d, y %d)", guarded[BUF_N + 1].x, guarded[BUF_N + 1].y);
+
+    /* The same must hold for the parallel width array, which is indexed with result_idx. */
+    int widths[BUF_N + 2];
+    for (i = 0; i < BUF_N + 2; i++)
+        widths[i] = 0x5a5a5a5a;
+    count = transform_point_buf(t, projection_mg, src, guarded, sizeof(struct point) * BUF_N, SRC_N, 0, 7, widths);
+    CHECK(count == TRANSFORM_ERR_BUF_SPACE, "overflowing transform with widths must report BUF_SPACE, got %d", count);
+    CHECK(widths[BUF_N] == 0x5a5a5a5a && widths[BUF_N + 1] == 0x5a5a5a5a,
+          "transform wrote past the end of the width buffer (%d, %d)", widths[BUF_N], widths[BUF_N + 1]);
+
+    /* A buffer that does fit must still return the full count, not an error. Use a flat transform
+     * here: under a pitched (ddd) one, z-clipping legitimately replays input coordinates, so the
+     * projected count can exceed the input count - which is why displayitem_transform_holes grows
+     * its buffer until the retry succeeds. The flat case is the strict 2D path where one input
+     * coordinate yields at most one output point. */
+    struct pcoord pc_flat = {projection_mg, center.x, center.y};
+    struct transformation *tf = transform_new(&pc_flat, PF_ZOOM, 0);
+    struct point fits[SRC_N];
+    count = transform_point_buf(tf, projection_mg, src, fits, sizeof(fits), SRC_N, 0, 0, NULL);
+    CHECK(count == SRC_N, "sufficiently sized buffer must project all %d points, got %d", SRC_N, count);
+    transform_destroy(tf);
+
+    transform_destroy(t);
+    printf("transform buf overflow: guard holds, sized buffer still returns %d/%d\n", count, SRC_N);
+    return 0;
+}
+
 struct scenario {
     const char *name;
     int (*fn)(void);
@@ -962,6 +1034,7 @@ static struct scenario scenarios[] = {
     {"covers_screen_3d",       scenario_covers_screen_3d      },
     {"recenter_jump_3d",       scenario_recenter_jump_3d      },
     {"polygon_flicker",        scenario_polygon_flicker       },
+    {"transform_buf_overflow", scenario_transform_buf_overflow},
 };
 
 int main(int argc, char **argv) {

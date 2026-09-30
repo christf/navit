@@ -3210,13 +3210,23 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
     struct graphics *gra = dc->gra;
     struct element *e = dc->e;
     int draw_underground = 0;
-    long pa_buf_size = sizeof(struct point) * dc->maxlen;
+    /* The chain can hold more coordinates than the context's scratch budget. displaylist->dc.maxlen
+     * is remembered across redraws and shrunk again at the end of a frame (see
+     * graphics_displaylist_draw), so it can be smaller than a displayitem added while it was
+     * larger. Sizing from the item itself keeps the projection of every displayitem in bounds;
+     * transform_point_buf would otherwise write past pa and corrupt the heap. */
+    int max_count = dc->maxlen;
+    for (struct displayitem *d = di; d; d = d->next) {
+        if (d->count > max_count)
+            max_count = d->count;
+    }
+    long pa_buf_size = sizeof(struct point) * max_count;
 
-    if (dc->maxlen < ALLOCA_COORD_LIMIT) {
-        width = g_alloca(sizeof(int) * dc->maxlen);
+    if (max_count < ALLOCA_COORD_LIMIT) {
+        width = g_alloca(sizeof(int) * max_count);
         pa = g_alloca(pa_buf_size);
     } else {
-        width = g_malloc(sizeof(int) * dc->maxlen);
+        width = g_malloc(sizeof(int) * max_count);
         pa = g_malloc(pa_buf_size);
     }
 
@@ -3318,7 +3328,7 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
 
         di = di->next;
     }
-    if (dc->maxlen >= ALLOCA_COORD_LIMIT) {
+    if (max_count >= ALLOCA_COORD_LIMIT) {
         g_free(width);
         g_free(pa);
     }
@@ -4071,6 +4081,15 @@ int graphics_displayitem_within_dist(struct displaylist *displaylist, struct dis
 
     count =
         transform_point_buf(displaylist->dc.trans, displaylist->dc.pro, di->c, pa, pa_buf_size, di->count, 0, 0, NULL);
+
+    /* A negative count means the projection did not fit the buffer. The loops below assume a
+     * usable polygon/polyline, so report "not within dist" instead of walking a bogus range. */
+    if (count <= 0) {
+        if (displaylist->dc.maxlen >= ALLOCA_COORD_LIMIT) {
+            g_free(pa);
+        }
+        return 0;
+    }
 
     if (di->item.type < type_line) {
         result = within_dist_point(p, &pa[0], dist);
