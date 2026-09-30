@@ -610,6 +610,10 @@ int transform_point_buf(struct transformation *t, enum projection required_proje
                 continue;
             }
         }
+        if (result_idx >= max_results) {
+            dbg(lvl_debug, "Not enough space in buf for transform_point_buf");
+            return TRANSFORM_ERR_BUF_SPACE;
+        }
         result[result_idx] = screen_point;
         if (width_result) {
             if (t->ddd) {
