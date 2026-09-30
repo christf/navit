@@ -964,7 +964,10 @@ static int scenario_transform_buf_overflow(void) {
      * overflowed here: the crash happened on a non-pitched map projection. */
     struct transformation *t = transform_new(&pc, PF_ZOOM, 0);
 
-    enum { BUF_N = 4, SRC_N = 64 };
+    enum {
+        BUF_N = 4,
+        SRC_N = 64
+    };
     struct coord src[SRC_N];
     struct point guard_lo[2];
     int i;
