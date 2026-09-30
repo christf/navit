@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE config SYSTEM "navit.dtd">
+<config xmlns:xi="http://www.w3.org/2001/XInclude">
+	<plugins>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}lib*.so" ondemand="no"/>
+		<plugin path="$NAVIT_LIBDIR/autoload/${NAVIT_LIBPREFIX}lib*.so"/>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}libbinding_dbus.so" active="no"/>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}libgraphics_null.so" active="no"/>
+	</plugins>
+
+	<navit center="11.613494 52.750079" zoom="256" tracking="1" orientation="-1" drag_bitmap="1">
+		<!-- GRAPHICS_TYPE is substituted by the runner script -->
+		<graphics type="GRAPHICS_TYPE" w="300" h="300"/>
+
+		<gui type="internal" enabled="yes"><![CDATA[
+			<html>
+				<img src="gui_map"/>
+				<a name='Main Menu'><text>Main menu</text>
+					<a href='#Settings'><img src="gui_settings"/><text>Settings</text></a>
+				</a>
+			</html>
+		]]></gui>
+
+		<osd enabled="yes" type="speed_warner" w="46" h="46" x="0" y="0" use_overlay="1"
+		     font_size="250" speed_exceed_limit_offset="5" speed_exceed_limit_percent="3"
+		     announce_on="0" background_color="#00000000"/>
+
+		<vehicle name="Demo" profilename="car" enabled="yes" active="yes"
+		        source="demo://" speed="30" follow="1"/>
+
+		<tracking cdf_histsize="0"/>
+
+		<vehicleprofile name="car" route_depth="18:25%" flags="0x4000000"
+		               flags_forward_mask="0x4040002" flags_reverse_mask="0x4040001"
+		               route_mode="0" static_speed="5" static_distance="25">
+			<roadprofile item_types="street_0,street_1_city,street_2_city,street_3_city" speed="50"/>
+			<roadprofile item_types="highway_city,street_1_land,street_2_land" speed="100"/>
+			<roadprofile item_types="highway_land,street_n_lanes" speed="120"/>
+		</vehicleprofile>
+
+		<route destination_distance="50"/>
+
+		<!-- MAPFILE is substituted by the runner script; navit refuses to start without a mapset -->
+		<mapset enabled="yes">
+			<map type="binfile" enabled="yes" data="MAPFILE"/>
+		</mapset>
+
+		<xi:include href="$NAVIT_SHAREDIR/navit_layout_*.xml"/>
+	</navit>
+</config>

@@ -20,3 +20,5 @@ if(NOT USE_PLUGINS)
         ENVIRONMENT "NAVIT_TEST_MAP=${FIXTURE_BIN}"
         TIMEOUT 600)
 endif()
+
+add_subdirectory(gtkglarea)
