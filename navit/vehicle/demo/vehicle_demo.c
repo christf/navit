@@ -49,7 +49,6 @@ struct vehicle_priv {
     struct navit *navit;
     struct route *route;
     struct coord_geo geo;
-    struct coord last;
     double config_speed;
     double speed;
     double direction;
@@ -58,12 +57,24 @@ struct vehicle_priv {
     char *timep;
     enum attr_position_valid valid; /**< Whether the vehicle has valid position data **/
     double height;
+    /** Route geometry as a flat waypoint list, and the cursor into it. The
+     * map_rect is rebuilt on every tick, so the walk cannot rely on item
+     * iteration state to remember where it got to: it has to be kept here. */
+    GArray *waypoints;
+    int waypoint_index;
+    /** Position reached by the previous tick. A step usually ends in the middle
+     * of a segment rather than on a waypoint, so the walk has to resume from
+     * here and not from the last waypoint it passed. */
+    struct coord current;
+    int current_valid;
 };
 
 static void vehicle_demo_destroy(struct vehicle_priv *priv) {
     if (priv->timer)
         event_remove_timeout(priv->timer);
     callback_destroy(priv->timer_callback);
+    if (priv->waypoints)
+        g_array_free(priv->waypoints, TRUE);
     g_free(priv->timep);
     g_free(priv);
 }
@@ -161,86 +172,228 @@ struct vehicle_methods vehicle_demo_methods = {
     vehicle_demo_set_attr,
 };
 
+/* Collect the route geometry into a flat waypoint list, so the per-tick walk
+ * can resume where the previous tick stopped instead of starting over. The
+ * route map yields one item per street; item_coord_get() walks the coordinates
+ * of each in turn and advancing to the next item continues the line. */
+static GArray *demo_scan_waypoints(struct route *route) {
+    struct map *route_map = route_get_map(route);
+    struct map_rect *mr;
+    struct item *item;
+    GArray *wp = g_array_new(FALSE, FALSE, sizeof(struct coord));
+
+    if (!route_map)
+        return wp;
+    mr = map_rect_new(route_map, NULL);
+    if (!mr)
+        return wp;
+    if ((item = map_rect_get_item(mr)) != NULL && item->type == type_route_start)
+        item = map_rect_get_item(mr);
+    while (item && item->type != type_street_route)
+        item = map_rect_get_item(mr);
+    while (item) {
+        struct coord c;
+        while (item_coord_get(item, &c, 1)) {
+            /* Skip duplicate joins between consecutive street items. */
+            if (wp->len) {
+                struct coord *prev = &g_array_index(wp, struct coord, wp->len - 1);
+                if (prev->x == c.x && prev->y == c.y)
+                    continue;
+            }
+            g_array_append_val(wp, c);
+        }
+        item = map_rect_get_item(mr);
+    }
+    map_rect_destroy(mr);
+    return wp;
+}
+
+/* True if both lists hold exactly the same coordinates. */
+static int demo_waypoints_equal(const GArray *a, const GArray *b) {
+    guint i;
+    if (!a || !b || a->len != b->len)
+        return 0;
+    for (i = 0; i < a->len; i++) {
+        const struct coord *ca = &g_array_index(a, struct coord, i);
+        const struct coord *cb = &g_array_index(b, struct coord, i);
+        if (ca->x != cb->x || ca->y != cb->y)
+            return 0;
+    }
+    return 1;
+}
+
+/* Re-anchor the walk cursor after the geometry changed.
+ *
+ * The route is recomputed from the moving vehicle on every position update, so
+ * most of these changes are just the leading part of the path being dropped as
+ * the vehicle drives along it. Discarding the cursor there sends the vehicle
+ * back to waypoint 0 every tick, which shows up as a vehicle that creeps back
+ * and forth around the route start and never reaches the destination.
+ *
+ * So instead of resetting, look for the segment of the new geometry closest to
+ * where the vehicle actually is and continue from there. That also handles a
+ * real reroute: route_get_position() snaps the route start to the nearest street
+ * to the vehicle, so the new path always begins next to it and the cursor ends
+ * up on the new geometry either way. Returns 0 if there is no position to
+ * anchor to yet, in which case the caller starts from the beginning. */
+static int demo_relocate_cursor(GArray *wp, struct coord *cur) {
+    guint i, best = 0;
+    int best_dist = 0, have = 0;
+    struct coord best_pnt = {0, 0};
+    struct coord from = *cur;
+
+    if (wp->len < 2)
+        return 0;
+    for (i = 0; i + 1 < wp->len; i++) {
+        const struct coord *a = &g_array_index(wp, struct coord, i);
+        const struct coord *b = &g_array_index(wp, struct coord, i + 1);
+        double dx = b->x - a->x, dy = b->y - a->y;
+        double len2 = dx * dx + dy * dy;
+        double t = 0.0, px, py;
+        struct coord pnt;
+        int dist;
+        if (len2 > 0.0) {
+            t = ((double)(from.x - a->x) * dx + (double)(from.y - a->y) * dy) / len2;
+            if (t < 0.0)
+                t = 0.0;
+            if (t > 1.0)
+                t = 1.0;
+        }
+        px = a->x + dx * t;
+        py = a->y + dy * t;
+        pnt.x = (int)px;
+        pnt.y = (int)py;
+        dist = transform_distance(projection_mg, &from, &pnt);
+        if (!have || dist < best_dist) {
+            have = 1;
+            best = i;
+            best_dist = dist;
+            best_pnt = pnt;
+        }
+    }
+    *cur = best_pnt;
+    return (int)best;
+}
+
 static void vehicle_demo_timer(struct vehicle_priv *priv) {
-    struct coord c, c2, pos, ci;
+    struct coord *nxt, ci;
     int slen, len, dx, dy;
-    struct route *route = NULL;
-    struct map *route_map = NULL;
-    struct map_rect *mr = NULL;
-    struct item *item = NULL;
 
     len = (priv->config_speed * priv->interval / 1000) / 3.6;
     dbg(lvl_debug, "###### Entering simulation loop");
     if (!priv->config_speed)
         return;
-    if (priv->route)
-        route = priv->route;
-    else if (priv->navit)
-        route = navit_get_route(priv->navit);
-    if (route)
-        route_map = route_get_map(route);
-    if (route_map)
-        mr = map_rect_new(route_map, NULL);
-    if (mr)
-        item = map_rect_get_item(mr);
-    if (item && item->type == type_route_start)
-        item = map_rect_get_item(mr);
-    while (item && item->type != type_street_route)
-        item = map_rect_get_item(mr);
-    if (item && item_coord_get(item, &pos, 1)) {
-        priv->position_set = 0;
-        dbg(lvl_debug, "current pos=0x%x,0x%x", pos.x, pos.y);
-        dbg(lvl_debug, "last pos=0x%x,0x%x", priv->last.x, priv->last.y);
-        if (priv->last.x == pos.x && priv->last.y == pos.y) {
-            dbg(lvl_warning, "endless loop");
-        }
-        priv->last = pos;
-        while (item && priv->config_speed) {
-            if (!item_coord_get(item, &c, 1)) {
-                item = map_rect_get_item(mr);
-                continue;
-            }
-            dbg(lvl_debug, "next pos=0x%x,0x%x", c.x, c.y);
-            slen = transform_distance(projection_mg, &pos, &c);
-            dbg(lvl_debug, "len=%d slen=%d", len, slen);
-            if (slen < len) {
-                len -= slen;
-                pos = c;
-            } else {
-                if (item_coord_get(item, &c2, 1) || map_rect_get_item(mr)) {
-                    dx = c.x - pos.x;
-                    dy = c.y - pos.y;
-                    ci.x = pos.x + dx * len / slen;
-                    ci.y = pos.y + dy * len / slen;
-                    priv->direction = transform_get_angle_delta(&pos, &c, 0);
-                    priv->speed =
-                        priv->config_speed
-                        + ((rand() % 5 + 1) * (rand() % 2 == 0 ? -1 : 1));  // a little random + or - 1 to 5 km/h
-                    priv->height =
-                        priv->height
-                        + ((rand() % 50 + 1) * (rand() % 2 == 0 ? -1 : 1));  // a little random + or - 1 to 50 m
-                } else {
-                    ci.x = pos.x;
-                    ci.y = pos.y;
-                    priv->speed = 0;
-                    dbg(lvl_debug, "destination reached");
-                }
-                dbg(lvl_debug, "ci=0x%x,0x%x", ci.x, ci.y);
-                transform_to_geo(projection_mg, &ci, &priv->geo);
-                if (priv->valid != attr_position_valid_valid) {
-                    priv->valid = attr_position_valid_valid;
-                    callback_list_call_attr_0(priv->cbl, attr_position_valid);
-                }
-                callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
-                break;
-            }
-        }
-    } else {
+    if (!priv->route && !priv->navit) {
         if (priv->position_set)
             callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
+        return;
     }
-    if (mr)
-        map_rect_destroy(mr);
+    {
+        struct route *route = priv->route ? priv->route : navit_get_route(priv->navit);
+        if (route) {
+            /* Rescan the geometry every tick, like the original walk did, so a
+             * recalculated route is picked up: route_get_map() hands back the
+             * same map object for a given route, so neither the route pointer
+             * nor the map pointer changes when a new path is computed. Keep the
+             * walk anchored to the vehicle's own position across the change. */
+            GArray *fresh = demo_scan_waypoints(route);
+            if (!demo_waypoints_equal(priv->waypoints, fresh)) {
+                struct coord anchor = priv->current;
+                int anchored = priv->current_valid;
+                if (priv->waypoints)
+                    g_array_free(priv->waypoints, TRUE);
+                priv->waypoints = fresh;
+                priv->waypoint_index = anchored ? demo_relocate_cursor(fresh, &anchor) : 0;
+                priv->current_valid = anchored;
+                if (anchored)
+                    priv->current = anchor;
+                dbg(lvl_debug, "demo loaded %u waypoints, continuing at %d", fresh->len, priv->waypoint_index + 1);
+            } else {
+                g_array_free(fresh, TRUE);
+            }
+        } else if (priv->waypoints) {
+            /* No route at all: drop the geometry rather than keep walking a
+             * path that is no longer backed by one. */
+            g_array_free(priv->waypoints, TRUE);
+            priv->waypoints = NULL;
+            priv->waypoint_index = 0;
+            priv->current_valid = 0;
+        }
+    }
+    if (!priv->waypoints || priv->waypoints->len < 2) {
+        if (priv->position_set)
+            callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
+        return;
+    }
+
+    priv->position_set = 1;
+    if (!priv->current_valid) {
+        priv->current = g_array_index(priv->waypoints, struct coord, 0);
+        priv->current_valid = 1;
+    }
+    while (priv->waypoint_index < (int)priv->waypoints->len - 1 && len > 0) {
+        nxt = &g_array_index(priv->waypoints, struct coord, priv->waypoint_index + 1);
+        slen = transform_distance(projection_mg, &priv->current, nxt);
+        if (slen < 1) {
+            /* Degenerate segment: step over it. */
+            priv->waypoint_index++;
+            continue;
+        }
+        if (slen <= len) {
+            /* This step reaches or passes the next waypoint. */
+            len -= slen;
+            priv->current = *nxt;
+            priv->waypoint_index++;
+            if (len == 0)
+                break;
+            continue;
+        }
+        /* The step ends inside this segment: remember where, so the next tick
+         * resumes from here instead of restarting at the last waypoint. */
+        dx = nxt->x - priv->current.x;
+        dy = nxt->y - priv->current.y;
+        priv->direction = transform_get_angle_delta(&priv->current, nxt, 0);
+        ci.x = priv->current.x + dx * len / slen;
+        ci.y = priv->current.y + dy * len / slen;
+        priv->current = ci;
+        priv->speed = priv->config_speed
+                      + ((rand() % 5 + 1) * (rand() % 2 == 0 ? -1 : 1));  // a little random + or - 1 to 5 km/h
+        priv->height = priv->height
+                       + ((rand() % 50 + 1) * (rand() % 2 == 0 ? -1 : 1));  // a little random + or - 1 to 50 m
+        dbg(lvl_debug, "ci=0x%x,0x%x", ci.x, ci.y);
+        transform_to_geo(projection_mg, &ci, &priv->geo);
+        if (priv->valid != attr_position_valid_valid) {
+            priv->valid = attr_position_valid_valid;
+            callback_list_call_attr_0(priv->cbl, attr_position_valid);
+        }
+        callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
+        return;
+    }
+
+    /* The loop above only exits early when a step lands inside a segment, and
+     * that case has already returned. Reaching here means the whole remaining
+     * distance was consumed by whole waypoint hops, so this tick's distance is
+     * spent but the route may well continue. Only the cursor running off the end
+     * of the geometry means the destination is reached. */
+    if (priv->waypoint_index < (int)priv->waypoints->len - 1) {
+        transform_to_geo(projection_mg, &priv->current, &priv->geo);
+        if (priv->valid != attr_position_valid_valid) {
+            priv->valid = attr_position_valid_valid;
+            callback_list_call_attr_0(priv->cbl, attr_position_valid);
+        }
+        callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
+        return;
+    }
+
+    priv->waypoint_index = (int)priv->waypoints->len - 1;
+    transform_to_geo(projection_mg, &priv->current, &priv->geo);
+    priv->speed = 0;
+    dbg(lvl_debug, "destination reached");
+    if (priv->valid != attr_position_valid_valid) {
+        priv->valid = attr_position_valid_valid;
+        callback_list_call_attr_0(priv->cbl, attr_position_valid);
+    }
+    callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
 }
 
 void vehicle_demo_test_tick(struct vehicle *v) {
