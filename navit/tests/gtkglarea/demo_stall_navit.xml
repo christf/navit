@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE config SYSTEM "navit.dtd">
+<config xmlns:xi="http://www.w3.org/2001/XInclude">
+	<plugins>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}lib*.so" ondemand="no"/>
+		<plugin path="$NAVIT_LIBDIR/autoload/${NAVIT_LIBPREFIX}lib*.so"/>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}libbinding_dbus.so" active="no"/>
+		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}libgraphics_null.so" active="no"/>
+	</plugins>
+
+	<debug name="vehicle_demo" dbg_level="debug"/>
+	<debug name="segv" level="1"/>
+
+	<!-- The user reports the demo vehicle only stalls with follow="1" and
+	     orientation="-1" (course up, map rotates). Both are set here on purpose;
+	     override NAVIT_ORIENTATION / FOLLOW to check the other combinations. -->
+	<navit center="11.614722 52.107222" zoom="-9" tracking="1" orientation="ORIENTATION" drag_bitmap="0">
+		<graphics type="GRAPHICS_TYPE" w="800" h="600"/>
+
+		<gui type="internal" enabled="yes"><![CDATA[
+			<html>
+				<script>
+					navit.set_position("SLNG SLAT");
+					navit.set_destination("DLNG DLAT", "Lerchenwuhne 20");
+				</script>
+				<img src="gui_map"/>
+			</html>
+		]]></gui>
+
+		<vehicle name="Demo" profilename="car" enabled="yes" active="yes"
+		        source="demo://" speed="40" follow="FOLLOW"/>
+
+		<tracking cdf_histsize="0"/>
+
+		<vehicleprofile name="car" route_depth="18:25%" flags="0x4000000"
+		               flags_forward_mask="0x4040002" flags_reverse_mask="0x4040001"
+		               route_mode="0" static_speed="5" static_distance="25">
+			<roadprofile item_types="street_0,street_1_city,living_street,street_service,track_gravelled,track_unpaved,street_parking_lane" speed="10"/>
+			<roadprofile item_types="street_2_city,track_paved" speed="30"/>
+			<roadprofile item_types="street_3_city" speed="40"/>
+			<roadprofile item_types="street_4_city,highway_city" speed="60"/>
+			<roadprofile item_types="street_1_land" speed="60"/>
+			<roadprofile item_types="street_2_land" speed="65"/>
+			<roadprofile item_types="street_3_land" speed="70"/>
+			<roadprofile item_types="street_4_land,highway_land,street_n_lanes" speed="120"/>
+			<roadprofile item_types="ramp,ferry" speed="40"/>
+		</vehicleprofile>
+
+		<route destination_distance="50"/>
+
+		<mapset enabled="yes">
+			<map type="binfile" enabled="yes" data="/home/christof/nobackup/osm/sachsen-anhalt.bin"/>
+		</mapset>
+
+		<xi:include href="$NAVIT_SHAREDIR/navit_layout_*.xml"/>
+	</navit>
+</config>
