@@ -25,6 +25,8 @@
 #include "search.h"
 #include "track.h"
 #include "transform.h"
+#include "vehicle.h"
+#include "vehicle_demo.h"
 #include "vehicleprofile.h"
 
 extern void builtin_init(void);
@@ -1020,6 +1022,170 @@ static int scenario_transform_buf_overflow(void) {
     return 0;
 }
 
+/* The demo vehicle is supposed to advance along the route in one fixed step per
+ * timer tick (vehicle_demo.c: len = speed * interval / 1000 / 3.6 metres).
+ *
+ * It does not. vehicle_demo_timer() rebuilds the map_rect from scratch on every
+ * tick and re-seeks the first type_street_route item, so the walk always starts
+ * from the very first waypoint again. Nothing persists the position reached by
+ * the previous tick, so the step is recomputed from the same starting point
+ * forever. With the default 40km/h and 1s interval the step is 11m, while the
+ * leading stub segment of a route is shorter than that, so the
+ * "slen < len" branch never triggers and ci collapses onto pos: the vehicle
+ * reports the identical coordinate on every tick and never moves.
+ *
+ * In follow mode that means the scroll target is recomputed from an unchanged
+ * position every second, which is what makes the map stutter instead of
+ * tracking the vehicle. Drive the real demo vehicle and require it to make
+ * forward progress. */
+#define DEMO_TICKS 60
+
+/* Runs DEMO_TICKS timer ticks and reports how far the vehicle got. */
+static void demo_drive(struct vehicle *v, int *moved, int *stalls, double *total_m, double *max_back_m) {
+    int have_last = 0;
+    struct coord_geo last = {0, 0};
+
+    *moved = 0;
+    *stalls = 0;
+    *total_m = 0.0;
+    *max_back_m = 0.0;
+
+    for (int tick = 0; tick < DEMO_TICKS; tick++) {
+        vehicle_demo_test_tick(v);
+
+        struct attr a;
+        if (!vehicle_get_attr(v, attr_position_coord_geo, &a, NULL))
+            continue;
+        struct coord_geo now = *a.u.coord_geo;
+        if (!have_last) {
+            last = now;
+            have_last = 1;
+            continue;
+        }
+        if (now.lat == last.lat && now.lng == last.lng) {
+            (*stalls)++;
+        } else {
+            (*moved)++;
+            double d = mg_distance_m(geo_to_mg(last.lat, last.lng), geo_to_mg(now.lat, now.lng));
+            if (d < 0.0)
+                *max_back_m = MAX(*max_back_m, -d);
+            *total_m += d;
+        }
+        last = now;
+    }
+}
+
+static int scenario_demo_vehicle_progress(void) {
+    setup_world();
+
+    /* A vehicle with no route at all has nothing to follow, so it legitimately
+     * stays put. Check it survives that without inventing a position: a demo
+     * vehicle in a config with no destination must not wander off on its own. */
+    {
+        struct attr source = {attr_source};
+        source.u.str = "demo://";
+        struct attr *attrs[] = {&source, NULL};
+        struct vehicle *v = vehicle_new(NULL, attrs);
+        CHECK(v != NULL, "vehicle_new(demo://) failed");
+        if (v) {
+            int moved, stalls;
+            double total_m, max_back_m;
+            demo_drive(v, &moved, &stalls, &total_m, &max_back_m);
+            printf("demo vehicle (no route): %d ticks -> %d moved, %d stalled, %.0fm total\n", DEMO_TICKS, moved,
+                   stalls, total_m);
+            CHECK(total_m < 1.0, "demo vehicle without a route moved %.0fm, it should hold position", total_m);
+            vehicle_destroy(v);
+        }
+    }
+
+    /* The same vehicle on a real route: it must still make progress. */
+    struct path_info pi = {0};
+    struct route *r = calc_route(52.3902, 13.0602, 52.3978, 13.0718, car_profile, &pi);
+    CHECK(route_status_done(r), "car grid route status=%d", route_status_done(r));
+    {
+        struct attr source = {attr_source};
+        source.u.str = "demo://";
+        struct attr ra = {attr_route};
+        ra.u.route = r;
+        struct attr *attrs[] = {&source, &ra, NULL};
+        struct vehicle *v = vehicle_new(NULL, attrs);
+        CHECK(v != NULL, "vehicle_new(demo://) with route failed");
+        if (v) {
+            int moved, stalls;
+            double total_m, max_back_m;
+            demo_drive(v, &moved, &stalls, &total_m, &max_back_m);
+            printf("demo vehicle (routed): %d ticks -> %d moved, %d stalled, %.0fm total, %.1fm max backtrack\n",
+                   DEMO_TICKS, moved, stalls, total_m, max_back_m);
+            /* The vehicle is meant to drive the route, not sit on its first
+             * waypoint: 60 ticks at 40km/h is ~660m. */
+            CHECK(moved > 0, "demo vehicle on a route never moves (%d stalls in %d ticks)", stalls, DEMO_TICKS);
+            CHECK(total_m > 100.0, "demo vehicle only advanced %.0fm in %d ticks", total_m, DEMO_TICKS);
+            CHECK(max_back_m < 1.0, "demo vehicle moved backwards %.1fm", max_back_m);
+            vehicle_destroy(v);
+        }
+    }
+    route_destroy(r);
+    free_path_info(&pi);
+
+    /* route_get_map() caches its map per route object, so a reroute does not
+     * change the route or map pointer the vehicle holds. Caching the geometry
+     * must therefore not make the demo keep walking the stale path. */
+    {
+        struct path_info pi2 = {0};
+        struct route *r2 = calc_route(52.3902, 13.0602, 52.3978, 13.0718, car_profile, &pi2);
+        CHECK(route_status_done(r2), "first route status=%d", route_status_done(r2));
+        {
+            struct attr source = {attr_source};
+            source.u.str = "demo://";
+            struct attr ra = {attr_route};
+            ra.u.route = r2;
+            struct attr *attrs[] = {&source, &ra, NULL};
+            struct vehicle *v = vehicle_new(NULL, attrs);
+            CHECK(v != NULL, "vehicle_new(demo://) for reroute test failed");
+            if (v) {
+                int moved, stalls;
+                double total_m, max_back_m;
+                struct attr pos = {attr_position_coord_geo};
+                struct coord_geo before = {0, 0};
+                (void)before;
+                demo_drive(v, &moved, &stalls, &total_m, &max_back_m);
+                CHECK(vehicle_get_attr(v, attr_position_coord_geo, &pos, NULL), "reroute test: no position on leg 1");
+                before = *(struct coord_geo *)pos.u.coord_geo;
+
+                /* Same route object, different destination. */
+                struct coord c2 = geo_to_mg(52.3902, 13.0798);
+                struct pcoord p2 = {projection_mg, c2.x, c2.y};
+                route_set_destination(r2, &p2, 0);
+                CHECK(route_status_done(r2), "reroute status=%d", route_status_done(r2));
+
+                struct coord_geo after = {0, 0};
+                moved = stalls = 0;
+                total_m = max_back_m = 0.0;
+                demo_drive(v, &moved, &stalls, &total_m, &max_back_m);
+                CHECK(vehicle_get_attr(v, attr_position_coord_geo, &pos, NULL), "reroute test: no position on leg 2");
+                after = *(struct coord_geo *)pos.u.coord_geo;
+                /* It has to keep moving after a reroute, and it has to end up
+                 * nearer the NEW destination. That only holds if the new
+                 * geometry was loaded: keeping the stale path ends the vehicle
+                 * at the old destination instead. */
+                double d_new = mg_distance_m(geo_to_mg(after.lat, after.lng), geo_to_mg(52.3902, 13.0798));
+                double d_old = mg_distance_m(geo_to_mg(after.lat, after.lng), geo_to_mg(52.3978, 13.0718));
+                printf("demo vehicle (rerouted): leg2 ended %.0fm from new dest, %.0fm from old dest\n", d_new, d_old);
+                CHECK(moved > 0, "demo vehicle stopped moving after a reroute (%d stalls in %d ticks)", stalls,
+                      DEMO_TICKS);
+                CHECK(d_new < d_old,
+                      "after reroute the vehicle is %.0fm from the new but %.0fm from the old destination,"
+                      " the stale path was reused",
+                      d_new, d_old);
+                vehicle_destroy(v);
+            }
+        }
+        route_destroy(r2);
+        free_path_info(&pi2);
+    }
+    return 0;
+}
+
 struct scenario {
     const char *name;
     int (*fn)(void);
@@ -1038,6 +1204,7 @@ static struct scenario scenarios[] = {
     {"recenter_jump_3d",       scenario_recenter_jump_3d      },
     {"polygon_flicker",        scenario_polygon_flicker       },
     {"transform_buf_overflow", scenario_transform_buf_overflow},
+    {"demo_vehicle_progress",  scenario_demo_vehicle_progress },
 };
 
 int main(int argc, char **argv) {

@@ -5,6 +5,7 @@ if(NOT USE_PLUGINS)
         -Wl,--start-group ${NAVIT_LIBNAME} ${MODULES_NAME} ${NAVIT_SUPPORT_LIBS} navit_deps
         -Wl,--end-group)
     target_link_libraries(navit_core_test PRIVATE navit_config navit_compile_options)
+    target_include_directories(navit_core_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../vehicle/demo")
 
     set(FIXTURE_BIN "${CMAKE_CURRENT_BINARY_DIR}/fixture.bin")
     add_custom_command(

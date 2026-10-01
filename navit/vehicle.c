@@ -116,6 +116,12 @@ static void vehicle_log_binfile(struct vehicle *this_, struct log *log);
 static int vehicle_add_log(struct vehicle *this_, struct log *log);
 static char *vehicle_synthesize_nmea(struct vehicle *this_);
 
+/* Accessor for modules that need to hand their private state back to vehicle.c
+ * helpers, and for the demo module's test seam (see navit/vehicle/demo). */
+struct vehicle_priv *vehicle_get_priv(struct vehicle *this_) {
+    return this_->priv;
+}
+
 /**
  * @brief Creates a new vehicle
  *
