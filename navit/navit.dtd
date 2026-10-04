@@ -129,7 +129,17 @@
 <!ATTLIST osd type CDATA #REQUIRED>
 <!ATTLIST osd x CDATA #IMPLIED>
 <!ATTLIST osd y CDATA #IMPLIED>
+<!ATTLIST osd w CDATA #IMPLIED>
+<!ATTLIST osd h CDATA #IMPLIED>
 <!ATTLIST osd src CDATA #IMPLIED>
+<!ATTLIST osd font CDATA #IMPLIED>
+<!ATTLIST osd font_size CDATA #IMPLIED>
+<!ATTLIST osd background_color CDATA #IMPLIED>
+<!ATTLIST osd text_color CDATA #IMPLIED>
+<!ATTLIST osd foreground_color CDATA #IMPLIED>
+<!ATTLIST osd osd_configuration CDATA #IMPLIED>
+<!ATTLIST osd enable_expression CDATA #IMPLIED>
+<!ATTLIST osd accesskey CDATA #IMPLIED>
 <!ATTLIST osd command CDATA #IMPLIED>
 <!ATTLIST osd data CDATA #IMPLIED>
 <!ELEMENT itemgra (polygon|polyline|text|circle|icon|image|arrows|spikes)*>
