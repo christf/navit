@@ -4200,20 +4200,6 @@ static void osd_scale_init(struct osd_priv_common *opc, struct navit *nav) {
 
     struct graphics *gra = navit_get_graphics(nav);
 
-    struct color transparent = {0, 0, 0, 0};
-
-    opc->osd_item.color_fg.r = 0xffff - opc->osd_item.text_color.r;
-    opc->osd_item.color_fg.g = 0xffff - opc->osd_item.text_color.g;
-    opc->osd_item.color_fg.b = 0xffff - opc->osd_item.text_color.b;
-    opc->osd_item.color_fg.a = 0xffff - opc->osd_item.text_color.a;
-
-    if (COLOR_IS_SAME(opc->osd_item.color_fg, transparent)) {
-        opc->osd_item.color_fg.r = 0x1111;
-        opc->osd_item.color_fg.g = 0x1111;
-        opc->osd_item.color_fg.b = 0x1111;
-        opc->osd_item.color_fg.a = 0x1111;
-    }
-
     osd_set_std_graphic(nav, &opc->osd_item, (struct osd_priv *)opc);
 
     this->draw_cb = callback_new_attr_2(callback_cast(osd_scale_draw), attr_postdraw, opc, nav);
