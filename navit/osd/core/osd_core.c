@@ -3911,7 +3911,6 @@ static struct osd_priv *osd_volume_new(struct navit *nav, struct osd_methods *me
 
 struct osd_scale {
     struct callback *draw_cb, *navit_init_cb;
-    struct graphics_gc *black;
 };
 
 static int round_to_nice_value(double value) {
