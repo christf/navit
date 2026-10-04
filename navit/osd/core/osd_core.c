@@ -3913,7 +3913,6 @@ static struct osd_priv *osd_volume_new(struct navit *nav, struct osd_methods *me
 }
 
 struct osd_scale {
-    int use_overlay;
     struct callback *draw_cb, *navit_init_cb;
 };
 
@@ -3931,8 +3930,6 @@ static int round_to_nice_value(double value) {
 }
 
 static void osd_scale_draw(struct osd_priv_common *opc, struct navit *nav, struct vehicle *unused) {
-    struct osd_scale *this = (struct osd_scale *)opc->data;
-
     struct point item_pos, scale_line_start, scale_line_end;
     struct point p[10], bbox[4];
     struct attr transformation, imperial_attr;
