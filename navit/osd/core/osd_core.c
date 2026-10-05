@@ -4064,7 +4064,6 @@ static struct osd_priv *osd_scale_new(struct navit *nav, struct osd_methods *met
         }
     }
 
-
     navit_add_callback(nav, this->navit_init_cb =
                                 callback_new_attr_1(callback_cast(osd_scale_init), attr_graphics_ready, opc));
     meth->destroy = osd_scale_destroy;
