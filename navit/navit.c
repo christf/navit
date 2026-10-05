@@ -87,7 +87,7 @@ struct vehicle;
 #define PAN_PREFETCH_SCREEN_DIVISOR 2
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
-/* Fraction of the render margin beyond which the map is re-centered. */
+/* Fraction of the prefetch margin beyond which the map is re-centered. */
 #define RECENTER_THRESHOLD_FRACTION 3
 #define RECENTER_THRESHOLD_DIVISOR 4
 
@@ -425,6 +425,14 @@ static int navit_pan_prefetch_margin(struct navit *this_) {
     return this_->render_margin > half_screen ? this_->render_margin : half_screen;
 }
 
+/* Drag distance beyond which the map is re-centered. Bounded by render_margin, the only headroom a
+ * driver's offscreen surface provides beyond the viewport: presenting the frame at a larger offset
+ * would slide it off the surface and leave the window showing the background colour. A fraction of
+ * it keeps margin for the motion events that arrive before the re-centering rebuild lands. */
+static int navit_pan_recenter_threshold(struct navit *this_) {
+    return this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
+}
+
 /* cb is non-NULL while a mid-drag rebuild is in flight. The drag offset has to stay applied in
  * that case: the surface still holds the frame drawn before the recenter, so presenting it at
  * offset zero would show it displaced until the rebuilt frame lands. cb releases the offset once
@@ -609,7 +617,7 @@ static int navit_animation_tick(void *data) {
         }
         vehicle_get_mapdrag_offset(nv->vehicle, &offset);
         {
-            int margin_threshold = this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
+            int margin_threshold = navit_pan_recenter_threshold(this_);
             int abs_x = offset.x < 0 ? -offset.x : offset.x;
             int abs_y = offset.y < 0 ? -offset.y : offset.y;
             if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
@@ -1069,7 +1077,7 @@ static void navit_motion_timeout(struct navit *this_) {
         if (graphics_draw_drag(this_->gra, &point)) {
             int abs_x = point.x < 0 ? -point.x : point.x;
             int abs_y = point.y < 0 ? -point.y : point.y;
-            int margin_threshold = this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
+            int margin_threshold = navit_pan_recenter_threshold(this_);
             /* While a rebuild is in flight the surface holds the frame drawn before the last
              * recenter, so it must keep tracking the pointer as-is. Recentering again would fold
              * the same drag into the transformation twice and request a rebuild that the busy
