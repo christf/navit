@@ -474,6 +474,13 @@ void navit_draw(struct navit *this_) {
         navit_draw_async(this_, 0);
 }
 
+/* True while a drag gesture has started moving. Foreign rebuilds then hand back the main thread
+ * between their idle chunks (see graphics do_draw): running them mid-gesture would steal time
+ * from the pan. */
+int navit_gesture_active(struct navit *this_) {
+    return this_->button_pressed && this_->moved;
+}
+
 static int navit_gui_menu_active(struct navit *this_) {
     struct attr attr;
     if (this_->gui && gui_get_attr(this_->gui, attr_active, &attr, NULL))

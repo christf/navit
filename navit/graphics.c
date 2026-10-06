@@ -3508,6 +3508,13 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
     enum projection pro;
     int need_free = 0;
 
+    /* Yield the idle chunks of a rebuild the gesture did not request: they run on the shared main
+     * thread and would steal time from the drag. The gesture's own rebuild carries a callback and
+     * keeps running, as it has to complete to release the drag offset. The chunks resume once the
+     * gesture ends and the idle event fires again. */
+    if (!cancel && !displaylist->cb && displaylist->navit && navit_gesture_active(displaylist->navit))
+        return;
+
     if (max < ALLOCA_COORD_LIMIT) {
         ca = g_alloca(sizeof(struct coord) * max);
         need_free = 0;
