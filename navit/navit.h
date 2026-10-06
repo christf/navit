@@ -66,6 +66,7 @@ struct tracking *navit_get_tracking(struct navit *this_);
 char *navit_get_user_data_directory(int create);
 void navit_draw_async(struct navit *this_, int async);
 void navit_draw(struct navit *this_);
+int navit_gesture_active(struct navit *this_);
 int navit_get_ready(struct navit *this_);
 void navit_draw_displaylist(struct navit *this_);
 void navit_handle_resize(struct navit *this_, int w, int h);
