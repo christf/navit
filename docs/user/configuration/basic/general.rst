@@ -41,6 +41,7 @@ Coordinates can be written in different formats; see :doc:`Coordinate format </u
 To determine a specific latitude and longitude for your location you can use http://itouchmap.com/latlong.html.
 Usually, changing the "center" setting is not necessary, since it is only used during the first start.
 On subsequent starts, Navit will remember the last map position (stored in "center.txt") and ignore the "center" setting.
+The vehicle profile that was active when Navit was closed is stored in the same file and restored on startup.
 
 When Navit starts, it will display the map at a pre-defined **zoom**. The default zoom level is 256. The lower the value, the closer you will be zoomed in.
 
