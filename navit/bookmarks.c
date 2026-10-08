@@ -29,6 +29,7 @@
 #include "projection.h"
 #include "transform.h"
 #include "util.h"
+#include "vehicleprofile.h"
 #include <errno.h>
 #include <glib.h>
 #include <stdio.h>
@@ -419,13 +420,18 @@ void bookmarks_set_center_from_file(struct bookmarks *this_, char *file) {
         return;
     if (getline(&line, &line_size, f) < 0)
         dbg(lvl_error, "Error on getline (%s)", strerror(errno));
-    fclose(f);
     if (line) {
         center = transform_center(this_->trans);
         pro = transform_get_projection(this_->trans);
         coord_parse(g_strchomp(line), pro, center);
         free(line);
+        line = NULL;
+        line_size = 0;
+        if (getline(&line, &line_size, f) > 0)
+            navit_restore_vehicleprofile(this_->parent->u.navit, g_strchomp(line));
+        free(line);
     }
+    fclose(f);
     return;
 }
 
@@ -433,12 +439,17 @@ void bookmarks_write_center_to_file(struct bookmarks *this_, char *file) {
     FILE *f;
     enum projection pro;
     struct coord *center;
+    struct vehicleprofile *prof;
+    char *name;
 
     f = fopen(file, "w+");
     if (f) {
         center = transform_center(this_->trans);
         pro = transform_get_projection(this_->trans);
         coord_print(pro, center, f);
+        prof = navit_get_vehicleprofile(this_->parent->u.navit);
+        if (prof && (name = vehicleprofile_get_name(prof)))
+            fprintf(f, "%s\n", name);
         fclose(f);
     } else {
         perror(file);
