@@ -4225,6 +4225,29 @@ int navit_set_vehicleprofile_name(struct navit *this_, char *name) {
     return 0;
 }
 
+/**
+ * @brief Activate a vehicle profile that was persisted together with the map center.
+ *
+ * The profile must also be applied to the active vehicle, otherwise the next
+ * navit_set_vehicle() re-applies the profilename from the configuration.
+ *
+ * @param this_ The navit instance
+ * @param name Name of the vehicle profile to restore
+ * @return True if a profile of that name exists and was activated
+ */
+int navit_restore_vehicleprofile(struct navit *this_, char *name) {
+    struct attr profilename;
+
+    if (!name || !navit_set_vehicleprofile_name(this_, name))
+        return 0;
+    if (this_->vehicle) {
+        profilename.type = attr_profilename;
+        profilename.u.str = name;
+        vehicle_set_attr(this_->vehicle->vehicle, &profilename);
+    }
+    return 1;
+}
+
 static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv) {
     struct attr attr;
     this_->vehicle = nv;
@@ -4720,6 +4743,13 @@ void navit_destroy(struct navit *this_) {
     navigation_destroy_map(this_->navigation);
     tracking_destroy_map(this_->tracking);
 
+    if (this_->bookmarks) {
+        char *center_file = bookmarks_get_center_file(TRUE);
+        bookmarks_write_center_to_file(this_->bookmarks, center_file);
+        g_free(center_file);
+        bookmarks_destroy(this_->bookmarks);
+    }
+
     attr_list_free(this_->attrs);
     callback_list_destroy(this_->attr_cbl);
     this_->navigation = NULL;
@@ -4727,13 +4757,6 @@ void navit_destroy(struct navit *this_) {
     this_->tracking = NULL;
 
     navit_destroy_global_cmd_state();
-
-    if (this_->bookmarks) {
-        char *center_file = bookmarks_get_center_file(TRUE);
-        bookmarks_write_center_to_file(this_->bookmarks, center_file);
-        g_free(center_file);
-        bookmarks_destroy(this_->bookmarks);
-    }
 
     if (this_->route) {
         route_destroy(this_->route);
