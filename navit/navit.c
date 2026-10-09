@@ -3981,6 +3981,10 @@ void navit_destroy(struct navit *this_) {
     graphics_draw_cancel(this_->gra, this_->displaylist);
 
     navit_shutdown_traffic(this_);
+
+    if (this_->route)
+        route_cancel_graph_build(this_->route);
+
     navit_destroy_traffic_maps(this_);
 
     callback_list_call_attr_1(this_->attr_cbl, attr_destroy, this_);
