@@ -4540,6 +4540,11 @@ void route_init(void) {
     plugin_register_category_map("route_graph", route_graph_map_new);
 }
 
+void route_cancel_graph_build(struct route *this_) {
+    if (this_->graph)
+        route_graph_build_done(this_->graph, 1);
+}
+
 void route_destroy(struct route *this_) {
     this_->refcount++; /* avoid recursion */
     route_path_destroy(this_->path2, 1);

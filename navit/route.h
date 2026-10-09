@@ -134,6 +134,7 @@ struct attr_iter *route_attr_iter_new(void);
 void route_attr_iter_destroy(struct attr_iter *iter);
 int route_get_attr(struct route *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 void route_init(void);
+void route_cancel_graph_build(struct route *this_);
 void route_destroy(struct route *this_);
 /* end of prototypes */
 #ifdef __cplusplus
