@@ -512,7 +512,12 @@ static int lzma_uncompress_int(Bytef *dest, uLongf *destLen, const Bytef *source
 #endif
 }
 
+
 unsigned char *file_data_read_method(struct file *file, long long offset, int size, int size_uncomp, int method) {
+
+unsigned char *file_data_read_compressed_method(struct file *file, long long offset, int size, int size_uncomp,
+                                                int method) {
+
     void *ret;
     char *buffer = 0;
     uLongf destLen = size_uncomp;
@@ -533,9 +538,12 @@ unsigned char *file_data_read_method(struct file *file, long long offset, int si
         ret = NULL;
     } else {
         switch (method) {
+
         case ZIP_COMPRESSION_STORED:
             memcpy(ret, buffer, size);
             break;
+
+
         case ZIP_COMPRESSION_DEFLATE:
             if (uncompress_int(ret, &destLen, (Bytef *)buffer, size) != Z_OK) {
                 dbg(lvl_error, "uncompress failed");
@@ -562,6 +570,10 @@ unsigned char *file_data_read_method(struct file *file, long long offset, int si
     g_free(buffer);
 
     return ret;
+}
+
+unsigned char *file_data_read_compressed(struct file *file, long long offset, int size, int size_uncomp) {
+    return file_data_read_compressed_method(file, offset, size, size_uncomp, ZIP_COMPRESSION_DEFLATE);
 }
 
 void file_data_free(struct file *file, unsigned char *data) {
@@ -806,6 +818,21 @@ void file_init(void) {
 #ifdef CACHE_SIZE
     file_name_hash = g_hash_table_new(g_str_hash, g_str_equal);
     file_cache = cache_new(sizeof(struct file_cache_id), CACHE_SIZE);
+
+#    ifndef HAVE_API_WIN32_BASE
+    {
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long page_size = sysconf(_SC_PAGESIZE);
+        if (pages > 0 && page_size > 0) {
+            int cache_size = (int)((long long)pages * page_size / 100);
+            if (cache_size < 4 * 1024 * 1024)
+                cache_size = 4 * 1024 * 1024;
+            if (cache_size > 64 * 1024 * 1024)
+                cache_size = 64 * 1024 * 1024;
+            cache_resize(file_cache, cache_size);
+        }
+    }
+#    endif
 #endif
     if (sizeof(off_t) < 8)
         dbg(lvl_error, "Maps larger than 2GB are not supported by this binary, sizeof(off_t)=%zu", sizeof(off_t));
