@@ -278,7 +278,6 @@ struct gui_methods gui_gtk_methods = {
     NULL,  // gui_gtk_run_main_loop
     gui_gtk_datawindow_new,
     gui_gtk_add_bookmark,
-    NULL,  // gui_gtk_show_coord_actions
 };
 
 static gboolean gui_gtk_delete(GtkWidget *widget, GdkEvent *event, struct navit *nav) {

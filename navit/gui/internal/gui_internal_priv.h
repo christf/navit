@@ -158,7 +158,6 @@ struct gui_priv {
     int town_use_postal;
     int search_active;
     int search_frame;
-    struct callback *deferred_exec_at_init; /*!< A callback to be run when internal GUI has finished initializing */
 };
 
 struct menu_data {
