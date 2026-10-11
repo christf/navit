@@ -28,7 +28,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2025-06-28 13:05+0000\n"
 "Last-Translator: Adolfo Jayme Barrientos <fitojb@ubuntu.com>\n"
 "Language-Team: Spanish <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -1944,6 +1944,9 @@ msgstr "Definir como origen (y desactivar el vehículo)"
 
 msgid "POIs"
 msgstr "PDIs"
+
+msgid "Copy position"
+msgstr ""
 
 msgid "View on map"
 msgstr "Ver en el mapa"

@@ -25,7 +25,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2026-04-28 08:10+0000\n"
 "Last-Translator: adevoss <arnobugs@hotmail.com>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -1946,6 +1946,9 @@ msgstr "zet positie en deactiveer voertuig"
 
 msgid "POIs"
 msgstr "Nuttige punten"
+
+msgid "Copy position"
+msgstr ""
 
 msgid "View on map"
 msgstr "Bekijk op de kaart"
