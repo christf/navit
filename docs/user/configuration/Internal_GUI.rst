@@ -71,6 +71,36 @@ your ``PATH`` that opens the URL passed to it in a browser, for example:
    #!/bin/bash
    xdg-open "$@"
 
+.. _internal_gui_position_menu_flags:
+
+Position context menu flags
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``position(coordinates, label, flags)`` command (used e.g. on the Map
+Point and Vehicle Position menus) shows a context menu for the given
+position. The third argument is a bit mask selecting the entries of that
+menu:
+
+-  1: "Streets"
+-  2: "House numbers"
+-  4: "View in Browser", "View Attributes"
+-  8: "Set as dest."
+-  16: "Set as pos."
+-  32: "Add as bookm."
+-  64: "POIs"
+-  128: "View on Map"
+-  256: POIs around this point, "Drop search results from the map"
+-  512: "Cut/Copy... bookmark"
+-  1024: Jump to the attributes of the top item within the configured
+  radius of the point (implies 256)
+-  2048: "Show search results on the map"
+-  4096: "Copy position"
+
+With flag ``4096`` the menu offers a **Copy position** entry that writes
+a ``geo:`` URI for the point to the system clipboard (Requires a graphics
+backend supporting clipboard access, e.g. GTK, Qt, SDL2, Win32 or
+Android).
+
 .. _internal_gui_keyboard_operation:
 
 Operation with keyboard or rotary encoder
@@ -457,7 +487,7 @@ This configuration is optimized for the small screens of netbooks:
 
                <img src='gui_bookmark' onclick='bookmarks()'><text>Bookmarks</text></img>
                <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256|1024)'><script>write(click_coord_geo)</script></img>
-               <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256)'><script>write(position_coord_geo)</script></img>
+               <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256|4096)'><script>write(position_coord_geo)</script></img>
                <img src='gui_town' onclick='town()'><text>Town</text></img>
 
            </a>
@@ -638,8 +668,8 @@ In the **Setup-Menu** you can:
    <a name='Main Menu'><text>Main menu</text>
        <img src='gui_bookmark' onclick='bookmarks()'><text>Bookmarks</text></img>
        <img src='gui_town' onclick='town()'><text>Town</text></img>
-       <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256)'><script>write(click_coord_geo)</script></img>
-       <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256)'><script>write(position_coord_geo)</script></img>
+       <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256|4096)'><script>write(click_coord_geo)</script></img>
+       <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256|4096)'><script>write(position_coord_geo)</script></img>
        <img src='gui_quit' onclick='quit()'><text>Quit</text></img>
        <a href='#Tuning'><img src='gui_arrow_right'><text>Tuning</text></img></a>
    </a>
@@ -713,11 +743,11 @@ conditional items when not in use.
 
        <img src='gui_bookmark' onclick='bookmarks()'><text>Bookmarks</text></img>
 
-       <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256)'><text>Map
+       <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256|4096)'><text>Map
                                                                                                                                            Position</text></img>
        <img cond='!click_coord_geo' src='heliport'><text></text></img>
 
-       <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256)'><text>Vehicle
+       <img cond='position_coord_geo' src='gui_vehicle' onclick='position(position_coord_geo,_("Vehicle Position"),8|32|64|128|256|4096)'><text>Vehicle
                                                                                                                                            Position</text></img>
        <img cond='!position_coord_geo' src='heliport'><text></text></img>
 
@@ -796,7 +826,7 @@ See also: :doc:`OSD Layouts </user/configuration/OSD_Layouts>`.
                    <html>
                    <a name='Main Menu'><text>Main menu</text>
              <img src='gui_town' onclick='town()'><text>Town</text></img>
-             <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256)'><script>write(click_coord_geo)</script></img>
+             <img cond='click_coord_geo' src='gui_map' onclick='position(click_coord_geo,_("Map Point"),8|16|32|64|256|4096)'><script>write(click_coord_geo)</script></img>
                        <img src='gui_bookmark' onclick='bookmarks()'><text>Bookmarks</text></img>
                        <img cond='flags&amp;2' src='gui_map' onclick='back_to_map()'><text>Show Map</text></img>
                        <a href='#Settings'><img src='gui_settings'><text>Settings</text></img></a>
