@@ -12,3 +12,10 @@ First off we have APIs (application programming interface) for other languages
    integrations/dbus
    integrations/python
    integrations/windows
+
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Desktop
+
+   integrations/geo
