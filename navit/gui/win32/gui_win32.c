@@ -543,7 +543,6 @@ struct gui_methods win32_gui_methods = {
     NULL,  // win32_gui_run_main_loop
     NULL,  // win32_gui_datawindow_new,
     win32_gui_add_bookmark,
-    NULL,  // win32_gui_show_coord_actions
 };
 
 static struct gui_priv *win32_gui_new(struct navit *nav, struct gui_methods *meth, struct attr **attrs) {
