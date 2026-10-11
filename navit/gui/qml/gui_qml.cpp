@@ -380,7 +380,6 @@ struct gui_methods gui_qml_methods = {
     NULL,
     NULL,
     NULL,
-    NULL,
     gui_qml_get_attr,
     NULL,
     gui_qml_set_attr  //
