@@ -171,6 +171,7 @@ struct graphics_methods {
     void (*clear_clip)(struct graphics_priv *gr);
     int (*scroll)(struct graphics_priv *gr, int dx, int dy);
     void (*freeze_display_rotation)(struct graphics_priv *gr);
+    int (*set_clipboard)(struct graphics_priv *gr, const char *text);
 };
 
 struct graphics_font_methods {
@@ -287,6 +288,14 @@ void graphics_draw_image(struct graphics *this_, struct graphics_gc *gc, struct 
 int graphics_draw_drag(struct graphics *this_, struct point *p);
 void graphics_set_display_rotation(struct graphics *this_, double angle_degrees, int center_x, int center_y);
 void graphics_freeze_display_rotation(struct graphics *this_);
+int graphics_set_clipboard(struct graphics *this_, const char *text);
+/**
+ * @brief Returns whether the graphics backend supports copying text to the clipboard.
+ *
+ * @param this_ The graphics instance
+ * @return 1 if the backend implements set_clipboard(), 0 otherwise
+ */
+int graphics_clipboard_supported(struct graphics *this_);
 void graphics_background_gc(struct graphics *this_, struct graphics_gc *gc);
 void graphics_draw_text_std(struct graphics *this_, int text_size, char *text, struct point *p);
 char *graphics_icon_path(const char *icon);

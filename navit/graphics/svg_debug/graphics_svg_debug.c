@@ -490,6 +490,13 @@ static void svg_debug_image_free(struct graphics_priv *gr, struct graphics_image
     g_free(img);
 }
 
+static int svg_debug_set_clipboard(struct graphics_priv *gr, const char *text) {
+    if (gr->proxy_graphics_methods->set_clipboard) {
+        return gr->proxy_graphics_methods->set_clipboard(gr->proxy_priv, text);
+    }
+    return 0;
+}
+
 static struct graphics_methods graphics_methods = {
     .graphics_destroy = svg_debug_graphics_destroy,
     .draw_mode = svg_debug_draw_mode,
@@ -524,6 +531,8 @@ static struct graphics_methods graphics_methods = {
     .set_clip_rects = NULL,
     .clear_clip = NULL,
     .scroll = NULL,
+    .freeze_display_rotation = NULL,
+    .set_clipboard = svg_debug_set_clipboard,
 };
 
 static struct graphics_priv *graphics_svg_debug_new(struct navit *nav, struct graphics_methods *meth,

@@ -29,6 +29,8 @@
 #include "graphics_qt_qpainter.h"
 #include "RenderArea.h"
 
+#include <QClipboard>
+
 // ##############################################################################################################
 // # Description: RenderArea (QWidget) class for the main window (map, menu, ...)
 // # Comment:
@@ -630,6 +632,15 @@ static int set_attr(struct graphics_priv *gr, struct attr *attr) {
     return 1;
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+    QClipboard *clipboard = QApplication::clipboard();
+    if (clipboard == NULL)
+        return 0;
+    clipboard->setText(QString::fromUtf8(text));
+    return 1;
+}
+
 // ##############################################################################################################
 // # Description:
 // # Comment:
@@ -657,15 +668,17 @@ static struct graphics_methods graphics_methods = {
     overlay_disable,
     NULL,
     set_attr,
-    NULL, /* show_native_keyboard */
-    NULL, /* hide_native_keyboard */
-    NULL, /* get_dpi */
-    NULL, /* draw_polygon_with_holes */
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* show_native_keyboard */
+    NULL,          /* hide_native_keyboard */
+    NULL,          /* get_dpi */
+    NULL,          /* draw_polygon_with_holes */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 // ##############################################################################################################

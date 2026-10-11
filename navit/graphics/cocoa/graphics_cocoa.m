@@ -623,6 +623,25 @@ overlay_disable(struct graphics_priv *gr, int disabled)
 	gr->overlay_disabled=disabled;
 }
 
+static int
+set_clipboard(struct graphics_priv *gr, const char *text)
+{
+	NSString *string;
+
+	(void)gr;
+	string=[NSString stringWithUTF8String:text];
+	if (!string)
+		return 0;
+#if USE_UIKIT
+	[UIPasteboard generalPasteboard].string=string;
+	return 1;
+#else
+	NSPasteboard *pasteboard=[NSPasteboard generalPasteboard];
+	[pasteboard clearContents];
+	return [pasteboard setString:string forType:NSPasteboardTypeString];
+#endif
+}
+
 static struct graphics_methods graphics_methods = {
 	NULL, /* graphics_destroy, */
 	draw_mode,
@@ -654,6 +673,8 @@ static struct graphics_methods graphics_methods = {
 	NULL, /* set_clip_rects */
 	NULL, /* clear_clip */
 	NULL, /* scroll */
+	NULL, /* freeze_display_rotation */
+	set_clipboard, /* set_clipboard */
 };
 
 
