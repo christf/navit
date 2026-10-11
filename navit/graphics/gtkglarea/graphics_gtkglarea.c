@@ -1390,6 +1390,16 @@ static void set_display_rotation(struct graphics_priv *gr, double angle_degrees,
     gr->rotation_center_y = center_y;
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    GdkDisplay *display;
+    (void)gr;
+    display = gdk_display_get_default();
+    if (!display)
+        return 0;
+    gdk_clipboard_set_text(gdk_display_get_clipboard(display), text);
+    return 1;
+}
+
 /* ----------------------------------------------------------------
  * DPI
  * ---------------------------------------------------------------- */
@@ -2416,13 +2426,12 @@ static struct graphics_methods graphics_methods = {
     get_dpi,                 /* get_dpi */
     draw_polygon_with_holes, /* draw_polygon_with_holes */
     set_display_rotation,    /* set_display_rotation */
-    /* No set_clip/clear_clip/scroll: navit's scroll+clip recenter path replays the whole display
-     * list on the calling thread (seconds at dense zoom levels), while the async rebuild replays
-     * it on a worker. Returning NULL makes graphics_scroll() fail and navit use that path. */
     NULL, /* set_clip */
     NULL, /* set_clip_rects */
     NULL, /* clear_clip */
     NULL, /* scroll */
+    NULL, /* freeze_display_rotation */
+    set_clipboard,           /* set_clipboard */
 };
 
 static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_methods *meth) {

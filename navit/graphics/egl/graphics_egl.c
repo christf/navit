@@ -986,6 +986,11 @@ static void overlay_resize(struct graphics_priv *gr, struct point *p, int w, int
 static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphics_methods *meth, struct point *p,
                                          int w, int h, int wraparound);
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+    return SDL_SetClipboardText(text) == 0;
+}
+
 static struct graphics_methods graphics_methods = {
     graphics_destroy,
     draw_mode,
@@ -1007,16 +1012,18 @@ static struct graphics_methods graphics_methods = {
     NULL,
     overlay_disable,
     overlay_resize,
-    NULL, /* set_attr, */
-    NULL, /* show_native_keyboard */
-    NULL, /* hide_native_keyboard */
-    NULL, /* get_dpi */
-    NULL, /* draw_polygon_with_holes */
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* set_attr, */
+    NULL,          /* show_native_keyboard */
+    NULL,          /* hide_native_keyboard */
+    NULL,          /* get_dpi */
+    NULL,          /* draw_polygon_with_holes */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 static struct graphics_priv *graphics_opengl_new_helper(struct graphics_methods *meth) {

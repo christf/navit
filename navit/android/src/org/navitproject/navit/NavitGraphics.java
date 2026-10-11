@@ -22,6 +22,8 @@ package org.navitproject.navit;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
@@ -814,6 +816,19 @@ class NavitGraphics {
     @SuppressWarnings("unused")
     void setPaddingChangedCallback(long id) {
         mPaddingChangedCallbackID = id;
+    }
+
+    @SuppressWarnings("unused")
+    void setClipboard(final String text) {
+        mActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                final ClipboardManager clipboard =
+                        (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Navit", text));
+            }
+        });
     }
 
     @SuppressWarnings("unused")

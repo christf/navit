@@ -769,6 +769,16 @@ static void clear_clip(struct graphics_priv *gr) {
     cairo_restore(gr->cairo);
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    GdkDisplay *display;
+    (void)gr;
+    display = gdk_display_get_default();
+    if (!display)
+        return 0;
+    gdk_clipboard_set_text(gdk_display_get_clipboard(display), text);
+    return 1;
+}
+
 static int scroll_surface(struct graphics_priv *gr, int dx, int dy) {
     int sw = gr->width + 2 * gr->render_margin;
     int sh = gr->height + 2 * gr->render_margin;
@@ -1477,6 +1487,7 @@ static struct graphics_methods graphics_methods = {
     clear_clip,
     scroll_surface,
     freeze_display_rotation,
+    set_clipboard,
 };
 
 static struct graphics_priv *graphics_gtk_drawing_area_new_helper(struct graphics_methods *meth) {

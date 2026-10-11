@@ -1582,6 +1582,39 @@ static void get_text_bbox(struct graphics_priv *gr, struct graphics_font_priv *f
     ret[3].y = -yMin;
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    HGLOBAL hMem;
+    WCHAR *mem;
+    int len;
+
+    (void)gr;
+    len = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+    if (len <= 0)
+        return 0;
+    hMem = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(WCHAR));
+    if (!hMem)
+        return 0;
+    mem = GlobalLock(hMem);
+    if (!mem) {
+        GlobalFree(hMem);
+        return 0;
+    }
+    MultiByteToWideChar(CP_UTF8, 0, text, -1, mem, len);
+    GlobalUnlock(hMem);
+
+    if (!OpenClipboard(NULL)) {
+        GlobalFree(hMem);
+        return 0;
+    }
+    if (!EmptyClipboard() || !SetClipboardData(CF_UNICODETEXT, hMem)) {
+        CloseClipboard();
+        GlobalFree(hMem);
+        return 0;
+    }
+    CloseClipboard();
+    return 1;
+}
+
 static struct graphics_methods graphics_methods = {
     graphics_destroy,
     draw_mode,
@@ -1612,11 +1645,13 @@ static struct graphics_methods graphics_methods = {
     NULL, /* hide_native_keyboard */
     NULL, /* get dpi */
     draw_polygon_with_holes,
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *meth) {

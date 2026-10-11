@@ -39,6 +39,7 @@ extern "C" {
 
 #include "event_qt5.h"
 #include "graphics_qt5.h"
+#include <QClipboard>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QFile>
@@ -865,6 +866,15 @@ static navit_float get_dpi(struct graphics_priv *gr) {
     return (navit_float)dpi;
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    if (clipboard == NULL)
+        return 0;
+    clipboard->setText(QString::fromUtf8(text));
+    return 1;
+}
+
 static struct graphics_methods graphics_methods = {
     graphics_destroy,
     draw_mode,
@@ -891,11 +901,13 @@ static struct graphics_methods graphics_methods = {
     NULL,  // hide_native_keyboard
     get_dpi,
     draw_polygon_with_holes,
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 /* create new graphics context on given context */
