@@ -107,6 +107,7 @@ struct traffic_shared_priv {
     GList *messages;                     /**< Currently active messages */
     GList *message_queue;                /**< Queued messages, waiting to be processed */
     GList *deferred_segments;            /**< Messages awaiting segment addition via idle callback */
+    GList *deferred_display;             /**< Messages awaiting display-only segment addition via idle callback */
     struct callback *deferred_idle_cb;   /**< Idle callback for deferred segment addition */
     struct event_idle *deferred_idle_ev; /**< Idle event for deferred segment addition */
     // TODO messages by ID?                 In a later phase…
@@ -319,6 +320,7 @@ static void traffic_dump_messages_to_xml(struct traffic_shared_priv *shared);
 static void traffic_loop(struct traffic *this_);
 static struct traffic *traffic_new(struct attr *parent, struct attr **attrs);
 static int traffic_process_messages_int(struct traffic *this_, int flags);
+static void traffic_ensure_deferred_idle(struct traffic_shared_priv *shared);
 static void traffic_add_segments_idle(struct traffic_shared_priv *shared);
 static void traffic_message_dump_to_stderr(struct traffic_message *this_);
 static struct seg_data *traffic_message_parse_events(struct traffic_message *this_);
@@ -961,9 +963,6 @@ static struct map_rect_priv *tm_rect_new(struct map_priv *priv, struct map_selec
     /* Map selection for current message, current map rect selection */
     struct map_selection *msg_sel, *rect_sel;
 
-    /* Attributes for traffic distortions generated from the current traffic message */
-    struct seg_data *data;
-
     /* Whether new segments have been added */
     int dirty = 0;
 
@@ -979,22 +978,17 @@ static struct map_rect_priv *tm_rect_new(struct map_priv *priv, struct map_selec
                 msg_sel = traffic_location_get_rect(message->location, traffic_map_meth.pro);
                 for (rect_sel = sel; rect_sel; rect_sel = rect_sel->next)
                     if (coord_rect_overlap(&(msg_sel->u.c_rect), &(rect_sel->u.c_rect))) {
-                        /* lazy cache restore */
-                        if (message->location->priv->txt_data) {
-                            dbg(lvl_debug, "location has txt_data, trying to restore");
-                            traffic_message_restore_segments(message, priv->shared->ms, priv->shared->map,
-                                                             priv->shared->rt);
-                        } else {
-                            dbg(lvl_debug, "location has no txt_data, nothing to restore");
+                        /* Resolving a location (restoring cached segments or expanding it from
+                         * scratch) can route over a large area and take a long time. Doing it here
+                         * would block the whole draw - and with it the GUI - until every pending
+                         * message overlapping the view has been resolved. Hand the work to the
+                         * deferred idle callback instead; the redraw it triggers picks up the items. */
+                        if (!g_list_find(priv->shared->deferred_display, message)) {
+                            priv->shared->deferred_display = g_list_append(priv->shared->deferred_display, message);
+                            traffic_ensure_deferred_idle(priv->shared);
+                            dbg(lvl_debug, "tm_rect_new: deferred resolution of message '%s'", message->id);
+                            dirty = 1;
                         }
-                        /* if cache restore yielded no items, expand from scratch */
-                        if (message->priv->items == NULL) {
-                            data = traffic_message_parse_events(message);
-                            traffic_message_add_segments(message, priv->shared->ms, data, priv->shared->map,
-                                                         priv->shared->rt);
-                            g_free(data);
-                        }
-                        dirty = 1;
                         break;
                     }
                 map_selection_destroy(msg_sel);
@@ -4347,50 +4341,66 @@ static void traffic_ensure_deferred_idle(struct traffic_shared_priv *shared) {
 /**
  * @brief Idle callback for deferred segment addition.
  *
- * Processes one message from the deferred segment queue per invocation. This keeps the GUI
+ * Processes one message from the deferred segment queues per invocation. This keeps the GUI
  * responsive by yielding back to the event loop after each expensive segment addition.
+ *
+ * Messages whose segments affect the active route (`deferred_segments`) are only resolved while a
+ * destination is set, matching the behaviour of `traffic_process_messages_int()`. Messages that
+ * merely need to be shown on the map (`deferred_display`) are resolved regardless of whether a
+ * route is active.
  *
  * @param shared The shared traffic data
  */
 static void traffic_add_segments_idle(struct traffic_shared_priv *shared) {
-    GList *entry;
     struct traffic_message *message;
     struct seg_data *data;
     struct attr attr;
 
-    entry = shared->deferred_segments;
-    if (!entry) {
+    if (shared->deferred_segments) {
+        message = (struct traffic_message *)shared->deferred_segments->data;
+        shared->deferred_segments = g_list_remove(shared->deferred_segments, message);
+
+        if (!message || !message->priv) {
+            dbg(lvl_warning, "traffic_add_segments_idle: skipping invalid message %p", message);
+        } else if (!message->priv->items && route_get_attr(shared->rt, attr_route_status, &attr, NULL)
+                   && route_get_pos(shared->rt) && ((attr.u.num & route_status_destination_set))) {
+            traffic_location_set_enclosing_rect(message->location, NULL);
+            data = traffic_message_parse_events(message);
+            traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
+            g_free(data);
+            if (message->priv->items && navit_get_ready(shared->navit) == NAVIT_READY_FULL)
+                navit_draw_async(shared->navit, 1);
+        }
+    } else if (shared->deferred_display) {
+        message = (struct traffic_message *)shared->deferred_display->data;
+        shared->deferred_display = g_list_remove(shared->deferred_display, message);
+
+        if (!message || !message->priv) {
+            dbg(lvl_warning, "traffic_add_segments_idle: skipping invalid message %p", message);
+        } else if (!message->priv->items) {
+            dbg(lvl_debug, "traffic_add_segments_idle: resolving display message '%s'", message->id);
+            if (message->location->priv->txt_data)
+                traffic_message_restore_segments(message, shared->ms, shared->map, shared->rt);
+            if (!message->priv->items) {
+                data = traffic_message_parse_events(message);
+                traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
+                g_free(data);
+            }
+            if (message->priv->items && navit_get_ready(shared->navit) == NAVIT_READY_FULL)
+                navit_draw_async(shared->navit, 1);
+        }
+    }
+
+    if (shared->deferred_segments || shared->deferred_display) {
+        traffic_ensure_deferred_idle(shared);
+    } else {
         if (shared->deferred_idle_ev)
             event_remove_idle(shared->deferred_idle_ev);
         if (shared->deferred_idle_cb)
             callback_destroy(shared->deferred_idle_cb);
         shared->deferred_idle_ev = NULL;
         shared->deferred_idle_cb = NULL;
-        return;
     }
-
-    message = (struct traffic_message *)entry->data;
-    shared->deferred_segments = g_list_remove(shared->deferred_segments, message);
-
-    if (!message || !message->priv) {
-        dbg(lvl_warning, "traffic_add_segments_idle: skipping invalid message %p", message);
-        if (shared->deferred_segments)
-            traffic_ensure_deferred_idle(shared);
-        return;
-    }
-
-    if (!message->priv->items && route_get_attr(shared->rt, attr_route_status, &attr, NULL) && route_get_pos(shared->rt)
-        && ((attr.u.num & route_status_destination_set))) {
-        traffic_location_set_enclosing_rect(message->location, NULL);
-        data = traffic_message_parse_events(message);
-        traffic_message_add_segments(message, shared->ms, data, shared->map, shared->rt);
-        g_free(data);
-        if (message->priv->items && navit_get_ready(shared->navit) == NAVIT_READY_FULL)
-            navit_draw_async(shared->navit, 1);
-    }
-
-    if (shared->deferred_segments)
-        traffic_ensure_deferred_idle(shared);
 }
 
 /**
@@ -4572,6 +4582,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                         ret |= MESSAGE_UPDATE_SEGMENTS;
                     this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
                     this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, stored_msg);
+                    this_->shared->deferred_display = g_list_remove_all(this_->shared->deferred_display, stored_msg);
                     traffic_message_remove_item_data(stored_msg, message, this_->shared->rt);
                     traffic_message_destroy(stored_msg);
                 }
@@ -4585,6 +4596,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
 
             if (message->is_cancellation) {
                 this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, message);
+                this_->shared->deferred_display = g_list_remove_all(this_->shared->deferred_display, message);
                 traffic_message_destroy(message);
             }
 
@@ -4626,6 +4638,7 @@ static int traffic_process_messages_int(struct traffic *this_, int flags) {
                     ret |= MESSAGE_UPDATE_SEGMENTS;
                 this_->shared->messages = g_list_remove_all(this_->shared->messages, stored_msg);
                 this_->shared->deferred_segments = g_list_remove_all(this_->shared->deferred_segments, stored_msg);
+                this_->shared->deferred_display = g_list_remove_all(this_->shared->deferred_display, stored_msg);
                 traffic_message_remove_item_data(stored_msg, NULL, this_->shared->rt);
                 traffic_message_destroy(stored_msg);
             }
@@ -6199,6 +6212,8 @@ void traffic_destroy(struct traffic *this_) {
     this_->shared->deferred_idle_cb = NULL;
     g_list_free(this_->shared->deferred_segments);
     this_->shared->deferred_segments = NULL;
+    g_list_free(this_->shared->deferred_display);
+    this_->shared->deferred_display = NULL;
     if (this_->meth.destroy)
         this_->meth.destroy(this_->priv);
     attr_list_free(this_->attrs);
