@@ -154,6 +154,17 @@ struct graphics_priv {
     GLint use_tex_loc;
     GLuint white_tex;
 
+    /* Off-screen multisample framebuffer. GtkGLArea renders into its own single-sampled
+     * framebuffer and exposes no multisampling option, so the scene is rendered here and
+     * resolved into the GtkGLArea framebuffer with glBlitFramebuffer. msaa_samples == 0
+     * disables the path and rendering goes straight to the GtkGLArea framebuffer. */
+    GLuint msaa_fbo;
+    GLuint msaa_color_rb;
+    GLuint msaa_stencil_rb;
+    int msaa_samples;
+    GLenum msaa_color_format;
+    int msaa_alloc_w, msaa_alloc_h;
+
     /* MVP matrix */
     float mvp[16];
     float display_rotation;
@@ -215,6 +226,7 @@ struct graphics_priv {
 /* Forward declarations */
 static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_methods *meth);
 static void get_data_window(struct graphics_priv *this, unsigned int xid);
+static void msaa_destroy(struct graphics_priv *gr);
 
 /* ----------------------------------------------------------------
  * GL shader helpers
@@ -1267,9 +1279,99 @@ static void graphics_destroy(struct graphics_priv *gr) {
         glDeleteBuffers(1, &gr->vbo);
     if (gr->white_tex)
         glDeleteTextures(1, &gr->white_tex);
+    /* Deleting the multisample objects needs the widget's context current. gtk_gl_area_make_current
+     * is a no-op on an unrealized widget, so only bother when the area is realized. */
+    if (gr->msaa_fbo && gr->glarea && gtk_widget_get_realized(gr->glarea)) {
+        gtk_gl_area_make_current(GTK_GL_AREA(gr->glarea));
+        msaa_destroy(gr);
+    }
     g_free(gr->vertices);
     g_free(gr->commands);
     g_free(gr);
+}
+
+/* ----------------------------------------------------------------
+ * Multisample anti-aliasing
+ *
+ * Closely spaced parallel 1px lines (adjacent train tracks, road + sidewalks)
+ * alias against the pixel grid and beat into a moire pattern. GtkGLArea's own
+ * framebuffer is single-sampled and its API offers no multisampling, so the
+ * scene is rendered into an off-screen multisampled FBO which is resolved into
+ * the GtkGLArea framebuffer at the end of ::render. The multisample resolve
+ * also smooths polygon edges and glyph outlines.
+ *
+ * Needs ES 3.0+ (core glRenderbufferStorageMultisample / glBlitFramebuffer) or
+ * GL_EXT_framebuffer_multisample + GL_EXT_framebuffer_blit on ES 2.0. Without
+ * either, rendering stays direct and the buffers are never allocated.
+ * ---------------------------------------------------------------- */
+
+#define GTKGL_MSAA_SAMPLES 4
+
+static int msaa_supported(void) {
+    if (epoxy_gl_version() >= 30)
+        return 1;
+    return epoxy_has_gl_extension("GL_EXT_framebuffer_multisample")
+           && epoxy_has_gl_extension("GL_EXT_framebuffer_blit");
+}
+
+static void msaa_setup(struct graphics_priv *gr) {
+    if (!msaa_supported()) {
+        dbg(lvl_debug, "gtkglarea: no multisample framebuffer support, MSAA disabled");
+        return;
+    }
+    /* RGBA8 keeps the full 8-bit-per-channel output the Cairo backend produces; RGBA4 would
+     * band the map colours. RGBA8 renderbuffer storage needs ES 3.0 or OES_rgb8_rgba8. */
+    gr->msaa_color_format = (epoxy_gl_version() >= 30 || epoxy_has_gl_extension("GL_OES_rgb8_rgba8")) ? GL_RGBA8
+                                                                                                      : GL_RGBA4;
+
+    glGenFramebuffers(1, &gr->msaa_fbo);
+    glGenRenderbuffers(1, &gr->msaa_color_rb);
+    glGenRenderbuffers(1, &gr->msaa_stencil_rb);
+    gr->msaa_samples = GTKGL_MSAA_SAMPLES;
+    dbg(lvl_info, "gtkglarea: MSAA enabled with %d samples", gr->msaa_samples);
+}
+
+static void msaa_alloc(struct graphics_priv *gr, int width, int height) {
+    if (gr->msaa_samples <= 0 || !gr->msaa_fbo || width <= 0 || height <= 0)
+        return;
+    if (gr->msaa_alloc_w == width && gr->msaa_alloc_h == height)
+        return;
+
+    /* The resize signal is emitted with the GtkGLArea framebuffer bound; keep it and restore it
+     * so the caller's glViewport and subsequent draws still target the widget. */
+    GLint prev = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+    glBindFramebuffer(GL_FRAMEBUFFER, gr->msaa_fbo);
+
+    glBindRenderbuffer(GL_RENDERBUFFER, gr->msaa_color_rb);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, gr->msaa_samples, gr->msaa_color_format, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, gr->msaa_color_rb);
+
+    /* Stencil only — the hole-filling path uses the stencil buffer, depth is never used and
+     * GtkGLArea is created without a depth buffer. */
+    glBindRenderbuffer(GL_RENDERBUFFER, gr->msaa_stencil_rb);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, gr->msaa_samples, GL_STENCIL_INDEX8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gr->msaa_stencil_rb);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        dbg(lvl_warning, "gtkglarea: multisample FBO incomplete at %dx%d, MSAA disabled", width, height);
+        gr->msaa_samples = 0;
+    } else {
+        gr->msaa_alloc_w = width;
+        gr->msaa_alloc_h = height;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, prev);
+}
+
+static void msaa_destroy(struct graphics_priv *gr) {
+    if (!gr->msaa_fbo)
+        return;
+    glDeleteFramebuffers(1, &gr->msaa_fbo);
+    glDeleteRenderbuffers(1, &gr->msaa_color_rb);
+    glDeleteRenderbuffers(1, &gr->msaa_stencil_rb);
+    gr->msaa_fbo = gr->msaa_color_rb = gr->msaa_stencil_rb = 0;
+    gr->msaa_samples = 0;
 }
 
 /* ----------------------------------------------------------------
@@ -1287,6 +1389,8 @@ static gboolean on_glarea_realize(GtkWidget *widget, gpointer data) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    msaa_setup(gr);
 
     return FALSE;
 }
@@ -1438,6 +1542,16 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     if (gr->draw_depth > 0)
         return FALSE;
 
+    /* GtkGLArea renders into its own framebuffer (not the default 0); remember it so the
+     * multisampled scene can be resolved into it at the end. */
+    GLint screen_fb = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &screen_fb);
+
+    int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->width > 0 && gr->height > 0 && gr->msaa_alloc_w == gr->width
+               && gr->msaa_alloc_h == gr->height;
+    if (msaa)
+        glBindFramebuffer(GL_FRAMEBUFFER, gr->msaa_fbo);
+
     /* Clear to the map backdrop. The background rectangle from the vertex buffer covers the
      * viewport, but display rotation leaves the corners outside it, so clearing to black would
      * expose black wedges there. */
@@ -1458,6 +1572,15 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     /* Draw overlays (recursively for nested overlays) */
     render_overlay(gr, gr->overlays);
 
+    /* Resolve the multisampled scene into the GtkGLArea framebuffer. Same-size NEAREST blit, no
+     * flip: both framebuffers share GL's bottom-left origin. */
+    if (msaa) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, gr->msaa_fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, screen_fb);
+        glBlitFramebuffer(0, 0, gr->width, gr->height, 0, 0, gr->width, gr->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, screen_fb);
+    }
+
     return FALSE;
 }
 
@@ -1467,6 +1590,8 @@ static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer 
     gr->height = height;
 
     glViewport(0, 0, width, height);
+
+    msaa_alloc(gr, width, height);
 
     navit_set_render_margin(gr->nav, (width > height ? width : height) / 4);
 
