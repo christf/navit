@@ -446,6 +446,98 @@ static void test_speed_warner_colours(struct graphics *gra, GtkWidget *glarea) {
         PASS("speed_warner_colours");
 }
 
+/* Regression test for the "moon problem": a concave polygon was over-filled across its notch
+ * because the ear-clipper's strict point-in-triangle test rejected vertices lying exactly on a
+ * candidate ear's edge, which produced overlapping triangles that covered the concave cut-out
+ * (and, once clipping stalled, a whole-ring fan that filled the convex hull). The polygon below
+ * is a minimal reproducer found by fuzzing the triangulator; (36,14) is a pixel that the broken
+ * version covered although it lies ~5px outside the polygon. Draw it and check that pixel stays
+ * background while the interior is filled. */
+static void test_concave_polygon_no_overcover(struct graphics *gra, GtkWidget *glarea) {
+    int w = gtk_widget_get_width(GTK_WIDGET(glarea));
+    int h = gtk_widget_get_height(GTK_WIDGET(glarea));
+    if (w <= 0 || h <= 0) {
+        g_skipped = 1;
+        printf("  SKIP: glarea has no allocation yet\n");
+        return;
+    }
+
+    /* star-shaped about the origin, so (0,0) is a safe interior sample */
+    static const struct point base[14] = {
+        {35,  0  },
+        {31,  15 },
+        {42,  50 },
+        {11,  66 },
+        {-4,  35 },
+        {-28, 31 },
+        {-66, 34 },
+        {-71, 1  },
+        {-59, -24},
+        {-26, -29},
+        {-6,  -45},
+        {5,   -29},
+        {23,  -29},
+        {57,  -29},
+    };
+    /* pixel the broken (strict-containment) triangulator over-covered, 5px clear of any edge */
+    static const struct point bad_pixel = {36, 14};
+
+    struct color black = {0, 0, 0, 0xffff};
+    struct graphics_gc *bg = graphics_gc_new(gra);
+    graphics_gc_set_background(bg, &black);
+    graphics_background_gc(gra, bg);
+    graphics_draw_mode(gra, draw_mode_begin_clear);
+    graphics_draw_mode(gra, draw_mode_end);
+    struct point_rect pr = {
+        {0, 0},
+        {w, h}
+    };
+    graphics_set_rect(gra, &pr);
+
+    int minx = base[0].x, maxx = base[0].x, miny = base[0].y, maxy = base[0].y;
+    for (int i = 1; i < 14; i++) {
+        if (base[i].x < minx)
+            minx = base[i].x;
+        if (base[i].x > maxx)
+            maxx = base[i].x;
+        if (base[i].y < miny)
+            miny = base[i].y;
+        if (base[i].y > maxy)
+            maxy = base[i].y;
+    }
+    int offx = w / 2 - (minx + maxx) / 2;
+    int offy = h / 2 - (miny + maxy) / 2;
+    struct point poly[14];
+    for (int i = 0; i < 14; i++) {
+        poly[i].x = base[i].x + offx;
+        poly[i].y = base[i].y + offy;
+    }
+    struct point probe = {bad_pixel.x + offx, bad_pixel.y + offy};
+    struct point inside = {offx, offy};
+
+    struct color white = {0xffff, 0xffff, 0xffff, 0xffff};
+    struct graphics_gc *gc = graphics_gc_new(gra);
+    graphics_gc_set_foreground(gc, &white);
+    graphics_draw_mode(gra, draw_mode_begin);
+    graphics_draw_polygon_clipped(gra, gc, poly, 14);
+    graphics_draw_mode(gra, draw_mode_end);
+
+    if (!render_once(gra, glarea) || !g_fb.rgba) {
+        g_skipped = 1;
+        printf("  SKIP: no frame rendered, cannot measure concave polygon\n");
+        return;
+    }
+
+    int inside_lit = pixel_is_stroke(&g_fb, readback_row(&g_fb, inside.y), inside.x);
+    int probe_lit = pixel_is_stroke(&g_fb, readback_row(&g_fb, probe.y), probe.x);
+    printf("  concave polygon interior_lit=%d notch_pixel(%d,%d)_lit=%d\n", inside_lit, probe.x, probe.y, probe_lit);
+    CHECK(inside_lit, "concave polygon interior is not filled at (%d,%d)", inside.x, inside.y);
+    CHECK(!probe_lit, "concave polygon over-covers the notch at (%d,%d); ear-clipper fills outside the outline",
+          probe.x, probe.y);
+    if (g_failures == 0)
+        PASS("concave_polygon_no_overcover");
+}
+
 int main(int argc, char **argv) {
     const char *libdir = argc > 1 ? argv[1] : ".";
 
@@ -536,6 +628,7 @@ int main(int argc, char **argv) {
     test_circle_linewidth_1px(gra, glarea);
     test_circle_radius_is_diameter_half(gra, glarea);
     test_speed_warner_colours(gra, glarea);
+    test_concave_polygon_no_overcover(gra, glarea);
 
     free(g_fb.rgba);
     printf("failures: %d\n", g_failures);
