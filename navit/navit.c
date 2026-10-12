@@ -240,6 +240,7 @@ static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
 static int navit_displaylist_covers(struct navit *this_);
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new);
+static void navit_pan_rebuild_done(struct navit *this_, int cancel);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
