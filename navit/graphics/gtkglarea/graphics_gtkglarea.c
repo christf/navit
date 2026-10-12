@@ -586,11 +586,16 @@ static long long cross2d(int ax, int ay, int bx, int by, int cx, int cy) {
     return (long long)(bx - ax) * (cy - ay) - (long long)(by - ay) * (cx - ax);
 }
 
+/* A vertex sitting exactly on an edge of the candidate ear blocks it just like one strictly
+ * inside does. With a strict test such a vertex is missed, the ear is not a real ear, clipping
+ * it flips the winding of the residual ring, and every vertex left in it then looks reflex so
+ * clipping stalls. On a thin concave shape - a lake or wood close to new-moon - the ring ends
+ * up wound the other way and the fill degenerates into a half-disc between the two tips. */
 static int point_in_triangle(int ax, int ay, int bx, int by, int cx, int cy, int px, int py) {
     long long d1 = cross2d(ax, ay, bx, by, px, py);
     long long d2 = cross2d(bx, by, cx, cy, px, py);
     long long d3 = cross2d(cx, cy, ax, ay, px, py);
-    return (d1 > 0 && d2 > 0 && d3 > 0) || (d1 < 0 && d2 < 0 && d3 < 0);
+    return (d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0);
 }
 
 static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, struct point *p, int count) {
@@ -600,16 +605,27 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
         return;
     submit_color(gr, gc);
 
-    /* Copy to local buffer, strip closing point (first==last) and consecutive duplicates */
+    /* Copy to local buffer, strip the closing point and collapse points at most one pixel
+     * apart. Where two boundary arcs meet tangentially - the cusp of a crescent - rounding
+     * scatters points one pixel apart along both arcs and the ring crosses itself, and a
+     * self-crossing ring has no triangulation any ear-clipping order can find. */
     struct point tmp[count];
     int n = 0;
     for (int i = 0; i < count; i++) {
-        if (n > 0 && p[i].x == tmp[n - 1].x && p[i].y == tmp[n - 1].y)
-            continue;
+        if (n > 0) {
+            int dx = p[i].x - tmp[n - 1].x;
+            int dy = p[i].y - tmp[n - 1].y;
+            if (dx * dx + dy * dy <= 1)
+                continue;
+        }
         tmp[n++] = p[i];
     }
-    if (n > 2 && tmp[0].x == tmp[n - 1].x && tmp[0].y == tmp[n - 1].y)
-        n--;
+    if (n > 2) {
+        int dx = tmp[n - 1].x - tmp[0].x;
+        int dy = tmp[n - 1].y - tmp[0].y;
+        if (dx * dx + dy * dy <= 1)
+            n--;
+    }
     if (n < 3)
         return;
 
@@ -691,25 +707,44 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
             ear_found = 1;
             break;
         }
-        if (!ear_found)
-            break;
+        if (ear_found)
+            continue;
+
+        /* A ring of collinear vertices can never yield an ear, because the closed
+         * containment test sees the neighbours as lying on the candidate edge. Such
+         * vertices enclose no area, so drop them and keep clipping instead of stalling. */
+        int w = 0;
+        for (int i = 0; i < rem; i++) {
+            int prev = (i - 1 + rem) % rem;
+            int next = (i + 1) % rem;
+            if (cross2d(tmp[idx[prev]].x, tmp[idx[prev]].y, tmp[idx[i]].x, tmp[idx[i]].y, tmp[idx[next]].x,
+                        tmp[idx[next]].y)
+                != 0)
+                idx[w++] = idx[i];
+        }
+        if (w < rem && w >= 3) {
+            rem = w;
+            continue;
+        }
+        break;
     }
 
-    /* Fan fallback if ear-clipping failed to triangulate fully */
-    if (tri_count < max_tris) {
-        dbg(lvl_warning, "fan fallback: ear-clipping got %d/%d triangles for %d-vertex polygon at (%d,%d)", tri_count,
-            max_tris, n, tmp[0].x, tmp[0].y);
-        tri_count = 0;
-        for (int i = 1; i < n - 1; i++) {
+    /* Clipping can still stall on a ring that has collapsed to a sliver of collinear vertices.
+     * Fan only what is left of the ring: fanning the whole polygon from tmp[0] instead would
+     * discard the correct ears and fill the convex hull, which on a concave shape such as a
+     * crescent is the half-disc between the two tips that the fill is supposed to leave empty. */
+    if (rem > 2) {
+        dbg(lvl_warning, "ear clipping stalled with %d of %d vertices left, filling the remainder as a fan", rem, n);
+        for (int i = 1; i < rem - 1; i++) {
             int vi = tri_count * 3;
-            verts[vi].x = tmp[0].x;
-            verts[vi].y = tmp[0].y;
+            verts[vi].x = tmp[idx[0]].x;
+            verts[vi].y = tmp[idx[0]].y;
             verts[vi].u = verts[vi].v = 0;
-            verts[vi + 1].x = tmp[i].x;
-            verts[vi + 1].y = tmp[i].y;
+            verts[vi + 1].x = tmp[idx[i]].x;
+            verts[vi + 1].y = tmp[idx[i]].y;
             verts[vi + 1].u = verts[vi + 1].v = 0;
-            verts[vi + 2].x = tmp[i + 1].x;
-            verts[vi + 2].y = tmp[i + 1].y;
+            verts[vi + 2].x = tmp[idx[i + 1]].x;
+            verts[vi + 2].y = tmp[idx[i + 1]].y;
             verts[vi + 2].u = verts[vi + 2].v = 0;
             tri_count++;
         }
