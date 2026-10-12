@@ -217,6 +217,7 @@ static void gui_internal_highlight_possible_keys(struct gui_priv *this, char *po
     md = gui_internal_menu_data(this);
     if (md && md->keyboard && !(this->flags & 2048)) {
         GList *lk = md->keyboard->children;
+        struct widget *menu = g_list_last(this->root.children)->data;
         graphics_draw_mode(this->gra, draw_mode_begin);
         while (lk) {
             struct widget *child = lk->data;
@@ -248,12 +249,16 @@ static void gui_internal_highlight_possible_keys(struct gui_priv *this, char *po
                             child_->state &= ~(STATE_HIGHLIGHTED);
                         }
                     }
-                    gui_internal_widget_render(this, child_);
                 }
             }
             lk = g_list_next(lk);
         }
-        gui_internal_widget_render(this, md->keyboard);
+        /* The keyboard is only a part of the menu. Redraw the whole menu rather than just the
+         * keyboard: gui_internal_highlight_do() only redraws the full menu when it selects a key
+         * and returns early when the key is already highlighted, so without this the rest of the
+         * menu would be missing. Backends that rebuild the frame from scratch for every
+         * draw_mode(begin) (e.g. gtkglarea) would then drop the menu and appear to flicker. */
+        gui_internal_widget_render(this, menu);
         graphics_draw_mode(this->gra, draw_mode_end);
     }
 }
