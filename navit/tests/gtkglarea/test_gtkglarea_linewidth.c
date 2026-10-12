@@ -538,6 +538,72 @@ static void test_concave_polygon_no_overcover(struct graphics *gra, GtkWidget *g
         PASS("concave_polygon_no_overcover");
 }
 
+/* GtkGLArea's own framebuffer is single-sampled and its API offers no multisampling, so the backend renders the scene
+ * into an off-screen 4x multisampled FBO and resolves it. Without that every polygon edge is a hard step and closely
+ * spaced parallel lines (train tracks, road plus sidewalk) beat into a moire pattern. Draw a filled triangle with a
+ * 45-degree hypotenuse; a coverage-based rasteriser leaves pixels there whose luminance lies strictly between the black
+ * background and the white fill, a hard single-sampled rasteriser does not. */
+static void test_msaa_antialiasing(struct graphics *gra, GtkWidget *glarea) {
+    int w = gtk_widget_get_width(GTK_WIDGET(glarea));
+    int h = gtk_widget_get_height(GTK_WIDGET(glarea));
+    if (w <= 0 || h <= 0) {
+        g_skipped = 1;
+        printf("  SKIP: glarea has no allocation yet\n");
+        return;
+    }
+
+    struct color black = {0, 0, 0, 0xffff};
+    struct graphics_gc *bg = graphics_gc_new(gra);
+    graphics_gc_set_background(bg, &black);
+    graphics_background_gc(gra, bg);
+    graphics_draw_mode(gra, draw_mode_begin_clear);
+    graphics_draw_mode(gra, draw_mode_end);
+
+    /* graphics_draw_polygon_clipped() clips against gra->r, which navit normally
+     * fills in from its ::resize signal. The harness never raises that signal, so
+     * set it here. */
+    struct point_rect pr = {
+        {0, 0},
+        {w, h}
+    };
+    graphics_set_rect(gra, &pr);
+
+    struct point tri[3] = {
+        {w / 4,     h / 4    },
+        {3 * w / 4, h / 4    },
+        {3 * w / 4, 3 * h / 4},
+    };
+    struct color white = {0xffff, 0xffff, 0xffff, 0xffff};
+    struct graphics_gc *gc = graphics_gc_new(gra);
+    graphics_gc_set_foreground(gc, &white);
+    graphics_draw_mode(gra, draw_mode_begin);
+    graphics_draw_polygon_clipped(gra, gc, tri, 3);
+    graphics_draw_mode(gra, draw_mode_end);
+
+    if (!render_once(gra, glarea) || !g_fb.rgba) {
+        g_skipped = 1;
+        printf("  SKIP: no frame rendered, cannot measure antialiasing\n");
+        return;
+    }
+
+    /* A point well inside the triangle (right angle at x = 3w/4) must be filled. */
+    int interior = pixel_is_stroke(&g_fb, readback_row(&g_fb, 3 * h / 8), 3 * w / 4 - 8);
+    int edge_pixels = 0;
+    for (int y = 0; y < g_fb.h; y++) {
+        for (int x = 0; x < g_fb.w; x++) {
+            const unsigned char *p = &g_fb.rgba[((gsize)y * g_fb.w + x) * 4];
+            int lum = (p[0] * 30 + p[1] * 59 + p[2] * 11) / 100;
+            if (lum > 40 && lum < 215)
+                edge_pixels++;
+        }
+    }
+    printf("  triangle interior lit=%d, partial-coverage edge pixels=%d\n", interior, edge_pixels);
+    CHECK(interior, "triangle interior was not filled");
+    CHECK(edge_pixels > 0, "no partial-coverage pixels: MSAA is not active (hard edges only)");
+    if (g_failures == 0)
+        PASS("msaa_antialiasing");
+}
+
 int main(int argc, char **argv) {
     const char *libdir = argc > 1 ? argv[1] : ".";
 
@@ -629,6 +695,7 @@ int main(int argc, char **argv) {
     test_circle_radius_is_diameter_half(gra, glarea);
     test_speed_warner_colours(gra, glarea);
     test_concave_polygon_no_overcover(gra, glarea);
+    test_msaa_antialiasing(gra, glarea);
 
     free(g_fb.rgba);
     printf("failures: %d\n", g_failures);
