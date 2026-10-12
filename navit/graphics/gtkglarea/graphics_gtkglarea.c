@@ -1909,5 +1909,8 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
 }
 
 void plugin_init(void) {
+    if (!g_get_prgname())
+        g_set_prgname("navit");
+    gtk_init();
     plugin_register_category_graphics("gtkglarea", graphics_gtkglarea_new);
 }
