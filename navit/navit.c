@@ -179,6 +179,12 @@ struct navit {
     int render_margin;
     int pan_margin;
     int drag_bitmap;
+    /* Bitmap-drag prefetch bookkeeping: while an asynchronous rebuild is in flight the still
+     * displayed old frame keeps pan_bias applied on top of the live drag so it stays glued to
+     * the pointer. pan_commit_callback clears it once the rebuilt frame commits. */
+    int pan_pending;
+    int pan_bias_x, pan_bias_y;
+    struct callback *pan_commit_callback;
     int use_mousewheel;
     struct messagelist *messages;
     struct callback *resize_callback, *button_callback, *motion_callback, *predraw_callback;
@@ -236,6 +242,7 @@ static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
 static int navit_displaylist_covers(struct navit *this_);
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new);
+static void navit_pan_commit(void *data, int cancel);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -437,6 +444,23 @@ static void navit_draw_async_margin(struct navit *this_, int async, int margin) 
     transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
+}
+
+/* Same as navit_draw_async_margin(), but leaves the current drag offset untouched and invokes
+ * `cb` once the rebuilt display list commits. The bitmap-drag prefetch uses this to keep the
+ * old frame glued to the pointer until the new frame is ready (see navit_pan_commit). */
+static void navit_draw_async_margin_cb(struct navit *this_, int async, int margin, struct callback *cb) {
+    if (this_->blocked) {
+        this_->blocked |= 2;
+        this_->pan_pending = 0;
+        this_->pan_bias_x = 0;
+        this_->pan_bias_y = 0;
+        dbg(lvl_debug, "draw_async: blocked=%d, deferred", this_->blocked);
+        return;
+    }
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
+    graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async, cb,
+                  this_->graphics_flags | 1);
 }
 
 void navit_draw_async(struct navit *this_, int async) {
@@ -961,6 +985,9 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
         this_->pressed = *p;
         this_->last = *p;
         this_->zoomed = 0;
+        this_->pan_pending = 0;
+        this_->pan_bias_x = 0;
+        this_->pan_bias_y = 0;
         if (button == 1) {
             this_->button_pressed = 1;
             this_->moved = 0;
@@ -985,6 +1012,9 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
     } else {
 
         this_->button_pressed = 0;
+        this_->pan_pending = 0;
+        this_->pan_bias_x = 0;
+        this_->pan_bias_y = 0;
         if (this_->button_timeout) {
             event_remove_timeout(this_->button_timeout);
             this_->button_timeout = NULL;
@@ -1035,26 +1065,36 @@ static void navit_motion_timeout(struct navit *this_) {
      * an affine (top-down) view; under perspective the scene must be re-projected instead. */
     if (this_->drag_bitmap && !transform_get_pitch(this_->trans)) {
         struct point point;
-        point.x = (this_->current.x - this_->pressed.x);
-        point.y = (this_->current.y - this_->pressed.y);
+        int drag_x = this_->current.x - this_->pressed.x;
+        int drag_y = this_->current.y - this_->pressed.y;
+        /* A pending rebuild already folded part of the drag into the new transformation
+         * (pan_bias); keep applying that part on top of the still displayed old frame. */
+        point.x = drag_x + this_->pan_bias_x;
+        point.y = drag_y + this_->pan_bias_y;
         if (graphics_draw_drag(this_->gra, &point)) {
-            int abs_x = point.x < 0 ? -point.x : point.x;
-            int abs_y = point.y < 0 ? -point.y : point.y;
+            int abs_x = drag_x < 0 ? -drag_x : drag_x;
+            int abs_y = drag_y < 0 ? -drag_y : drag_y;
             int margin_threshold = this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
-            if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
-                int drag_dx = this_->current.x - this_->pressed.x;
-                int drag_dy = this_->current.y - this_->pressed.y;
+            if (!this_->pan_pending && margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
+                int drag_dx = drag_x;
+                int drag_dy = drag_y;
                 int sw = this_->render_margin * 2 + navit_get_width(this_);
                 int sh = this_->render_margin * 2 + navit_get_height(this_);
                 update_transformation(this_->trans, &this_->pressed, &this_->current);
-                graphics_draw_drag(this_->gra, NULL);
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
                 if (this_->zoomed || !navit_displaylist_covers(this_)) {
-                    navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_));
+                    /* Async rebuild: keep the old frame shifted by the just-committed drag
+                     * (pan_bias) until the rebuilt frame commits; navit_pan_commit() then
+                     * clears the bias so the new frame is not shifted. */
+                    this_->pan_bias_x = drag_dx;
+                    this_->pan_bias_y = drag_dy;
+                    this_->pan_pending = 1;
+                    navit_draw_async_margin_cb(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_commit_callback);
                 } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
+                    graphics_draw_drag(this_->gra, NULL);
                     if (drag_dx != 0) {
                         clip_p1.x = drag_dx > 0 ? 0 : sw + drag_dx;
                         clip_p1.y = 0;
@@ -1081,6 +1121,7 @@ static void navit_motion_timeout(struct navit *this_) {
                         graphics_clear_clip(this_->gra);
                     }
                 } else {
+                    graphics_draw_drag(this_->gra, NULL);
                     navit_draw_displaylist(this_);
                 }
             }
@@ -1148,6 +1189,32 @@ static void navit_predraw(struct navit *this_) {
             navit_vehicle_draw(this_, nv, NULL);
         l = g_list_next(l);
     }
+}
+
+/**
+ * @brief Commit a deferred bitmap-drag rebuild started in navit_motion_timeout().
+ *
+ * While the asynchronous rebuild is in flight the still displayed frame is kept glued to the
+ * pointer by navit::pan_bias. Once the rebuilt frame is ready (cancel==0) the bias is dropped
+ * so the new frame sits exactly at the new transformation and the map does not jump back.
+ *
+ * @param data   The navit instance (callback payload).
+ * @param cancel Non-zero if the rebuild was cancelled, i.e. no new frame was produced.
+ */
+static void navit_pan_commit(void *data, int cancel) {
+    struct navit *this_ = data;
+    struct point point;
+
+    if (!this_->pan_pending)
+        return; /* superseded by a newer draw (e.g. button release) */
+    this_->pan_pending = 0;
+    this_->pan_bias_x = 0;
+    this_->pan_bias_y = 0;
+    if (cancel)
+        return;
+    point.x = this_->current.x - this_->pressed.x;
+    point.y = this_->current.y - this_->pressed.y;
+    graphics_draw_drag(this_->gra, &point);
 }
 
 static void navit_scale(struct navit *this_, long scale, struct point *p, int draw) {
@@ -1989,6 +2056,7 @@ static int navit_set_graphics(struct navit *this_, struct graphics *gra) {
     graphics_add_callback(gra, this_->motion_callback);
     this_->predraw_callback = callback_new_attr_1(callback_cast(navit_predraw), attr_predraw, this_);
     graphics_add_callback(gra, this_->predraw_callback);
+    this_->pan_commit_callback = callback_new_1(callback_cast(navit_pan_commit), this_);
     return 1;
 }
 
