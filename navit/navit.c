@@ -424,8 +424,9 @@ char *navit_get_user_data_directory(int create) {
     return dir;
 }
 
-/* Prefetch margin for display lists that must survive a pan gesture: at least half the
- * larger screen dimension, so a fast drag does not immediately uncover the list. */
+/* Prefetch margin for a pan gesture: both the source-rect room a mid-drag rebuild fetches and
+ * the drawable ring (gra->r) the frame is kept in, sized to at least half the larger screen
+ * dimension so a fast drag does not immediately uncover the list. */
 static int navit_pan_prefetch_margin(struct navit *this_) {
     int half_screen = (this_->w > this_->h ? this_->w : this_->h) / PAN_PREFETCH_SCREEN_DIVISOR;
     return this_->render_margin > half_screen ? this_->render_margin : half_screen;
@@ -883,11 +884,17 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     sel.u.p_rect.rl.y = h;
     transform_set_screen_selection(this_->trans, &sel);
     graphics_init(this_->gra);
-    if (this_->render_margin) {
-        sel.u.p_rect.lu.x = -this_->render_margin;
-        sel.u.p_rect.lu.y = -this_->render_margin;
-        sel.u.p_rect.rl.x = w + this_->render_margin;
-        sel.u.p_rect.rl.y = h + this_->render_margin;
+    /* Size the drawable to the pan buffer, not the plain render margin. A mid-drag rebuild
+     * already fetches navit_pan_prefetch_margin() worth of map, but only what fits gra->r
+     * survives draw-time clipping, so sizing it to the smaller render_margin discarded most of
+     * the prefetch and left the drag with nothing to slide into. Idle draws still fetch only
+     * render_margin, so the larger rect costs nothing until the user actually pans. */
+    int buffer_margin = this_->render_margin ? navit_pan_prefetch_margin(this_) : 0;
+    if (buffer_margin) {
+        sel.u.p_rect.lu.x = -buffer_margin;
+        sel.u.p_rect.lu.y = -buffer_margin;
+        sel.u.p_rect.rl.x = w + buffer_margin;
+        sel.u.p_rect.rl.y = h + buffer_margin;
     }
     graphics_set_rect(this_->gra, &sel.u.p_rect);
     if (callback)
