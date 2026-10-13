@@ -170,8 +170,13 @@ struct graphics_priv {
     float display_rotation;
     int rotation_center_x, rotation_center_y;
 
-    /* Viewport */
+    /* Viewport. width/height hold the logical (GTK) size navit lays out in, matching the cairo
+     * backend; phys_w/phys_h are the GL framebuffer size in device pixels (logical * scale).
+     * scale is the monitor scale factor, needed to convert navit's logical coordinates to the
+     * device pixels that GL APIs take (scissor rects, line width). */
     int width, height;
+    int phys_w, phys_h;
+    int scale;
     int win_w, win_h;
 
     /* Draw command buffer (dynamically allocated, grows as needed) */
@@ -1121,12 +1126,15 @@ static void set_clip(struct graphics_priv *gr, struct point *p, int w, int h) {
             off_x += cur->p.x;
             off_y += cur->p.y;
         }
-        int win_h = cur->height;
+        /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
+         * rect and flip the y axis using the framebuffer height. */
+        int sc = cur->scale > 0 ? cur->scale : 1;
+        int dev_h = cur->phys_h;
         gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = p->x + off_x;
-        gr->commands[gr->cmd_count].clip_y = win_h - (p->y + h + off_y);
-        gr->commands[gr->cmd_count].clip_w = w;
-        gr->commands[gr->cmd_count].clip_h = h;
+        gr->commands[gr->cmd_count].clip_x = (p->x + off_x) * sc;
+        gr->commands[gr->cmd_count].clip_y = dev_h - (p->y + h + off_y) * sc;
+        gr->commands[gr->cmd_count].clip_w = w * sc;
+        gr->commands[gr->cmd_count].clip_h = h * sc;
         gr->cmd_count++;
     }
 }
@@ -1140,7 +1148,6 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
         off_x += cur->p.x;
         off_y += cur->p.y;
     }
-    int win_h = cur->height;
     int x_min = (p1->x < p2->x ? p1->x : p2->x) + off_x;
     int y_min = (p1->y < p2->y ? p1->y : p2->y) + off_y;
     int x_max1 = p1->x + w1 + off_x;
@@ -1149,6 +1156,10 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
     int y_max2 = p2->y + h2 + off_y;
     int x_max = x_max1 > x_max2 ? x_max1 : x_max2;
     int y_max = y_max1 > y_max2 ? y_max1 : y_max2;
+    /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
+     * rect and flip the y axis using the framebuffer height. */
+    int sc = cur->scale > 0 ? cur->scale : 1;
+    int dev_h = cur->phys_h;
     ensure_cmd_capacity(gr, gr->cmd_count + 2);
     if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
@@ -1156,10 +1167,10 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
     }
     if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = x_min;
-        gr->commands[gr->cmd_count].clip_y = win_h - y_max;
-        gr->commands[gr->cmd_count].clip_w = x_max - x_min;
-        gr->commands[gr->cmd_count].clip_h = y_max - y_min;
+        gr->commands[gr->cmd_count].clip_x = x_min * sc;
+        gr->commands[gr->cmd_count].clip_y = dev_h - y_max * sc;
+        gr->commands[gr->cmd_count].clip_w = (x_max - x_min) * sc;
+        gr->commands[gr->cmd_count].clip_h = (y_max - y_min) * sc;
         gr->cmd_count++;
     }
 }
@@ -1494,7 +1505,9 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
         if (cmd->type == CMD_LINES || cmd->type == CMD_LINE_STRIP || cmd->type == CMD_LINE_LOOP) {
             /* Honour graphics_gc_set_linewidth(). Without this every line keeps the GL default
              * of 1px, which is what made e.g. the speed warner's d/10 ring invisible. */
-            float w = cmd->linewidth > 0.0f ? cmd->linewidth : 1.0f;
+            /* linewidth is a navit logical width; glLineWidth takes device pixels. */
+            int sc = gr->scale > 0 ? gr->scale : 1;
+            float w = (cmd->linewidth > 0.0f ? cmd->linewidth : 1.0f) * (float)sc;
             /* Some drivers (notably llvmpipe/Mesa and ANGLE) silently clamp widths above 1 and
              * just widen the line themselves, so only lower-bound it here and let the driver
              * decide the rest. */
@@ -1551,8 +1564,8 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     GLint screen_fb = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &screen_fb);
 
-    int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->width > 0 && gr->height > 0 && gr->msaa_alloc_w == gr->width
-               && gr->msaa_alloc_h == gr->height;
+    int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->phys_w > 0 && gr->phys_h > 0
+               && gr->msaa_alloc_w == gr->phys_w && gr->msaa_alloc_h == gr->phys_h;
     if (msaa)
         glBindFramebuffer(GL_FRAMEBUFFER, gr->msaa_fbo);
 
@@ -1581,7 +1594,7 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     if (msaa) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gr->msaa_fbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, screen_fb);
-        glBlitFramebuffer(0, 0, gr->width, gr->height, 0, 0, gr->width, gr->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBlitFramebuffer(0, 0, gr->phys_w, gr->phys_h, 0, 0, gr->phys_w, gr->phys_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, screen_fb);
     }
 
@@ -1590,16 +1603,26 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
 
 static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer data) {
     struct graphics_priv *gr = data;
-    gr->width = width;
-    gr->height = height;
+    /* GtkGLArea reports its framebuffer size in device pixels (allocation * scale factor).
+     * Hand the logical size to navit so layout math matches the gtk_drawing_area/cairo
+     * backend, which paints in logical units and lets GTK scale them by the monitor factor.
+     * The device-pixel size is retained for the GL output (viewport, MSAA, blit). */
+    int scale = gtk_widget_get_scale_factor(GTK_WIDGET(glarea));
+    if (scale < 1)
+        scale = 1;
+    gr->scale = scale;
+    gr->phys_w = width;
+    gr->phys_h = height;
+    gr->width = width / scale;
+    gr->height = height / scale;
 
     glViewport(0, 0, width, height);
 
     msaa_alloc(gr, width, height);
 
-    navit_set_render_margin(gr->nav, (width > height ? width : height) / 4);
+    navit_set_render_margin(gr->nav, (gr->width > gr->height ? gr->width : gr->height) / 4);
 
-    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(width), GINT_TO_POINTER(height));
+    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(gr->width), GINT_TO_POINTER(gr->height));
 }
 
 /* ----------------------------------------------------------------
@@ -1905,6 +1928,7 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     gtk_widget_add_controller(this->glarea, key);
 
     this->timeout = 100;
+    this->scale = 1;
     this->last_motion.x = this->width / 2;
     this->last_motion.y = this->height / 2;
     for (int i = 0; i < 8; i++) {
