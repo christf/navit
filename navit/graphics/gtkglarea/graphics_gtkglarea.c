@@ -170,8 +170,10 @@ struct graphics_priv {
     float display_rotation;
     int rotation_center_x, rotation_center_y;
 
-    /* Viewport */
+    /* Viewport. width/height hold the logical (GTK) size navit lays out in, matching the cairo
+     * backend; phys_w/phys_h are the GL framebuffer size in device pixels (logical * scale). */
     int width, height;
+    int phys_w, phys_h;
     int win_w, win_h;
 
     /* Draw command buffer (dynamically allocated, grows as needed) */
@@ -1551,8 +1553,8 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     GLint screen_fb = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &screen_fb);
 
-    int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->width > 0 && gr->height > 0 && gr->msaa_alloc_w == gr->width
-               && gr->msaa_alloc_h == gr->height;
+    int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->phys_w > 0 && gr->phys_h > 0
+               && gr->msaa_alloc_w == gr->phys_w && gr->msaa_alloc_h == gr->phys_h;
     if (msaa)
         glBindFramebuffer(GL_FRAMEBUFFER, gr->msaa_fbo);
 
@@ -1581,7 +1583,7 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     if (msaa) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gr->msaa_fbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, screen_fb);
-        glBlitFramebuffer(0, 0, gr->width, gr->height, 0, 0, gr->width, gr->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBlitFramebuffer(0, 0, gr->phys_w, gr->phys_h, 0, 0, gr->phys_w, gr->phys_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, screen_fb);
     }
 
@@ -1590,16 +1592,25 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
 
 static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer data) {
     struct graphics_priv *gr = data;
-    gr->width = width;
-    gr->height = height;
+    /* GtkGLArea reports its framebuffer size in device pixels (allocation * scale factor).
+     * Hand the logical size to navit so layout math matches the gtk_drawing_area/cairo
+     * backend, which paints in logical units and lets GTK scale them by the monitor factor.
+     * The device-pixel size is retained for the GL output (viewport, MSAA, blit). */
+    int scale = gtk_widget_get_scale_factor(GTK_WIDGET(glarea));
+    if (scale < 1)
+        scale = 1;
+    gr->phys_w = width;
+    gr->phys_h = height;
+    gr->width = width / scale;
+    gr->height = height / scale;
 
     glViewport(0, 0, width, height);
 
     msaa_alloc(gr, width, height);
 
-    navit_set_render_margin(gr->nav, (width > height ? width : height) / 4);
+    navit_set_render_margin(gr->nav, (gr->width > gr->height ? gr->width : gr->height) / 4);
 
-    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(width), GINT_TO_POINTER(height));
+    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(gr->width), GINT_TO_POINTER(gr->height));
 }
 
 /* ----------------------------------------------------------------
