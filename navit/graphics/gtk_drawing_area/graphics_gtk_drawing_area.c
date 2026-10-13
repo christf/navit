@@ -64,6 +64,9 @@ struct graphics_priv {
     struct window window;
     cairo_t *cairo;
     struct point p;
+    /* Last known pointer position. A GdkScrollEvent carries no position, so the
+     * scroll handler has to use the most recent motion event instead. */
+    struct point last_motion;
     double display_rotation;
     double target_rotation;
     double rotation_from;
@@ -885,6 +888,7 @@ static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, g
     gdk_event_get_position(event, &x, &y);
     p.x = (int)x;
     p.y = (int)y;
+    this->last_motion = p;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -892,12 +896,14 @@ static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy
     struct graphics_priv *this = user_data;
     struct point p;
     int button;
-    double x, y;
-    GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller));
-    gdk_event_get_position(event, &x, &y);
+    (void)controller;
+    (void)dx;
 
-    p.x = (int)x;
-    p.y = (int)y;
+    /* A GdkScrollEvent does not carry a position: gdk_event_get_position() returns
+     * FALSE and writes NaN for it, which would become INT_MIN once cast to int and
+     * send the map far off when used as the zoom invariant point. Use the last known
+     * pointer position instead. */
+    p = this->last_motion;
     if (dy < 0)
         button = 4;
     else if (dy > 0)
@@ -916,6 +922,7 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
 
     p.x = (int)x;
     p.y = (int)y;
+    this->last_motion = p;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1314,6 +1321,8 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     this->win_h = 547;
     if ((attr = attr_search(attrs, attr_h)))
         this->win_h = attr->u.num;
+    this->last_motion.x = this->win_w / 2;
+    this->last_motion.y = this->win_h / 2;
     this->timeout = 100;
     if ((attr = attr_search(attrs, attr_timeout)))
         this->timeout = attr->u.num;
