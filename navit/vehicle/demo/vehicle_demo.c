@@ -222,6 +222,59 @@ static int demo_waypoints_equal(const GArray *a, const GArray *b) {
     return 1;
 }
 
+/* Re-anchor the walk cursor after the geometry changed.
+ *
+ * The route is recomputed from the moving vehicle on every position update, so
+ * most of these changes are just the leading part of the path being dropped as
+ * the vehicle drives along it. Discarding the cursor there sends the vehicle
+ * back to waypoint 0 every tick, which shows up as a vehicle that creeps back
+ * and forth around the route start and never reaches the destination.
+ *
+ * So instead of resetting, look for the segment of the new geometry closest to
+ * where the vehicle actually is and continue from there. That also handles a
+ * real reroute: route_get_position() snaps the route start to the nearest street
+ * to the vehicle, so the new path always begins next to it and the cursor ends
+ * up on the new geometry either way. Returns 0 if there is no position to
+ * anchor to yet, in which case the caller starts from the beginning. */
+static int demo_relocate_cursor(GArray *wp, struct coord *cur) {
+    guint i, best = 0;
+    int best_dist = 0, have = 0;
+    struct coord best_pnt = {0, 0};
+    struct coord from = *cur;
+
+    if (wp->len < 2)
+        return 0;
+    for (i = 0; i + 1 < wp->len; i++) {
+        const struct coord *a = &g_array_index(wp, struct coord, i);
+        const struct coord *b = &g_array_index(wp, struct coord, i + 1);
+        double dx = b->x - a->x, dy = b->y - a->y;
+        double len2 = dx * dx + dy * dy;
+        double t = 0.0, px, py;
+        struct coord pnt;
+        int dist;
+        if (len2 > 0.0) {
+            t = ((double)(from.x - a->x) * dx + (double)(from.y - a->y) * dy) / len2;
+            if (t < 0.0)
+                t = 0.0;
+            if (t > 1.0)
+                t = 1.0;
+        }
+        px = a->x + dx * t;
+        py = a->y + dy * t;
+        pnt.x = (int)px;
+        pnt.y = (int)py;
+        dist = transform_distance(projection_mg, &from, &pnt);
+        if (!have || dist < best_dist) {
+            have = 1;
+            best = i;
+            best_dist = dist;
+            best_pnt = pnt;
+        }
+    }
+    *cur = best_pnt;
+    return (int)best;
+}
+
 static void vehicle_demo_timer(struct vehicle_priv *priv) {
     struct coord *nxt, ci;
     int slen, len, dx, dy;
@@ -242,15 +295,19 @@ static void vehicle_demo_timer(struct vehicle_priv *priv) {
              * recalculated route is picked up: route_get_map() hands back the
              * same map object for a given route, so neither the route pointer
              * nor the map pointer changes when a new path is computed. Keep the
-             * walk cursor only while the geometry is byte for byte the same. */
+             * walk anchored to the vehicle's own position across the change. */
             GArray *fresh = demo_scan_waypoints(route);
             if (!demo_waypoints_equal(priv->waypoints, fresh)) {
+                struct coord anchor = priv->current;
+                int anchored = priv->current_valid;
                 if (priv->waypoints)
                     g_array_free(priv->waypoints, TRUE);
                 priv->waypoints = fresh;
-                priv->waypoint_index = 0;
-                priv->current_valid = 0;
-                dbg(lvl_debug, "demo loaded %u waypoints", fresh->len);
+                priv->waypoint_index = anchored ? demo_relocate_cursor(fresh, &anchor) : 0;
+                priv->current_valid = anchored;
+                if (anchored)
+                    priv->current = anchor;
+                dbg(lvl_debug, "demo loaded %u waypoints, continuing at %d", fresh->len, priv->waypoint_index + 1);
             } else {
                 g_array_free(fresh, TRUE);
             }
@@ -313,7 +370,21 @@ static void vehicle_demo_timer(struct vehicle_priv *priv) {
         return;
     }
 
-    /* Ran out of route while still owing distance: sit at the destination. */
+    /* The loop above only exits early when a step lands inside a segment, and
+     * that case has already returned. Reaching here means the whole remaining
+     * distance was consumed by whole waypoint hops, so this tick's distance is
+     * spent but the route may well continue. Only the cursor running off the end
+     * of the geometry means the destination is reached. */
+    if (priv->waypoint_index < (int)priv->waypoints->len - 1) {
+        transform_to_geo(projection_mg, &priv->current, &priv->geo);
+        if (priv->valid != attr_position_valid_valid) {
+            priv->valid = attr_position_valid_valid;
+            callback_list_call_attr_0(priv->cbl, attr_position_valid);
+        }
+        callback_list_call_attr_0(priv->cbl, attr_position_coord_geo);
+        return;
+    }
+
     priv->waypoint_index = (int)priv->waypoints->len - 1;
     transform_to_geo(projection_mg, &priv->current, &priv->geo);
     priv->speed = 0;
