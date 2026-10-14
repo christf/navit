@@ -940,6 +940,14 @@ static void draw_image_warp(struct graphics_priv *gr, struct graphics_gc_priv *f
 }
 
 static void draw_drag(struct graphics_priv *gr, struct point *p) {
+    /* For an overlay this carries its top-left position, as in the cairo/opengl/egl backends:
+     * the vehicle moves its cursor this way and render_overlay places it from gr->p. For the
+     * root it is a rigid translation of the already-projected frame during a pan. */
+    if (gr->parent) {
+        if (p)
+            gr->p = *p;
+        return;
+    }
     if (p) {
         gr->dx = p->x;
         gr->dy = p->y;
@@ -1854,6 +1862,10 @@ static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_metho
         return NULL;
 
     struct graphics_priv *this = g_new0(struct graphics_priv, 1);
+    /* Overlays start enabled, matching the opengl/egl backends. g_new0 would leave this at 0,
+     * which the render_overlay/draw guards read as disabled, so a cursor (or any overlay created
+     * without a later overlay_disable(...,0)) would never be drawn. */
+    this->overlay_enabled = 1;
     this->vertex_capacity = MAX_VERTICES;
     this->vertices = g_new(Vertex, MAX_VERTICES);
     this->cmd_capacity = MAX_VERTICES / 3;
