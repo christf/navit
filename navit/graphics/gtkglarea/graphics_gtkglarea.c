@@ -78,6 +78,9 @@ static const char fragment_src[] = "precision mediump float;\n"
 /* Hard cap to prevent runaway allocation (~256 MB for vertices + commands) */
 #define MAX_VERTICES_HARD (MAX_VERTICES * 16)
 #define CIRCLE_SEGMENTS 72
+/* Pinch scale must grow or shrink by this ratio between zoom steps, matching the Android
+ * backend so a two-finger pinch zooms at a comparable rate there and here. */
+#define PINCH_ZOOM_STEP_RATIO 1.2
 
 /* Vertex: position (x,y) + texcoord (u,v) */
 typedef struct {
@@ -170,7 +173,10 @@ struct graphics_priv {
     float display_rotation;
     int rotation_center_x, rotation_center_y;
 
-    /* Viewport */
+    /* Viewport. width/height hold the logical (GTK) size navit lays out in, matching the cairo
+     * backend; phys_w/phys_h are the GL framebuffer size in device pixels (logical * scale).
+     * scale is the monitor scale factor, needed to convert navit's logical coordinates to the
+     * device pixels that GL APIs take (scissor rects, line width). */
     int width, height;
     int phys_w, phys_h;
     int scale;
@@ -227,6 +233,12 @@ struct graphics_priv {
     struct timeval button_press[8];
     struct timeval button_release[8];
     int timeout;
+
+    /* Cumulative pinch scale at which the last zoom step was emitted, 1.0 at gesture start */
+    double pinch_last_scale;
+    float preview_cx, preview_cy;
+    /* Pinch gesture, kept for the click update handler to know whether a pinch owns the touch */
+    GtkGesture *zoom_gesture;
 };
 
 /* Forward declarations */
@@ -1160,12 +1172,15 @@ static void set_clip(struct graphics_priv *gr, struct point *p, int w, int h) {
             off_x += cur->p.x;
             off_y += cur->p.y;
         }
-        int win_h = cur->height;
+        /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
+         * rect and flip the y axis using the framebuffer height. */
+        int sc = cur->scale > 0 ? cur->scale : 1;
+        int dev_h = cur->phys_h;
         gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = p->x + off_x;
-        gr->commands[gr->cmd_count].clip_y = win_h - (p->y + h + off_y);
-        gr->commands[gr->cmd_count].clip_w = w;
-        gr->commands[gr->cmd_count].clip_h = h;
+        gr->commands[gr->cmd_count].clip_x = (p->x + off_x) * sc;
+        gr->commands[gr->cmd_count].clip_y = dev_h - (p->y + h + off_y) * sc;
+        gr->commands[gr->cmd_count].clip_w = w * sc;
+        gr->commands[gr->cmd_count].clip_h = h * sc;
         gr->cmd_count++;
     }
 }
@@ -1179,7 +1194,6 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
         off_x += cur->p.x;
         off_y += cur->p.y;
     }
-    int win_h = cur->height;
     int x_min = (p1->x < p2->x ? p1->x : p2->x) + off_x;
     int y_min = (p1->y < p2->y ? p1->y : p2->y) + off_y;
     int x_max1 = p1->x + w1 + off_x;
@@ -1188,6 +1202,10 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
     int y_max2 = p2->y + h2 + off_y;
     int x_max = x_max1 > x_max2 ? x_max1 : x_max2;
     int y_max = y_max1 > y_max2 ? y_max1 : y_max2;
+    /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
+     * rect and flip the y axis using the framebuffer height. */
+    int sc = cur->scale > 0 ? cur->scale : 1;
+    int dev_h = cur->phys_h;
     ensure_cmd_capacity(gr, gr->cmd_count + 2);
     if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
@@ -1195,10 +1213,10 @@ static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, i
     }
     if (gr->cmd_count < gr->cmd_capacity) {
         gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = x_min;
-        gr->commands[gr->cmd_count].clip_y = win_h - y_max;
-        gr->commands[gr->cmd_count].clip_w = x_max - x_min;
-        gr->commands[gr->cmd_count].clip_h = y_max - y_min;
+        gr->commands[gr->cmd_count].clip_x = x_min * sc;
+        gr->commands[gr->cmd_count].clip_y = dev_h - y_max * sc;
+        gr->commands[gr->cmd_count].clip_w = (x_max - x_min) * sc;
+        gr->commands[gr->cmd_count].clip_h = (y_max - y_min) * sc;
         gr->cmd_count++;
     }
 }
@@ -1638,16 +1656,26 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
 
 static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer data) {
     struct graphics_priv *gr = data;
-    gr->width = width;
-    gr->height = height;
+    /* GtkGLArea reports its framebuffer size in device pixels (allocation * scale factor).
+     * Hand the logical size to navit so layout math matches the gtk_drawing_area/cairo
+     * backend, which paints in logical units and lets GTK scale them by the monitor factor.
+     * The device-pixel size is retained for the GL output (viewport, MSAA, blit). */
+    int scale = gtk_widget_get_scale_factor(GTK_WIDGET(glarea));
+    if (scale < 1)
+        scale = 1;
+    gr->scale = scale;
+    gr->phys_w = width;
+    gr->phys_h = height;
+    gr->width = width / scale;
+    gr->height = height / scale;
 
     glViewport(0, 0, width, height);
 
     msaa_alloc(gr, width, height);
 
-    navit_set_render_margin(gr->nav, (width > height ? width : height) / 4);
+    navit_set_render_margin(gr->nav, (gr->width > gr->height ? gr->width : gr->height) / 4);
 
-    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(width), GINT_TO_POINTER(height));
+    callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(gr->width), GINT_TO_POINTER(gr->height));
 }
 
 /* ----------------------------------------------------------------
@@ -1671,6 +1699,9 @@ static void on_gesture_click_pressed(GtkGestureClick *gesture, int n_press, doub
     gettimeofday(&tv, &tz);
 
     if (gdk_event_get_event_type(event) == GDK_TOUCH_BEGIN) {
+        /* The second finger of a pinch must not restart the drag the first one began. */
+        if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+            return;
         p.x = (int)x;
         p.y = (int)y;
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(1), (void *)&p);
@@ -1731,6 +1762,24 @@ static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, g
     p.x = (int)x;
     p.y = (int)y;
     this->last_motion = p;
+    /* While a pinch is recognized the two-finger motion drives the zoom; forwarding it as a
+     * drag would also pan the map under the fingers. */
+    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture)) {
+        /* The midpoint still moves during a pinch even when the finger spacing (and so
+         * scale-changed) does not, e.g. panning after zooming out; track it here so the
+         * release recenters using the final midpoint, not a stale one. */
+        double cx, cy;
+        if (gtk_gesture_get_bounding_box_center(this->zoom_gesture, &cx, &cy)) {
+            cx = (double)(int)cx;
+            cy = (double)(int)cy;
+            if (this->preview_cx != (float)cx || this->preview_cy != (float)cy) {
+                this->preview_cx = (float)cx;
+                this->preview_cy = (float)cy;
+                gtk_widget_queue_draw(this->glarea);
+            }
+        }
+        return;
+    }
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1742,6 +1791,8 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
     p.x = (int)x;
     p.y = (int)y;
     this->last_motion = p;
+    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+        return;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1766,6 +1817,33 @@ static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy
     if (button != -1) {
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(button), (void *)&p);
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(button), (void *)&p);
+    }
+}
+
+static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    (void)gesture;
+    (void)sequence;
+    this->pinch_last_scale = 1.0;
+}
+
+static void on_gesture_zoom_scale_changed(GtkGestureZoom *gesture, double scale, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    double cx, cy;
+    /* Zoom about the centre between the fingers, so the map stays under them. Fall back to the
+     * last pointer position if the bounding box is not available. */
+    struct point p = this->last_motion;
+
+    if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
+        p.x = (int)cx;
+        p.y = (int)cy;
+    }
+    if (scale >= this->pinch_last_scale * PINCH_ZOOM_STEP_RATIO) {
+        this->pinch_last_scale = scale;
+        navit_zoom_in(this->nav, 2, &p);
+    } else if (scale <= this->pinch_last_scale / PINCH_ZOOM_STEP_RATIO) {
+        this->pinch_last_scale = scale;
+        navit_zoom_out(this->nav, 2, &p);
     }
 }
 
@@ -1952,11 +2030,19 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     g_signal_connect(scroll, "scroll", G_CALLBACK(on_scroll), this);
     gtk_widget_add_controller(this->glarea, scroll);
 
+    GtkGesture *zoom = gtk_gesture_zoom_new();
+    g_signal_connect(zoom, "begin", G_CALLBACK(on_gesture_zoom_begin), this);
+    g_signal_connect(zoom, "scale-changed", G_CALLBACK(on_gesture_zoom_scale_changed), this);
+    gtk_widget_add_controller(this->glarea, GTK_EVENT_CONTROLLER(zoom));
+    this->zoom_gesture = zoom;
+    this->pinch_last_scale = 1.0;
+
     GtkEventController *key = gtk_event_controller_key_new();
     g_signal_connect(key, "key-pressed", G_CALLBACK(on_key_pressed), this);
     gtk_widget_add_controller(this->glarea, key);
 
     this->timeout = 100;
+    this->scale = 1;
     this->last_motion.x = this->width / 2;
     this->last_motion.y = this->height / 2;
     for (int i = 0; i < 8; i++) {
