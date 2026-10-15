@@ -78,6 +78,9 @@ static const char fragment_src[] = "precision mediump float;\n"
 /* Hard cap to prevent runaway allocation (~256 MB for vertices + commands) */
 #define MAX_VERTICES_HARD (MAX_VERTICES * 16)
 #define CIRCLE_SEGMENTS 72
+/* Pinch scale must grow or shrink by this ratio between zoom steps, matching the Android
+ * backend so a two-finger pinch zooms at a comparable rate there and here. */
+#define PINCH_ZOOM_STEP_RATIO 1.2
 
 /* Vertex: position (x,y) + texcoord (u,v) */
 typedef struct {
@@ -230,6 +233,11 @@ struct graphics_priv {
     struct timeval button_press[8];
     struct timeval button_release[8];
     int timeout;
+
+    /* Cumulative pinch scale at which the last zoom step was emitted, 1.0 at gesture start */
+    double pinch_last_scale;
+    /* Pinch gesture, kept for the click update handler to know whether a pinch owns the touch */
+    GtkGesture *zoom_gesture;
 };
 
 /* Forward declarations */
@@ -1654,6 +1662,9 @@ static void on_gesture_click_pressed(GtkGestureClick *gesture, int n_press, doub
     gettimeofday(&tv, &tz);
 
     if (gdk_event_get_event_type(event) == GDK_TOUCH_BEGIN) {
+        /* The second finger of a pinch must not restart the drag the first one began. */
+        if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+            return;
         p.x = (int)x;
         p.y = (int)y;
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(1), (void *)&p);
@@ -1714,6 +1725,10 @@ static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, g
     p.x = (int)x;
     p.y = (int)y;
     this->last_motion = p;
+    /* While a pinch is recognized the two-finger motion drives the zoom; forwarding it as a
+     * drag would also pan the map under the fingers. */
+    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+        return;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1725,6 +1740,8 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
     p.x = (int)x;
     p.y = (int)y;
     this->last_motion = p;
+    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+        return;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1749,6 +1766,33 @@ static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy
     if (button != -1) {
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(button), (void *)&p);
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(button), (void *)&p);
+    }
+}
+
+static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    (void)gesture;
+    (void)sequence;
+    this->pinch_last_scale = 1.0;
+}
+
+static void on_gesture_zoom_scale_changed(GtkGestureZoom *gesture, double scale, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    double cx, cy;
+    /* Zoom about the centre between the fingers, so the map stays under them. Fall back to the
+     * last pointer position if the bounding box is not available. */
+    struct point p = this->last_motion;
+
+    if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
+        p.x = (int)cx;
+        p.y = (int)cy;
+    }
+    if (scale >= this->pinch_last_scale * PINCH_ZOOM_STEP_RATIO) {
+        this->pinch_last_scale = scale;
+        navit_zoom_in(this->nav, 2, &p);
+    } else if (scale <= this->pinch_last_scale / PINCH_ZOOM_STEP_RATIO) {
+        this->pinch_last_scale = scale;
+        navit_zoom_out(this->nav, 2, &p);
     }
 }
 
@@ -1934,6 +1978,16 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     GtkEventController *scroll = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
     g_signal_connect(scroll, "scroll", G_CALLBACK(on_scroll), this);
     gtk_widget_add_controller(this->glarea, scroll);
+
+    GtkGesture *zoom = gtk_gesture_zoom_new();
+    g_signal_connect(zoom, "begin", G_CALLBACK(on_gesture_zoom_begin), this);
+    g_signal_connect(zoom, "scale-changed", G_CALLBACK(on_gesture_zoom_scale_changed), this);
+    gtk_widget_add_controller(this->glarea, GTK_EVENT_CONTROLLER(zoom));
+    /* Share the click and zoom groups so a pinch can take over the touches the click gesture
+     * already claimed; otherwise the click gesture denies the zoom gesture both of them. */
+    gtk_gesture_group(GTK_GESTURE(click), zoom);
+    this->zoom_gesture = zoom;
+    this->pinch_last_scale = 1.0;
 
     GtkEventController *key = gtk_event_controller_key_new();
     g_signal_connect(key, "key-pressed", G_CALLBACK(on_key_pressed), this);
