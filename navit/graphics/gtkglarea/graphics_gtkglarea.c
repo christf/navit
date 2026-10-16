@@ -785,9 +785,26 @@ static void draw_polygon(struct graphics_priv *gr, struct graphics_gc_priv *gc, 
     gr->dirty = 1;
 }
 
+/* The monitor scale factor, taken from the root graphics so overlays (whose own copy is
+ * never updated) resolve it too. Text is rasterized at this density and drawn at logical
+ * size, keeping glyphs crisp on hidpi screens instead of upscaling a logical-resolution
+ * texture through the device-pixel viewport. */
+static int effective_scale(struct graphics_priv *gr) {
+    while (gr->parent)
+        gr = gr->parent;
+    return gr->scale > 0 ? gr->scale : 1;
+}
+
+/* Snap a logical coordinate to a whole device pixel so each glyph quad samples its texture
+ * 1:1 instead of blurring across a pixel boundary. */
+static float snap_device(float v, float sc) {
+    return roundf(v * sc) / sc;
+}
+
 static void display_text_draw(struct font_freetype_text *text, struct graphics_priv *gr, struct graphics_gc_priv *fg,
                               struct graphics_gc_priv *bg, struct point *p) {
-    int i, x, y, stride;
+    int i, x, y, stride, sc = effective_scale(gr);
+    float fsc = sc;
     struct font_freetype_glyph *g, **gp;
     struct color transparent = {0x0000, 0x0000, 0x0000, 0x0000};
     struct color black = fg->c;
@@ -827,25 +844,27 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g->w + 2, g->h + 2, 0, GL_BGRA, GL_UNSIGNED_BYTE, shadow);
 
-            int gx = ((x + g->x) >> 6) - 1;
-            int gy = ((y + g->y) >> 6) - 1;
+            float gx = snap_device((float)(x >> 6) + (float)g->x / (fsc * 64.0f) - 1.0f, fsc);
+            float gy = snap_device((float)(y >> 6) + (float)g->y / (fsc * 64.0f) - 1.0f, fsc);
+            float gw = snap_device((float)g->w / fsc + 2.0f, fsc);
+            float gh = snap_device((float)g->h / fsc + 2.0f, fsc);
             gr->cur_r = gr->cur_g = gr->cur_b = 1.0f;
             gr->cur_a = 1.0f;
             Vertex verts[6] = {
-                {gx,            gy,            0, 0},
-                {gx + g->w + 2, gy,            1, 0},
-                {gx + g->w + 2, gy + g->h + 2, 1, 1},
-                {gx,            gy,            0, 0},
-                {gx + g->w + 2, gy + g->h + 2, 1, 1},
-                {gx,            gy + g->h + 2, 0, 1},
+                {gx,      gy,      0, 0},
+                {gx + gw, gy,      1, 0},
+                {gx + gw, gy + gh, 1, 1},
+                {gx,      gy,      0, 0},
+                {gx + gw, gy + gh, 1, 1},
+                {gx,      gy + gh, 0, 1},
             };
             submit_vertices(gr, CMD_TEXTURED_QUADS, tex, verts, 6);
             g_free(shadow);
             queue_tex_delete(gr, tex);
             gr->dirty = 1;
         }
-        x += g->dx;
-        y += g->dy;
+        x += g->dx / sc;
+        y += g->dy / sc;
     }
 
     /* Draw foreground glyphs */
@@ -869,25 +888,27 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g->w, g->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, glyph);
 
-            int gx = (x + g->x) >> 6;
-            int gy = (y + g->y) >> 6;
+            float gx = snap_device((float)(x >> 6) + (float)g->x / (fsc * 64.0f), fsc);
+            float gy = snap_device((float)(y >> 6) + (float)g->y / (fsc * 64.0f), fsc);
+            float gw = snap_device((float)g->w / fsc, fsc);
+            float gh = snap_device((float)g->h / fsc, fsc);
             gr->cur_r = gr->cur_g = gr->cur_b = 1.0f;
             gr->cur_a = 1.0f;
             Vertex verts[6] = {
-                {gx,        gy,        0, 0},
-                {gx + g->w, gy,        1, 0},
-                {gx + g->w, gy + g->h, 1, 1},
-                {gx,        gy,        0, 0},
-                {gx + g->w, gy + g->h, 1, 1},
-                {gx,        gy + g->h, 0, 1},
+                {gx,      gy,      0, 0},
+                {gx + gw, gy,      1, 0},
+                {gx + gw, gy + gh, 1, 1},
+                {gx,      gy,      0, 0},
+                {gx + gw, gy + gh, 1, 1},
+                {gx,      gy + gh, 0, 1},
             };
             submit_vertices(gr, CMD_TEXTURED_QUADS, tex, verts, 6);
             g_free(glyph);
             queue_tex_delete(gr, tex);
             gr->dirty = 1;
         }
-        x += g->dx;
-        y += g->dy;
+        x += g->dx / sc;
+        y += g->dy / sc;
     }
 }
 
@@ -899,8 +920,12 @@ static void draw_text(struct graphics_priv *gr, struct graphics_gc_priv *fg, str
     }
     if (gr->parent && !gr->overlay_enabled)
         return;
+    /* dx/dy form a unit rotation matrix (0x10000 == 1.0); scaling both by the monitor factor
+     * makes freetype rasterize each glyph at device resolution while display_text_draw divides
+     * the resulting metrics back to logical size, so labels stay sharp on hidpi screens. */
+    int sc = effective_scale(gr);
     struct font_freetype_text *t;
-    t = gr->freetype_methods.text_new(text, (struct font_freetype_font *)font, dx, dy);
+    t = gr->freetype_methods.text_new(text, (struct font_freetype_font *)font, dx * sc, dy * sc);
     display_text_draw(t, gr, fg, bg, p);
     gr->freetype_methods.text_destroy(t);
 }
