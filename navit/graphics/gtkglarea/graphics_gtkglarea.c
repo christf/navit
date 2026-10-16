@@ -1443,7 +1443,12 @@ static gboolean on_glarea_realize(GtkWidget *widget, gpointer data) {
     setup_program(gr);
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    /* Blend RGB normally, but leave the destination alpha untouched (GL_ZERO, GL_ONE). The
+     * GtkGLArea surface is opaque: the whole framebuffer must stay alpha = 1 so the window
+     * compositor does not blend the desktop back over translucent elements (which washed out
+     * semi-transparent OSD backgrounds). glBlendFunc would blend the alpha channel too, letting
+     * a translucent quad's alpha leak into the framebuffer alpha. */
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     msaa_setup(gr);
