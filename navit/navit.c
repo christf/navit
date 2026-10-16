@@ -481,6 +481,13 @@ void navit_draw(struct navit *this_) {
         navit_draw_async(this_, 0);
 }
 
+/* Fetch the prefetch margin of map around the current view. A pinch zoom-out reveals area beyond
+ * the viewport, so without this the scaled-back frame shows the background at its edges. */
+void navit_draw_prefetch(struct navit *this_) {
+    if (this_->ready == 3)
+        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
+}
+
 /* True while a drag gesture has started moving. Foreign rebuilds then hand back the main thread
  * between their idle chunks (see graphics do_draw): running them mid-gesture would steal time
  * from the pan. */
@@ -1365,6 +1372,33 @@ void navit_zoom_out(struct navit *this_, int factor, struct point *p) {
         this_->autozoom_paused = 10;
     }
     navit_scale(this_, scale, p, 1);
+}
+
+/**
+ * Apply the result of a pinch gesture that both scaled and panned the map.
+ *
+ * The two-finger midpoint may move as well as change the finger spacing. The frame rendered during
+ * the gesture is the retained one scaled about the midpoint it started at and translated by the
+ * midpoint's movement; this reproduces that transform in a single redraw.
+ *
+ * @param this_ The navit instance
+ * @param scale The target scale
+ * @param base The midpoint when the gesture began
+ * @param now The midpoint when the gesture ended
+ * @returns nothing
+ */
+void navit_pinch_to(struct navit *this_, long scale, struct point *base, struct point *now) {
+    struct point q;
+    if (this_->autozoom_active)
+        this_->autozoom_paused = 10;
+    navit_scale(this_, scale, base, 0);
+    q.x = this_->w / 2 - now->x + base->x;
+    q.y = this_->h / 2 - now->y + base->y;
+    navit_set_center_screen(this_, &q, 0);
+}
+
+long navit_get_scale(struct navit *this_) {
+    return transform_get_scale(this_->trans);
 }
 
 void navit_zoom_in_cursor(struct navit *this_, int factor) {

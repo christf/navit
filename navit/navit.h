@@ -66,6 +66,7 @@ struct tracking *navit_get_tracking(struct navit *this_);
 char *navit_get_user_data_directory(int create);
 void navit_draw_async(struct navit *this_, int async);
 void navit_draw(struct navit *this_);
+void navit_draw_prefetch(struct navit *this_);
 int navit_gesture_active(struct navit *this_);
 int navit_get_ready(struct navit *this_);
 void navit_draw_displaylist(struct navit *this_);
@@ -80,6 +81,8 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
 void navit_handle_motion(struct navit *this_, struct point *p);
 void navit_zoom_in(struct navit *this_, int factor, struct point *p);
 void navit_zoom_out(struct navit *this_, int factor, struct point *p);
+void navit_pinch_to(struct navit *this_, long scale, struct point *base, struct point *now);
+long navit_get_scale(struct navit *this_);
 void navit_zoom_in_cursor(struct navit *this_, int factor);
 void navit_zoom_out_cursor(struct navit *this_, int factor);
 struct navit *navit_new(struct attr *parent, struct attr **attrs);

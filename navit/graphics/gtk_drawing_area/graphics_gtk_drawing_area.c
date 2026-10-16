@@ -20,9 +20,6 @@
 #include "callback.h"
 /* Default render margin is one quarter of the larger screen dimension. */
 #define RENDER_MARGIN_DEFAULT_DIVISOR 4
-/* Pinch scale must grow or shrink by this ratio between zoom steps, matching the Android
- * backend so a two-finger pinch zooms at a comparable rate there and here. */
-#define PINCH_ZOOM_STEP_RATIO 1.2
 #include "color.h"
 #include "config.h"
 #include "debug.h"
@@ -104,8 +101,15 @@ struct graphics_priv {
     cairo_surface_t *scroll_surface;
     double touch_start_x;
     double touch_start_y;
-    /* Cumulative pinch scale at which the last zoom step was emitted, 1.0 at gesture start */
-    double pinch_last_scale;
+    /* Map scale in effect when the pinch began, so the gesture scale can be applied absolutely */
+    long pinch_base_scale;
+    /* The frame rendered while the fingers move: the retained one scaled by preview_scale about
+     * the gesture's start midpoint and translated by that midpoint's movement. No display list
+     * rebuild runs until the gesture ends. */
+    double preview_scale, preview_cx, preview_cy;
+    double pinch_base_cx, pinch_base_cy;
+    /* Set once a pinch has fetched the wider region, so zooming out only rebuilds once per gesture. */
+    int pinch_prefetched;
     /* Pinch gesture, kept for the click update handler to know whether a pinch owns the touch */
     GtkGesture *zoom_gesture;
 };
@@ -790,9 +794,19 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
         cairo_translate(cr, -gra->rotation_center_x, -gra->rotation_center_y);
     }
 
+    cairo_save(cr);
+    /* Pinch preview transforms the retained frame until the gesture ends, so the map tracks the
+     * two fingers without rebuilding the display list. p' = now + s (p - base), i.e. scaled about
+     * the start midpoint and moved with the current one. */
+    if (gra->preview_scale != 1.0 || gra->preview_cx != gra->pinch_base_cx || gra->preview_cy != gra->pinch_base_cy) {
+        cairo_translate(cr, gra->preview_cx - gra->preview_scale * gra->pinch_base_cx,
+                        gra->preview_cy - gra->preview_scale * gra->pinch_base_cy);
+        cairo_scale(cr, gra->preview_scale, gra->preview_scale);
+    }
     cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x - gra->render_margin,
                              gra->p.y - gra->render_margin);
     cairo_paint(cr);
+    cairo_restore(cr);
 
     if (gra->display_rotation != 0.0) {
         cairo_identity_matrix(cr);
@@ -932,29 +946,73 @@ static void on_scroll(GtkEventControllerScroll *controller, double dx, double dy
 
 static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data) {
     struct graphics_priv *this = user_data;
-    (void)gesture;
+    struct graphics *gra;
+    double cx, cy;
     (void)sequence;
-    this->pinch_last_scale = 1.0;
+    this->pinch_base_scale = navit_get_scale(this->nav);
+    this->preview_scale = 1.0;
+    this->pinch_prefetched = 0;
+    if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
+        this->pinch_base_cx = this->preview_cx = cx;
+        this->pinch_base_cy = this->preview_cy = cy;
+    } else {
+        this->pinch_base_cx = this->preview_cx = this->last_motion.x;
+        this->pinch_base_cy = this->preview_cy = this->last_motion.y;
+    }
+    /* The map scales under the fingers, so hide the cursor and OSD for the duration of the pinch. */
+    gra = navit_get_graphics(this->nav);
+    if (gra)
+        graphics_overlay_disable(gra, 1);
+    gtk_widget_queue_draw(this->widget);
 }
 
 static void on_gesture_zoom_scale_changed(GtkGestureZoom *gesture, double scale, gpointer user_data) {
     struct graphics_priv *this = user_data;
     double cx, cy;
-    /* Zoom about the centre between the fingers, so the map stays under them. Fall back to the
-     * last pointer position if the bounding box is not available. */
-    struct point p = this->last_motion;
 
+    if (scale <= 0.0)
+        return;
     if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
-        p.x = (int)cx;
-        p.y = (int)cy;
+        this->preview_cx = cx;
+        this->preview_cy = cy;
+    } else {
+        this->preview_cx = this->last_motion.x;
+        this->preview_cy = this->last_motion.y;
     }
-    if (scale >= this->pinch_last_scale * PINCH_ZOOM_STEP_RATIO) {
-        this->pinch_last_scale = scale;
-        navit_zoom_in(this->nav, 2, &p);
-    } else if (scale <= this->pinch_last_scale / PINCH_ZOOM_STEP_RATIO) {
-        this->pinch_last_scale = scale;
-        navit_zoom_out(this->nav, 2, &p);
+    /* Only re-render the retained frame; the display list is rebuilt once the gesture ends. */
+    this->preview_scale = scale;
+    /* Zooming out reveals area beyond the viewport, so fetch the pan prefetch margin once; the
+     * scaled-back frame then has map to show instead of the background at its edges. */
+    if (scale < 1.0 && !this->pinch_prefetched) {
+        this->pinch_prefetched = 1;
+        navit_draw_prefetch(this->nav);
     }
+    gtk_widget_queue_draw(this->widget);
+}
+
+static void on_gesture_zoom_end(GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data) {
+    struct graphics_priv *this = user_data;
+    struct graphics *gra = navit_get_graphics(this->nav);
+    struct point base, now;
+    long target;
+
+    (void)gesture;
+    (void)sequence;
+    if (gra)
+        graphics_overlay_disable(gra, 0);
+    base.x = (int)this->pinch_base_cx;
+    base.y = (int)this->pinch_base_cy;
+    now.x = (int)this->preview_cx;
+    now.y = (int)this->preview_cy;
+    if (this->preview_scale == 1.0 && base.x == now.x && base.y == now.y) {
+        gtk_widget_queue_draw(this->widget);
+        return;
+    }
+    target = (long)(this->pinch_base_scale / this->preview_scale);
+    if (target < 1)
+        target = 1;
+    this->preview_scale = 1.0;
+    navit_pinch_to(this->nav, target, &base, &now);
 }
 
 static void on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
@@ -1366,6 +1424,7 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
         this->win_h = attr->u.num;
     this->last_motion.x = this->win_w / 2;
     this->last_motion.y = this->win_h / 2;
+    this->preview_scale = 1.0;
     this->timeout = 100;
     if ((attr = attr_search(attrs, attr_timeout)))
         this->timeout = attr->u.num;
@@ -1406,9 +1465,9 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     GtkGesture *zoom = gtk_gesture_zoom_new();
     g_signal_connect(zoom, "begin", G_CALLBACK(on_gesture_zoom_begin), this);
     g_signal_connect(zoom, "scale-changed", G_CALLBACK(on_gesture_zoom_scale_changed), this);
+    g_signal_connect(zoom, "end", G_CALLBACK(on_gesture_zoom_end), this);
     gtk_widget_add_controller(draw, GTK_EVENT_CONTROLLER(zoom));
     this->zoom_gesture = zoom;
-    this->pinch_last_scale = 1.0;
 
     for (i = 0; i < 8; i++) {
         this->button_press[i].tv_sec = 0;
