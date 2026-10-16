@@ -64,19 +64,25 @@ struct font_freetype_methods {
      * @brief Get glyph "shadow", a glyph bitmap to be used as background.
      *
      * This method returns a glyph shadow, a bitmap with the glyph, where the glyph has been
-     * "fattened" by expanding it by one pixel on each side.
+     * "fattened" by expanding it by radius pixels on each side.
      * In Navit, the shadow is used as the background behind the glyph bitmaps (returned by
      * font_freetype_methods.get_glyph() ), to make the text easier to read.
      *
+     * Callers that rasterize glyphs at the device pixel density (i.e. that scale the dx/dy
+     * passed to font_freetype_methods.text_new() by the monitor scale) must pass that same
+     * scale as radius, so the halo keeps its width of one logical pixel instead of shrinking
+     * to a single device pixel.
+     *
      * @param g glyph to render, usually created via font_freetype_methods.text_new()
-     * @param data buffer for result image bitmap. Size must be at least (4 * stride * (g->h+2)).
-     * @param stride see font_freetype_methods.get_glyph(). Minimum: g->w+2.
+     * @param data buffer for result image bitmap. Size must be at least (4 * stride * (g->h+2*radius)).
+     * @param stride see font_freetype_methods.get_glyph(). Minimum: g->w+2*radius.
      * @param foreground color for rendering the "shadow"
      * @param background color for rest of the bitmap (typically set to transparent)
+     * @param radius halo width in pixels, 1 for glyphs rasterized at logical resolution
      * @returns 0 if depth is invalid, 1 otherwise
      */
     int (*get_shadow)(struct font_freetype_glyph *glyph, unsigned char *data, int stride, struct color *fg,
-                      struct color *tr);
+                      struct color *tr, int radius);
     /**
      * @brief Get a glyph bitmap.
      *

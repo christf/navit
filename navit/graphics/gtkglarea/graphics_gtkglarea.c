@@ -830,9 +830,13 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
     while (i-- > 0) {
         g = *gp++;
         if (g->w && g->h && bg) {
-            stride = (g->w + 2) * 4;
-            unsigned char *shadow = g_malloc(stride * (g->h + 2));
-            gr->freetype_methods.get_shadow(g, shadow, stride, &white, &transparent);
+            /* The halo must stay one logical pixel wide. The glyph is rasterized at the device
+             * pixel density, so a one-device-pixel halo would shrink to 1/sc of a logical pixel;
+             * dilate by sc instead. The quad below already spans 2*sc device pixels (its -1.0f
+             * and +2.0f offsets are logical), so texture and quad stay in step. */
+            stride = (g->w + 2 * sc) * 4;
+            unsigned char *shadow = g_malloc(stride * (g->h + 2 * sc));
+            gr->freetype_methods.get_shadow(g, shadow, stride, &white, &transparent, sc);
 
             /* Upload shadow as GL texture and draw */
             GLuint tex;
@@ -842,7 +846,7 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g->w + 2, g->h + 2, 0, GL_BGRA, GL_UNSIGNED_BYTE, shadow);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g->w + 2 * sc, g->h + 2 * sc, 0, GL_BGRA, GL_UNSIGNED_BYTE, shadow);
 
             float gx = snap_device((float)(x >> 6) + (float)g->x / (fsc * 64.0f) - 1.0f, fsc);
             float gy = snap_device((float)(y >> 6) + (float)g->y / (fsc * 64.0f) - 1.0f, fsc);

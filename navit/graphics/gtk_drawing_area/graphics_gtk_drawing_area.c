@@ -436,7 +436,7 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             unsigned char *shadow;
             stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, g->w + 2);
             shadow = g_malloc(stride * (g->h + 2));
-            gr->freetype_methods.get_shadow(g, shadow, stride, &bg->c, &transparent);
+            gr->freetype_methods.get_shadow(g, shadow, stride, &bg->c, &transparent, 1);
             draw_rgb_image_buffer(gr->cairo, g->w + 2, g->h + 2, ((x + g->x) >> 6) - 1, ((y + g->y) >> 6) - 1, stride,
                                   shadow);
             g_free(shadow);
