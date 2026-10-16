@@ -2017,9 +2017,6 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     g_signal_connect(zoom, "begin", G_CALLBACK(on_gesture_zoom_begin), this);
     g_signal_connect(zoom, "scale-changed", G_CALLBACK(on_gesture_zoom_scale_changed), this);
     gtk_widget_add_controller(this->glarea, GTK_EVENT_CONTROLLER(zoom));
-    /* Share the click and zoom groups so a pinch can take over the touches the click gesture
-     * already claimed; otherwise the click gesture denies the zoom gesture both of them. */
-    gtk_gesture_group(GTK_GESTURE(click), zoom);
     this->zoom_gesture = zoom;
     this->pinch_last_scale = 1.0;
 
