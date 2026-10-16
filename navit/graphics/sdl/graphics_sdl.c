@@ -541,7 +541,7 @@ static void display_text_draw(struct font_freetype_text *text, struct graphics_p
             stride = (g->w + 2) * 4;
             if (color) {
                 resize_ft_buffer(stride * (g->h + 2));
-                gr->freetype_methods.get_shadow(g, ft_buffer, stride, &white, &transparent);
+                gr->freetype_methods.get_shadow(g, ft_buffer, stride, &white, &transparent, 1);
 
                 SDL_Surface *glyph_surface = SDL_CreateRGBSurfaceFrom(ft_buffer, g->w + 2, g->h + 2, 32, stride,
                                                                       0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000);
