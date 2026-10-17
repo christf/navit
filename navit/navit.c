@@ -1144,7 +1144,13 @@ static void navit_motion_timeout(struct navit *this_) {
                 update_transformation(this_->trans, &this_->pressed, &this_->current);
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
-                if (this_->zoomed || !navit_displaylist_covers(this_)) {
+                /* A covering recenter can only take the cheap scroll+clip path when the driver
+                 * actually shifts its surface: navit then repaints just the exposed strips. A
+                 * driver without a scrollable surface (gtkglarea rebuilds every frame from its
+                 * retained command list) cannot, and a synchronous full redraw here would stall
+                 * the gesture at dense zoom levels, so it falls through to the async rebuild. */
+                if (this_->zoomed || !navit_displaylist_covers(this_)
+                    || !graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     if (!this_->pan_rebuild_cb)
                         this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
                     this_->pan_rebuild =
@@ -1157,7 +1163,7 @@ static void navit_motion_timeout(struct navit *this_) {
                     } else {
                         graphics_draw_drag(this_->gra, NULL);
                     }
-                } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
+                } else {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
                     graphics_draw_drag(this_->gra, NULL);
@@ -1186,9 +1192,6 @@ static void navit_motion_timeout(struct navit *this_) {
                         navit_draw_displaylist(this_);
                         graphics_clear_clip(this_->gra);
                     }
-                } else {
-                    graphics_draw_drag(this_->gra, NULL);
-                    navit_draw_displaylist(this_);
                 }
             }
             graphics_overlay_disable(this_->gra, 1);
