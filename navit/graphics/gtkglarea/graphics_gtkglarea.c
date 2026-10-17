@@ -1251,10 +1251,12 @@ static int scroll_surface(struct graphics_priv *gr, int dx, int dy) {
     (void)gr;
     (void)dx;
     (void)dy;
-    /* No-op: navit's scroll+clip+redraw flow already updates the map transformation
-     * and redraws the full map at the correct position via draw_mode_begin/end.
-     * Adding an MVP offset here would double-shift the geometry. */
-    return 1;
+    /* This backend keeps no scrollable surface: the frame is rebuilt from the retained command
+     * list on every render. Reporting success here would send navit into its scroll+clip+redraw
+     * flow, which redraws the whole display list synchronously on every recenter and stalls the
+     * gesture at dense zoom levels. Return 0 so navit falls back to its async retained-frame
+     * rebuild, which keeps the current frame on screen and off the main thread. */
+    return 0;
 }
 
 /* ----------------------------------------------------------------
