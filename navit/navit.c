@@ -1065,32 +1065,40 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
         }
         if (this_->moved) {
             dbg(lvl_debug, "mouse drag (%d, %d)->(%d, %d)", this_->pressed.x, this_->pressed.y, p->x, p->y);
+            this_->current = *p;
             update_transformation(this_->trans, &this_->pressed, p);
-            graphics_draw_drag(this_->gra, NULL);
-            this_->pan_drift.x = 0;
-            this_->pan_drift.y = 0;
-            this_->pan_rebuild = 0;
             transform_copy(this_->trans, this_->trans_cursor);
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
-            if (!this_->zoomed) {
-                navit_set_timeout(this_);
-                /* A rebuild requested during the gesture was deferred; release flushes it by
-                 * taking the full rebuild branch even when the (once prefetched) selection would
-                 * still cover the view. The plain redraw below cannot pick it up: it only
-                 * re-projects items already in the list. The flush runs chunked on idle rather
-                 * than synchronously, so the release does not stall. If a rebuild is already in
-                 * flight, it was paused for the gesture and resumes with the map the moment the
-                 * release turns the gesture off, picking up the change itself. */
-                int deferred_rebuild = this_->redraw_pending;
-                this_->redraw_pending = 0;
-                if (navit_displaylist_covers(this_) && !deferred_rebuild)
-                    navit_draw_displaylist(this_);
-                else if (!graphics_displaylist_busy(this_->displaylist))
-                    navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
-            } else
-                navit_draw(this_);
+            if (this_->pan_rebuild) {
+                /* A rebuild from the last recenter is still in flight and the surface holds the
+                 * frame drawn before it. Clearing the offset here would present that frame at the
+                 * pan origin until the rebuild lands, so keep it and let navit_pan_rebuild_done
+                 * apply the residual drag to the fresh frame. */
+                if (!this_->zoomed)
+                    navit_set_timeout(this_);
+            } else {
+                graphics_draw_drag(this_->gra, NULL);
+                this_->pan_drift.x = 0;
+                this_->pan_drift.y = 0;
+                this_->pan_rebuild = 0;
+                if (!this_->zoomed) {
+                    navit_set_timeout(this_);
+                    /* A rebuild requested during the gesture was deferred; release flushes it by
+                     * taking the full rebuild branch even when the (once prefetched) selection
+                     * would still cover the view. The plain redraw below cannot pick it up: it
+                     * only re-projects items already in the list. The flush runs chunked on idle
+                     * rather than synchronously, so the release does not stall. */
+                    int deferred_rebuild = this_->redraw_pending;
+                    this_->redraw_pending = 0;
+                    if (navit_displaylist_covers(this_) && !deferred_rebuild)
+                        navit_draw_displaylist(this_);
+                    else if (!graphics_displaylist_busy(this_->displaylist))
+                        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
+                } else
+                    navit_draw(this_);
+            }
         } else
             return 1;
     }
