@@ -1017,10 +1017,10 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
         return 0;
     }
     if (pressed) {
-        this_->pressed = *p;
         this_->last = *p;
-        this_->zoomed = 0;
         if (button == 1) {
+            this_->pressed = *p;
+            this_->zoomed = 0;
             this_->button_pressed = 1;
             this_->moved = 0;
             this_->popped = 0;
@@ -1028,6 +1028,11 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
                 this_->button_timeout = event_add_timeout(500, 0, popup_callback);
             if (this_->gra)
                 graphics_freeze_display_rotation(this_->gra);
+        } else if (!this_->button_pressed) {
+            /* A standalone click on another button (centre, popup, wheel). While a drag is active,
+             * leave its state alone: zooming mid-drag must not move the drag origin or end it. */
+            this_->pressed = *p;
+            this_->zoomed = 0;
         }
         if (button == 2)
             navit_set_center_screen(this_, p, 1);
@@ -1042,7 +1047,10 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             navit_zoom_out(this_, 2, p);
         }
     } else {
-
+        /* Only the drag button ends the gesture; a wheel release during a drag must not finalise the
+         * pan or clear the pressed state. */
+        if (button != 1)
+            return 0;
         this_->button_pressed = 0;
         if (this_->button_timeout) {
             event_remove_timeout(this_->button_timeout);
