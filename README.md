@@ -19,7 +19,7 @@ Optimal routes and directions spoken in 70+ languages. \
 Points of interest (POIs) in many formats.
 
 Help and more info can be found in [the docs](https://navit.readthedocs.io/en/latest/). \
-The [Reporting Bugs](https://navit.readthedocs.io/en/latest/user/community/Reporting%20Bugs.html) document helps you file issues.
+The [Reporting Bugs](https://navit.readthedocs.io/en/latest/user/community/Reporting_Bugs.html) document helps you file issues.
 
 Maps
 ====
