@@ -1065,22 +1065,6 @@ static int access_value(char *v) {
     return 3;
 }
 
-/*
- * Default access flags for a barrier node without access tags, or -1 if the
- * type is not a barrier. Bollards, cycle barriers and lift gates narrow the
- * way, so pedestrians, bicycles and horses can usually pass.
- */
-static int osm_node_barrier_default_flags(enum item_type type) {
-    switch (type) {
-    case type_barrier_bollard:
-    case type_barrier_cycle:
-    case type_barrier_lift_gate:
-        return AF_PBH;
-    default:
-        return -1;
-    }
-}
-
 static void osm_update_attr_present(char *k, char *v);
 
 void osm_add_tag(char *k, char *v) {
@@ -1981,7 +1965,7 @@ void osm_end_node(struct maptool_osm *osm) {
         if (types[i] == type_none)
             continue;
         item_bin = init_item(types[i]);
-        barrier_flags = osm_node_barrier_default_flags(types[i]);
+        barrier_flags = item_barrier_default_flags(types[i]);
         if (item_is_town(*item_bin) && attr_strings[attr_string_population])
             item_bin_set_type_by_population(item_bin, atoi(attr_strings[attr_string_population]));
         item_bin_add_coord(item_bin, &current_node->c, 1);
