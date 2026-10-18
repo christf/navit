@@ -1404,6 +1404,33 @@ void navit_zoom_out(struct navit *this_, int factor, struct point *p) {
 }
 
 /**
+ * Hand the running button drag over to a two-finger pinch.
+ *
+ * The first finger of a pinch starts a drag before the zoom gesture is recognised, and its motion
+ * is not forwarded once it is, so the drag position stops where the pinch takes over. Ending the
+ * drag there moves the pan the displayed frame is offset by into the transformation without
+ * changing the view. Left to the touch-up instead, the drag would end at the lift position,
+ * panning by the finger travel of the whole pinch, or, when no motion was forwarded, recenter on
+ * the lift as if the touch had been a tap.
+ *
+ * @param this_ The navit instance
+ */
+void navit_pinch_begin(struct navit *this_) {
+    struct point end;
+
+    if (!this_->button_pressed)
+        return;
+    end = this_->current;
+    if (!this_->moved) {
+        /* There is no pan to hand over. End the drag at the screen centre, well inside the tap
+         * border, so the release cannot recenter the map either. */
+        end.x = this_->w / 2;
+        end.y = this_->h / 2;
+    }
+    navit_handle_button(this_, 0, 1, &end, NULL);
+}
+
+/**
  * Apply the result of a pinch gesture that both scaled and panned the map.
  *
  * The two-finger midpoint may move as well as change the finger spacing. The frame rendered during

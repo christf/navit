@@ -112,6 +112,9 @@ struct graphics_priv {
     int pinch_prefetched;
     /* Pinch gesture, kept for the click update handler to know whether a pinch owns the touch */
     GtkGesture *zoom_gesture;
+    /* A single-finger touch drag is in progress: its press was forwarded and the release is still
+     * pending. A pinch takes the sequence over and ends the drag itself. */
+    int touch_drag;
 };
 
 struct graphics_gc_priv {
@@ -854,6 +857,7 @@ static void on_gesture_click_pressed(GtkGestureClick *gesture, int n_press, doub
             return;
         this->touch_start_x = x;
         this->touch_start_y = y;
+        this->touch_drag = 1;
         p.x = (int)x;
         p.y = (int)y;
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(1), GINT_TO_POINTER(1), (void *)&p);
@@ -883,6 +887,11 @@ static void on_gesture_click_released(GtkGestureClick *gesture, int n_press, dou
     gettimeofday(&tv, &tz);
 
     if (gdk_event_get_event_type(event) == GDK_TOUCH_END) {
+        /* A touch with no drag left to end belongs to a pinch: the pinch already ended the drag
+         * and rebuilt the view, so the finger positions must not pan it a second time. */
+        if (!this->touch_drag)
+            return;
+        this->touch_drag = 0;
         p.x = (int)x;
         p.y = (int)y;
         callback_list_call_attr_3(this->cbl, attr_button, GINT_TO_POINTER(0), GINT_TO_POINTER(1), (void *)&p);
@@ -961,6 +970,10 @@ static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequenc
         this->pinch_base_cx = this->preview_cx = this->last_motion.x;
         this->pinch_base_cy = this->preview_cy = this->last_motion.y;
     }
+    /* The first finger started a drag before the pinch was recognised, and its motion is no
+     * longer forwarded, so hand that drag to the transform before the touch-up ends it here. */
+    navit_pinch_begin(this->nav);
+    this->touch_drag = 0;
     /* The map scales under the fingers, so hide the cursor and OSD for the duration of the pinch. */
     gra = navit_get_graphics(this->nav);
     if (gra)
