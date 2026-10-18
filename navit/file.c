@@ -512,7 +512,6 @@ static int lzma_uncompress_int(Bytef *dest, uLongf *destLen, const Bytef *source
 #endif
 }
 
-
 unsigned char *file_data_read_method(struct file *file, long long offset, int size, int size_uncomp, int method) {
     void *ret;
     char *buffer = 0;

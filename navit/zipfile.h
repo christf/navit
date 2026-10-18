@@ -31,7 +31,6 @@
 #    define ATTRIBUTE_PACKED
 #endif
 
-
 #define ZIP_COMPRESSION_NONE 0
 
 #define ZIP_COMPRESSION_STORED 0
