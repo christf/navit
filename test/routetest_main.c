@@ -17,6 +17,7 @@
 #include "route.h"
 #include "transform.h"
 #include "vehicleprofile.h"
+#include "xmlconfig.h"
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,6 +101,7 @@ static struct vehicleprofile *make_profile(char *name, long flags, long fwd_mask
     rp_a.type = attr_roadprofile;
     rp_a.u.navit_object = (struct navit_object *)rp;
     vehicleprofile_add_attr(vp, &rp_a);
+    navit_object_unref((struct navit_object *)rp);
     return vp;
 }
 
@@ -139,7 +141,7 @@ static int run_case(char *map_path, struct coord *from, struct coord *to, struct
     struct mapset *ms;
     struct route *r;
     struct pcoord pos, dst;
-    int status, i;
+    int status, i, rc = 0;
 
     type_a.type = attr_type;
     type_a.u.str = "binfile";
@@ -181,7 +183,8 @@ static int run_case(char *map_path, struct coord *from, struct coord *to, struct
     printf("status=%d %s\n", status, status == 1 ? "path_done" : status == 0 ? "not_found" : "error");
     if (status < 0) {
         printf("FAIL: routing did not complete (status=%d)\n", status);
-        return 1;
+        rc = 1;
+        goto out;
     }
     if (status == 1 && len_out) {
         struct attr len_a;
@@ -196,10 +199,15 @@ static int run_case(char *map_path, struct coord *from, struct coord *to, struct
     if ((status == 1) != expect_found) {
         printf("FAIL: expected %s but got %s\n", expect_found ? "route found" : "route not found",
                status == 1 ? "route found" : "route not found");
-        return 1;
+        rc = 1;
+        goto out;
     }
     printf("PASS\n");
-    return 0;
+out:
+    route_destroy(r);
+    mapset_destroy(ms);
+    map_destroy(map);
+    return rc;
 }
 
 /* Position on a fixture street: same longitude as the street, latitude in
@@ -325,5 +333,8 @@ int main(int argc, char **argv) {
         printf("== regression map: bike -> BEYOND (expect found; proves per-node flag reset) ==\n");
         rc |= run_case(argv[5], &a1, &b2, vp_bike, 1, NULL);
     }
+    navit_object_unref((struct navit_object *)vp_car);
+    navit_object_unref((struct navit_object *)vp_bike);
+    plugin_destroy(pl);
     return rc;
 }
