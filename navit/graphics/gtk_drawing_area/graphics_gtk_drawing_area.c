@@ -924,8 +924,22 @@ static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, g
     this->last_motion = p;
     /* While a pinch is recognized the two-finger motion drives the zoom; forwarding it as a
      * drag would also pan the map under the fingers. */
-    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture))
+    if (this->zoom_gesture && gtk_gesture_is_recognized(this->zoom_gesture)) {
+        /* The midpoint still moves during a pinch even when the finger spacing (and so
+         * scale-changed) does not, e.g. panning after zooming out; track it here so the
+         * release recenters using the final midpoint, not a stale one. */
+        double cx, cy;
+        if (gtk_gesture_get_bounding_box_center(this->zoom_gesture, &cx, &cy)) {
+            cx = (double)(int)cx;
+            cy = (double)(int)cy;
+            if (this->preview_cx != cx || this->preview_cy != cy) {
+                this->preview_cx = cx;
+                this->preview_cy = cy;
+                gtk_widget_queue_draw(this->widget);
+            }
+        }
         return;
+    }
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
