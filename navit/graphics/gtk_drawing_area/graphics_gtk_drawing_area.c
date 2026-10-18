@@ -952,9 +952,11 @@ static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequenc
     this->pinch_base_scale = navit_get_scale(this->nav);
     this->preview_scale = 1.0;
     this->pinch_prefetched = 0;
+    /* Truncate to whole pixels: the release hands these to navit_pinch_to as struct point, so the
+     * preview has to use the same integer anchors to stay pixel-identical. */
     if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
-        this->pinch_base_cx = this->preview_cx = cx;
-        this->pinch_base_cy = this->preview_cy = cy;
+        this->pinch_base_cx = this->preview_cx = (double)((int)cx);
+        this->pinch_base_cy = this->preview_cy = (double)((int)cy);
     } else {
         this->pinch_base_cx = this->preview_cx = this->last_motion.x;
         this->pinch_base_cy = this->preview_cy = this->last_motion.y;
@@ -969,21 +971,27 @@ static void on_gesture_zoom_begin(GtkGesture *gesture, GdkEventSequence *sequenc
 static void on_gesture_zoom_scale_changed(GtkGestureZoom *gesture, double scale, gpointer user_data) {
     struct graphics_priv *this = user_data;
     double cx, cy;
+    long target;
 
     if (scale <= 0.0)
         return;
     if (gtk_gesture_get_bounding_box_center(GTK_GESTURE(gesture), &cx, &cy)) {
-        this->preview_cx = cx;
-        this->preview_cy = cy;
+        this->preview_cx = (double)((int)cx);
+        this->preview_cy = (double)((int)cy);
     } else {
         this->preview_cx = this->last_motion.x;
         this->preview_cy = this->last_motion.y;
     }
-    /* Only re-render the retained frame; the display list is rebuilt once the gesture ends. */
-    this->preview_scale = scale;
+    /* Only re-render the retained frame; the display list is rebuilt once the gesture ends. The
+     * preview is snapped to the integer zoom level the release applies, so lifting the fingers
+     * re-renders the very same view instead of moving it by the quantisation remainder. */
+    target = (long)(this->pinch_base_scale / scale + 0.5);
+    if (target < 1)
+        target = 1;
+    this->preview_scale = (double)this->pinch_base_scale / (double)target;
     /* Zooming out reveals area beyond the viewport, so fetch the pan prefetch margin once; the
      * scaled-back frame then has map to show instead of the background at its edges. */
-    if (scale < 1.0 && !this->pinch_prefetched) {
+    if (this->preview_scale < 1.0 && !this->pinch_prefetched) {
         this->pinch_prefetched = 1;
         navit_draw_prefetch(this->nav);
     }
@@ -1008,7 +1016,7 @@ static void on_gesture_zoom_end(GtkGesture *gesture, GdkEventSequence *sequence,
         gtk_widget_queue_draw(this->widget);
         return;
     }
-    target = (long)(this->pinch_base_scale / this->preview_scale);
+    target = (long)(this->pinch_base_scale / this->preview_scale + 0.5);
     if (target < 1)
         target = 1;
     this->preview_scale = 1.0;
