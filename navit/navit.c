@@ -240,6 +240,7 @@ static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
 static int navit_displaylist_covers(struct navit *this_);
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new);
+static void navit_pan_rebuild_done(struct navit *this_, int cancel);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -1071,33 +1072,42 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
-            if (this_->pan_rebuild) {
-                /* A rebuild from the last recenter is still in flight and the surface holds the
-                 * frame drawn before it. Clearing the offset here would present that frame at the
-                 * pan origin until the rebuild lands, so keep it and let navit_pan_rebuild_done
-                 * apply the residual drag to the fresh frame. */
-                if (!this_->zoomed)
-                    navit_set_timeout(this_);
-            } else {
+            if (this_->zoomed) {
+                /* navit_draw replaces the retained frame in one synchronous step, so the offset
+                 * can be dropped without exposing the stale frame. */
                 graphics_draw_drag(this_->gra, NULL);
                 this_->pan_drift.x = 0;
                 this_->pan_drift.y = 0;
                 this_->pan_rebuild = 0;
-                if (!this_->zoomed) {
-                    navit_set_timeout(this_);
-                    /* A rebuild requested during the gesture was deferred; release flushes it by
-                     * taking the full rebuild branch even when the (once prefetched) selection
-                     * would still cover the view. The plain redraw below cannot pick it up: it
-                     * only re-projects items already in the list. The flush runs chunked on idle
-                     * rather than synchronously, so the release does not stall. */
-                    int deferred_rebuild = this_->redraw_pending;
+                navit_draw(this_);
+            } else {
+                navit_set_timeout(this_);
+                if (this_->pan_rebuild) {
+                    /* A rebuild from the last recenter is in flight and the surface still holds
+                     * the frame drawn before it. Keep the offset; navit_pan_rebuild_done applies
+                     * the residual drag once the fresh frame lands. A rebuild requested during
+                     * the gesture stays deferred and is flushed by the next release. */
+                } else if (navit_displaylist_covers(this_) && !this_->redraw_pending) {
+                    /* Cheap synchronous repaint of the existing list: dropping the offset and
+                     * repainting happen without a frame in between. */
+                    graphics_draw_drag(this_->gra, NULL);
+                    this_->pan_drift.x = 0;
+                    this_->pan_drift.y = 0;
+                    navit_draw_displaylist(this_);
+                } else {
+                    /* The rebuild is asynchronous and the surface keeps the pre-release frame
+                     * until it lands. Hold the offset that positions that frame and let the
+                     * callback drop it; the frame is built for the current transformation, so the
+                     * residual is zero. */
                     this_->redraw_pending = 0;
-                    if (navit_displaylist_covers(this_) && !deferred_rebuild)
-                        navit_draw_displaylist(this_);
-                    else if (!graphics_displaylist_busy(this_->displaylist))
-                        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
-                } else
-                    navit_draw(this_);
+                    this_->pressed = *p;
+                    if (!this_->pan_rebuild_cb)
+                        this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
+                    this_->pan_rebuild =
+                        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
+                    if (!this_->pan_rebuild)
+                        graphics_draw_drag(this_->gra, NULL);
+                }
             }
         } else
             return 1;
