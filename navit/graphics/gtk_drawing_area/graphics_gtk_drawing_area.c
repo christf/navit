@@ -1043,6 +1043,8 @@ static void on_gesture_zoom_end(GtkGesture *gesture, GdkEventSequence *sequence,
     }
     target = navit_pinch_target(this->nav, this->pinch_base_scale, this->preview_scale);
     this->preview_scale = 1.0;
+    this->preview_cx = this->pinch_base_cx;
+    this->preview_cy = this->pinch_base_cy;
     navit_pinch_to(this->nav, target, &base, &now);
 }
 
