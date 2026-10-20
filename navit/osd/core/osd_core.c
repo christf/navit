@@ -3991,7 +3991,7 @@ static void osd_scale_draw(struct osd_priv_common *opc, struct navit *nav, struc
     graphics_get_text_bbox(opc->osd_item.gr, opc->osd_item.font, text, 0x10000, 0, bbox, 0);
     p[0].x = (opc->osd_item.w - bbox[2].x) / 2 + item_pos.x;
     p[0].y = item_pos.y + opc->osd_item.h - opc->osd_item.h / 10;
-graphics_draw_text(opc->osd_item.gr, opc->osd_item.graphic_fg_text, NULL, opc->osd_item.font, text, &p[0], 0x10000,
+    graphics_draw_text(opc->osd_item.gr, opc->osd_item.graphic_fg_text, NULL, opc->osd_item.font, text, &p[0], 0x10000,
                        0);
     g_free(text);
     graphics_draw_mode(opc->osd_item.gr, draw_mode_end);
