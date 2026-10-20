@@ -4004,8 +4004,8 @@ static void graphics_displaylist_draw_setup(struct graphics *gra, struct display
     if (l) {
         order += l->order_delta;
         c->order = order > 0 ? order : 0;
+        c->active = 1;
     }
-    c->active = 1;
 }
 
 /**
