@@ -170,6 +170,8 @@ struct navit {
     int autozoom_paused;
     struct event_timeout *button_timeout, *motion_timeout, *animation_timer;
     struct callback *motion_timeout_callback;
+    struct event_timeout *pan_retry_timeout;
+    struct callback *pan_retry_cb;
     int ignore_button;
     int ignore_graphics_events;
     struct log *textfile_debug_log;
@@ -242,6 +244,7 @@ static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *
 static int navit_displaylist_covers(struct navit *this_);
 static void update_transformation(struct transformation *tr, struct point *old, struct point *new);
 static void navit_pan_rebuild_done(struct navit *this_, int cancel);
+static void navit_pan_retry(struct navit *this_);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -1133,11 +1136,13 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
                     this_->pan_rebuild =
                         navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
                     if (!this_->pan_rebuild) {
-                        graphics_draw_drag(this_->gra, NULL);
-                        this_->pan_drift.x = 0;
-                        this_->pan_drift.y = 0;
-                        this_->pan_rebuild_drift.x = 0;
-                        this_->pan_rebuild_drift.y = 0;
+                        /* The rebuild was refused (blocked or a foreign draw owns the list). Keep
+                         * the offset so the retained frame still tracks the release, and retry
+                         * until the list frees up instead of snapping back to the pre-pan view. */
+                        this_->redraw_pending = 1;
+                        if (!this_->pan_retry_cb)
+                            this_->pan_retry_cb = callback_new_1(callback_cast(navit_pan_retry), this_);
+                        this_->pan_retry_timeout = event_add_timeout(10, 0, this_->pan_retry_cb);
                     }
                 }
             }
@@ -1185,6 +1190,31 @@ static void navit_pan_rebuild_done(struct navit *this_, int cancel) {
     point.x = this_->current.x - this_->pressed.x + this_->pan_drift.x;
     point.y = this_->current.y - this_->pressed.y + this_->pan_drift.y;
     graphics_draw_drag(this_->gra, &point);
+}
+
+/* A rebuild requested on release is silently refused while the display list is busy with a
+ * foreign draw (typically a pinch prefetch, whose completion does not release a pan offset), and
+ * dropping the offset then would snap the retained frame back to its pre-pan position. Retry
+ * until the list frees up; the offset recorded at request time keeps the frame tracking in the
+ * meantime, and the fresh frame is committed exactly as a landing mid-drag would commit it. */
+static void navit_pan_retry(struct navit *this_) {
+    /* The one-shot source freed itself before this callback ran, so clear the stale pointer
+     * instead of removing it again. The external cancel path only runs while it is still pending. */
+    this_->pan_retry_timeout = NULL;
+    /* A new gesture or a completed draw owns the state now; nothing left to retry. */
+    if (this_->button_pressed || !this_->redraw_pending)
+        return;
+    if (this_->blocked || graphics_displaylist_busy(this_->displaylist)) {
+        this_->pan_retry_timeout = event_add_timeout(10, 0, this_->pan_retry_cb);
+        return;
+    }
+    if (!this_->pan_rebuild_cb)
+        this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
+    this_->pan_rebuild = navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
+    if (this_->pan_rebuild)
+        this_->redraw_pending = 0;
+    else
+        this_->pan_retry_timeout = event_add_timeout(10, 0, this_->pan_retry_cb);
 }
 
 static void navit_motion_timeout(struct navit *this_) {
@@ -4949,6 +4979,11 @@ void navit_destroy(struct navit *this_) {
 
     callback_destroy(this_->popup_callback);
     callback_destroy(this_->motion_timeout_callback);
+    if (this_->pan_retry_timeout) {
+        event_remove_timeout(this_->pan_retry_timeout);
+        this_->pan_retry_timeout = NULL;
+    }
+    callback_destroy(this_->pan_retry_cb);
     /* Cancel before freeing: a pending rebuild holds pan_rebuild_cb in displaylist->cb, and
      * graphics_displaylist_destroy() does not drain the in-flight draw. */
     graphics_draw_cancel(this_->gra, this_->displaylist);
