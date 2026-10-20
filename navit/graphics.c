@@ -128,6 +128,22 @@ struct hash_entry {
     struct displayitem *di;
 };
 
+/* Position within the replay of a display list. A replay that is allowed to yield (see
+ * graphics_displaylist_draw_continue) keeps its place here across idle callbacks. */
+struct displaylist_draw_cursor {
+    struct graphics *gra;
+    struct layout *layout;
+    int flags;
+    int order;
+    int active;
+    int started;
+    GList *layer;
+    GList *itemgra;
+    GList *element;
+    GList *type;
+    struct displayitem *di;
+};
+
 struct displaylist {
     int busy;
     int workload;
@@ -135,6 +151,10 @@ struct displaylist {
     struct layout *layout, *layout_hashed;
     struct display_context dc;
     int order, order_hashed, max_offset;
+    struct displaylist_draw_cursor draw_cursor;
+    int draw_async;
+    int draw_sliced;
+    int replay_sliced;
     struct mapset *ms;
     struct mapset_handle *msh;
     struct map *m;
@@ -152,6 +172,12 @@ struct displaylist_icon_cache {
     unsigned int seq;
 };
 
+/* Number of display items replayed before the deadline of a yielding draw is checked, and the
+ * length of one yield: a slice that stays in this range keeps the event loop responsive while a
+ * full replay of a dense scene would block it for seconds. */
+#define DISPLAYLIST_DRAW_SLICE_ITEMS 256
+#define DISPLAYLIST_DRAW_SLICE_US 8000
+
 static void circle_to_points(const struct point *center, int diameter, int scale, int start, int len, struct point *res,
                              int *pos, int dir);
 static void graphics_labels_reset(struct graphics *gra);
@@ -159,6 +185,10 @@ static void graphics_labels_flush(struct graphics *gra);
 static struct graphics_font *get_font(struct graphics *gra, int size);
 static void graphics_process_selection(struct graphics *gra, struct displaylist *dl);
 static void graphics_gc_init(struct graphics *this_);
+static int graphics_displaylist_draw_continue(struct displaylist *displaylist, int budget, gint64 deadline);
+static void graphics_displaylist_draw_finish(struct displaylist *displaylist);
+static void graphics_displaylist_draw_setup(struct graphics *gra, struct displaylist *displaylist,
+                                            struct transformation *trans, struct layout *l, int flags);
 
 static int graphics_dpi_scale(struct graphics *gra, int p) {
     int result;
@@ -3325,17 +3355,23 @@ int graphics_element_mindist(int mindist, int element_type) {
  *
  * This function will invoke the appropriate draw primitive depending on the type of the element to draw
  *
- * @brief di The displayitem to draw
+ * @brief di The displayitem chain to draw; advanced to the first item that was not processed
  * @brief l current layout for getting defaults and underground alpha
  * @brief dc The display_context to use to draw items
+ * @brief budget Maximum number of items to process, INT_MAX for all of them
+ * @brief deadline Monotonic time at which to stop, G_MAXINT64 to never stop
+ * @returns The number of items processed; a non-NULL *di means the budget ran out
  */
-static void displayitem_draw(struct displayitem *di, struct layout *l, struct display_context *dc) {
+static int displayitem_draw(struct displayitem **di_inout, struct layout *l, struct display_context *dc, int budget,
+                            gint64 deadline) {
     int *width;
     int limit = 0;
     struct point *pa;
+    struct displayitem *di = *di_inout;
     struct graphics *gra = dc->gra;
     struct element *e = dc->e;
     int draw_underground = 0;
+    int processed = 0;
     /* The chain can hold more coordinates than the context's scratch budget. displaylist->dc.maxlen
      * is remembered across redraws and shrunk again at the end of a frame (see
      * graphics_displaylist_draw), so it can be smaller than a displayitem added while it was
@@ -3360,6 +3396,10 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
         int count = di->count, mindist = dc->mindist;
         struct displayitem_poly_holes t_holes;
         t_holes.count = 0;
+
+        if (processed >= budget || g_get_monotonic_time() >= deadline)
+            break;
+        processed++;
 
         di->z_order = ++(gra->current_z_order);
 
@@ -3458,36 +3498,47 @@ static void displayitem_draw(struct displayitem *di, struct layout *l, struct di
         g_free(width);
         g_free(pa);
     }
+    *di_inout = di;
+    return processed;
 }
 /**
- * FIXME
- * @param <>
- * @returns <>
- * @author Martin Schaller (04/2008)
+ * Replay the elements of one itemgra, resuming at the cursor.
+ *
+ * @brief display_list The display list whose hash supplies the items
+ * @brief itm The itemgra whose elements are replayed
+ * @brief c The replay position, advanced while items are drawn
+ * @brief budget Maximum number of items to draw
+ * @brief deadline Monotonic time at which to stop
+ * @returns The number of items drawn; a non-NULL cursor element means the budget ran out
  */
-static void xdisplay_draw_elements(struct graphics *gra, struct displaylist *display_list, struct itemgra *itm,
-                                   struct layout *l) {
-    struct element *e;
-    GList *es, *types;
+static int xdisplay_draw_elements(struct displaylist *display_list, struct itemgra *itm,
+                                  struct displaylist_draw_cursor *c, int budget, gint64 deadline) {
     struct display_context *dc = &display_list->dc;
-    struct hash_entry *entry;
+    int drawn = 0;
 
-    es = itm->elements;
-    while (es) {
-        e = es->data;
-        dc->e = e;
-        types = itm->type;
-        while (types) {
-            dc->type = GPOINTER_TO_INT(types->data);
-            entry = get_hash_entry(display_list, dc->type);
-            if (entry && entry->di) {
-                displayitem_draw(entry->di, l, dc);
+    while (c->element && drawn < budget && g_get_monotonic_time() < deadline) {
+        dc->e = c->element->data;
+        if (!c->type)
+            c->type = itm->type;
+        while (c->type && drawn < budget && g_get_monotonic_time() < deadline) {
+            dc->type = GPOINTER_TO_INT(c->type->data);
+            if (!c->di) {
+                struct hash_entry *entry = get_hash_entry(display_list, dc->type);
+                if (entry && entry->di)
+                    c->di = entry->di;
+            }
+            if (c->di) {
+                drawn += displayitem_draw(&c->di, c->layout, dc, budget - drawn, deadline);
+                if (c->di)
+                    return drawn;
                 display_context_free(dc);
             }
-            types = g_list_next(types);
+            c->type = g_list_next(c->type);
         }
-        es = g_list_next(es);
+        c->type = NULL;
+        c->element = g_list_next(c->element);
     }
+    return drawn;
 }
 
 void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct transformation *t, char *label) {
@@ -3536,7 +3587,10 @@ void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct tra
         }
         dc.e = e;
         di->next = NULL;
-        displayitem_draw(di, NULL, &dc);
+        {
+            struct displayitem *d = di;
+            displayitem_draw(&d, NULL, &dc, INT_MAX, G_MAXINT64);
+        }
         display_context_free(&dc);
         es = g_list_next(es);
     }
@@ -3546,46 +3600,60 @@ void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct tra
 }
 
 /**
- * FIXME
- * @param <>
- * @returns <>
- * @author Martin Schaller (04/2008)
+ * Replay the display list for one layout, starting at the cursor and stopping when the budget or
+ * the deadline is exhausted.
+ *
+ * @brief displaylist The display list to replay, its cursor holding the layout and position
+ * @brief budget Maximum number of items to draw
+ * @brief deadline Monotonic time at which to stop
+ * @returns The number of items drawn; the cursor is inactive once the layout is exhausted
  */
-static void xdisplay_draw_layer(struct displaylist *display_list, struct graphics *gra, struct layer *lay, int order,
-                                struct layout *l) {
-    GList *itms;
-    struct itemgra *itm;
+static int displaylist_draw_slice(struct displaylist *displaylist, int budget, gint64 deadline) {
+    struct displaylist_draw_cursor *c = &displaylist->draw_cursor;
+    struct layout *l = c->layout;
+    int drawn = 0;
 
-    itms = lay->itemgras;
-    while (itms) {
-        itm = itms->data;
-        if (order >= itm->order.min && order <= itm->order.max)
-            xdisplay_draw_elements(gra, display_list, itm, l);
-        itms = g_list_next(itms);
+    if (!l)
+        return 0;
+    if (!c->started) {
+        c->started = 1;
+        c->layer = l->layers;
+        c->gra->current_z_order = 0;
     }
-}
-
-/**
- * FIXME
- * @param <>
- * @returns <>
- * @author Martin Schaller (04/2008)
- */
-static void xdisplay_draw(struct displaylist *display_list, struct graphics *gra, struct layout *l, int order) {
-    GList *lays;
-    struct layer *lay;
-
-    gra->current_z_order = 0;
-    lays = l->layers;
-    while (lays) {
-        lay = lays->data;
-        if (lay->active) {
-            if (lay->ref)
-                lay = lay->ref;
-            xdisplay_draw_layer(display_list, gra, lay, order, l);
+    while (c->layer && drawn < budget && g_get_monotonic_time() < deadline) {
+        struct layer *lay = c->layer->data;
+        if (!lay->active)
+            goto next_layer;
+        if (lay->ref)
+            lay = lay->ref;
+        if (!c->itemgra)
+            c->itemgra = lay->itemgras;
+        while (c->itemgra && drawn < budget && g_get_monotonic_time() < deadline) {
+            struct itemgra *itm = c->itemgra->data;
+            if (c->order < itm->order.min || c->order > itm->order.max)
+                goto next_itemgra;
+            if (!c->element)
+                c->element = itm->elements;
+            drawn += xdisplay_draw_elements(displaylist, itm, c, budget - drawn, deadline);
+            if (c->element)
+                return drawn;
+        next_itemgra:
+            c->element = NULL;
+            c->type = NULL;
+            c->di = NULL;
+            c->itemgra = g_list_next(c->itemgra);
         }
-        lays = g_list_next(lays);
+        if (c->itemgra)
+            return drawn;
+    next_layer:
+        c->itemgra = NULL;
+        c->element = NULL;
+        c->type = NULL;
+        c->di = NULL;
+        c->layer = g_list_next(c->layer);
     }
+    c->active = 0;
+    return drawn;
 }
 
 /**
@@ -3672,6 +3740,8 @@ GList *displaylist_get_clicked_list(struct displaylist *displaylist, struct poin
     return l;
 }
 
+static void do_draw_continue(struct displaylist *displaylist, int cancel);
+
 static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
     struct item *item;
     int count, max = displaylist->dc.maxlen, workload = 0;
@@ -3680,6 +3750,11 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
     struct attr attr2;
     enum projection pro;
     int need_free = 0;
+
+    if (displaylist->draw_sliced) {
+        do_draw_continue(displaylist, cancel);
+        return;
+    }
 
     /* Yield the idle chunks of a rebuild the gesture did not request: they run on the shared main
      * thread and would steal time from the drag. The gesture's own rebuild carries a callback and
@@ -3821,6 +3896,17 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
         displaylist->m = NULL;
     }
     profile(1, "process_selection\n");
+    if (displaylist->draw_async && !cancel) {
+        /* Replay the list in slices instead of one blocking pass. The slices run as idle
+         * callbacks on the shared main thread, so the event loop keeps running while the frame
+         * is rebuilt; a dense scene would otherwise stall input and timers for seconds. The
+         * driver keeps showing the previous frame until the last slice has finished. */
+        graphics_process_selection(displaylist->dc.gra, displaylist);
+        graphics_displaylist_draw_setup(displaylist->dc.gra, displaylist, displaylist->dc.trans, displaylist->layout,
+                                        flags);
+        displaylist->draw_sliced = 1;
+        return;
+    }
     if (displaylist->idle_ev)
         event_remove_idle(displaylist->idle_ev);
     displaylist->idle_ev = NULL;
@@ -3853,14 +3939,44 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
     profile(0, "end\n");
 }
 
+/* Continue a replay started by do_draw() in slices. The idle event stays armed until the last
+ * slice, so the event loop runs between the slices. */
+static void do_draw_continue(struct displaylist *displaylist, int cancel) {
+    if (cancel)
+        graphics_displaylist_draw_continue(displaylist, INT_MAX, G_MAXINT64);
+    else if (!graphics_displaylist_draw_continue(displaylist, DISPLAYLIST_DRAW_SLICE_ITEMS,
+                                                 g_get_monotonic_time() + DISPLAYLIST_DRAW_SLICE_US))
+        return;
+    displaylist->draw_sliced = 0;
+    displaylist->draw_async = 0;
+    if (displaylist->idle_ev)
+        event_remove_idle(displaylist->idle_ev);
+    displaylist->idle_ev = NULL;
+    callback_destroy(displaylist->idle_cb);
+    displaylist->idle_cb = NULL;
+    displaylist->busy = 0;
+    graphics_displaylist_draw_finish(displaylist);
+    map_rect_destroy(displaylist->mr);
+    if (!route_selection)
+        map_selection_destroy(displaylist->sel);
+    mapset_close(displaylist->msh);
+    displaylist->mr = NULL;
+    displaylist->sel = NULL;
+    displaylist->m = NULL;
+    displaylist->msh = NULL;
+    dbg(lvl_debug, "sliced replay finished, cancel=%d", cancel);
+    callback_call_1(displaylist->cb, cancel);
+}
+
 /**
  * FIXME
  * @param <>
  * @returns <>
  * @author Martin Schaller (04/2008)
  */
-void graphics_displaylist_draw(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
-                               struct layout *l, int flags) {
+static void graphics_displaylist_draw_setup(struct graphics *gra, struct displaylist *displaylist,
+                                            struct transformation *trans, struct layout *l, int flags) {
+    struct displaylist_draw_cursor *c = &displaylist->draw_cursor;
     int order = transform_get_order(trans);
     if (displaylist->dc.trans && displaylist->dc.trans != trans)
         transform_destroy(displaylist->dc.trans);
@@ -3881,15 +3997,94 @@ void graphics_displaylist_draw(struct graphics *gra, struct displaylist *display
     graphics_draw_mode(gra, (flags & 8) ? draw_mode_begin_clear : draw_mode_begin);
     if (!(flags & 2))
         graphics_draw_rectangle(gra, gra->gc[0], &gra->r.lu, gra->r.rl.x - gra->r.lu.x, gra->r.rl.y - gra->r.lu.y);
+    memset(c, 0, sizeof(*c));
+    c->gra = gra;
+    c->layout = l;
+    c->flags = flags;
     if (l) {
         order += l->order_delta;
-        xdisplay_draw(displaylist, gra, l, order > 0 ? order : 0);
+        c->order = order > 0 ? order : 0;
     }
-    if (flags & 1)
-        callback_list_call_attr_0(gra->cbl, attr_postdraw);
-    if (!(flags & 4))
-        graphics_draw_mode(gra, draw_mode_end);
+    c->active = 1;
+}
+
+/**
+ * Replay part of the display list prepared by graphics_displaylist_draw_setup().
+ *
+ * @brief displaylist The display list being replayed
+ * @brief budget Maximum number of items to replay, INT_MAX for all of them
+ * @brief deadline Monotonic time at which to stop, G_MAXINT64 to never stop
+ * @returns non-zero once the replay has no items left
+ */
+static int graphics_displaylist_draw_continue(struct displaylist *displaylist, int budget, gint64 deadline) {
+    struct displaylist_draw_cursor *c = &displaylist->draw_cursor;
+    if (!c->active)
+        return 1;
+    displaylist_draw_slice(displaylist, budget, deadline);
+    return !c->active;
+}
+
+static void graphics_displaylist_draw_finish(struct displaylist *displaylist) {
+    struct displaylist_draw_cursor *c = &displaylist->draw_cursor;
+    if (c->flags & 1)
+        callback_list_call_attr_0(c->gra->cbl, attr_postdraw);
+    if (!(c->flags & 4))
+        graphics_draw_mode(c->gra, draw_mode_end);
     display_context_free(&displaylist->dc);
+    c->active = 0;
+}
+
+void graphics_displaylist_draw(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
+                               struct layout *l, int flags) {
+    /* A yielding replay may be in flight (an idle callback still holds its position); the cursor
+     * belongs to it, so keep it aside and restore it afterwards. */
+    struct displaylist_draw_cursor saved = displaylist->draw_cursor;
+    graphics_displaylist_draw_setup(gra, displaylist, trans, l, flags);
+    /* A synchronous replay must draw the whole list: the caller closes the frame right after and
+     * would otherwise bake a time-truncated fragment into the retained surface. */
+    graphics_displaylist_draw_continue(displaylist, INT_MAX, G_MAXINT64);
+    graphics_displaylist_draw_finish(displaylist);
+    displaylist->draw_cursor = saved;
+}
+
+static void graphics_displaylist_replay_finish(struct displaylist *displaylist) {
+    if (displaylist->idle_ev)
+        event_remove_idle(displaylist->idle_ev);
+    displaylist->idle_ev = NULL;
+    callback_destroy(displaylist->idle_cb);
+    displaylist->idle_cb = NULL;
+    displaylist->replay_sliced = 0;
+    displaylist->busy = 0;
+    graphics_displaylist_draw_finish(displaylist);
+}
+
+/* Continue a replay started by graphics_displaylist_draw_async() in slices. Unlike do_draw_continue
+ * there is no mapset fetch in flight, so finishing only has to close the frame. */
+static void graphics_displaylist_replay_continue(struct displaylist *displaylist) {
+    if (!graphics_displaylist_draw_continue(displaylist, DISPLAYLIST_DRAW_SLICE_ITEMS,
+                                            g_get_monotonic_time() + DISPLAYLIST_DRAW_SLICE_US))
+        return;
+    graphics_displaylist_replay_finish(displaylist);
+}
+
+int graphics_displaylist_draw_async(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
+                                    struct layout *l, int flags) {
+    if (!displaylist)
+        return 0;
+    if (displaylist->busy) {
+        /* A rebuild or a previous replay owns the list; a fresh request supersedes it. */
+        if (displaylist->replay_sliced)
+            graphics_displaylist_replay_finish(displaylist);
+        else
+            do_draw(displaylist, 1, flags);
+    }
+    graphics_displaylist_draw_setup(gra, displaylist, trans, l, flags);
+    displaylist->replay_sliced = 1;
+    displaylist->busy = 1;
+    if (!displaylist->idle_cb)
+        displaylist->idle_cb = callback_new_1(callback_cast(graphics_displaylist_replay_continue), displaylist);
+    displaylist->idle_ev = event_add_idle(0, displaylist->idle_cb);
+    return 1;
 }
 
 static int graphics_load_mapset(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
@@ -3920,6 +4115,8 @@ static int graphics_load_mapset(struct graphics *gra, struct displaylist *displa
     displaylist->order = order > 0 ? order : 0;
     displaylist->busy = 1;
     displaylist->layout = l;
+    displaylist->draw_async = async;
+    displaylist->draw_sliced = 0;
     if (async) {
         if (!displaylist->idle_cb)
             displaylist->idle_cb = callback_new_3(callback_cast(do_draw), displaylist, 0, flags);
@@ -3942,7 +4139,10 @@ int graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct 
 int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist) {
     if (!displaylist->busy)
         return 0;
-    do_draw(displaylist, 1, 0);
+    if (displaylist->replay_sliced)
+        graphics_displaylist_replay_finish(displaylist);
+    else
+        do_draw(displaylist, 1, 0);
     return 1;
 }
 
@@ -4362,4 +4562,8 @@ int graphics_scroll(struct graphics *gra, int dx, int dy) {
     if (!gra->meth.scroll)
         return 0;
     return gra->meth.scroll(gra->priv, dx, dy);
+}
+
+int graphics_can_scroll(struct graphics *gra) {
+    return gra->meth.scroll != NULL;
 }
