@@ -157,6 +157,7 @@ struct navit {
     struct map *former_destination;
     struct point pressed, last, current;
     struct point pan_drift;
+    struct point pan_rebuild_drift;
     struct callback *pan_rebuild_cb;
     int pan_rebuild;
     int redraw_pending;
@@ -466,6 +467,8 @@ static int navit_draw_async_margin(struct navit *this_, int async, int margin, s
         graphics_draw_drag(this_->gra, NULL);
         this_->pan_drift.x = 0;
         this_->pan_drift.y = 0;
+        this_->pan_rebuild_drift.x = 0;
+        this_->pan_rebuild_drift.y = 0;
         this_->pan_rebuild = 0;
     }
     transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
@@ -729,22 +732,22 @@ static int navit_animation_tick(void *data) {
             navit_set_center_coord_screen(this_, scroll_coord, &cursor_fixed, 0);
             transform_copy(this_->trans, this_->trans_cursor);
             if (navit_displaylist_covers(this_))
-                navit_draw_displaylist(this_);
+                navit_draw_displaylist_async(this_);
             else
                 navit_draw(this_);
             vehicle_reset_map_scroll(nv->vehicle);
             this_->anim_last_redraw_yaw = yaw;
             this_->anim_last_displayed_yaw = yaw;
             graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed.x, cursor_fixed.y);
-            graphics_draw_mode(this_->gra, draw_mode_end);
         } else if (yaw_inc_delta > 1 || yaw_inc_delta < -1) {
             dbg(lvl_debug, "scroll_tick: yaw_delta=%d yaw_inc=%d display_rotation", yaw_delta, yaw_inc_delta);
             graphics_set_display_rotation(this_->gra, (double)yaw_delta, cursor_fixed.x, cursor_fixed.y);
             this_->anim_last_displayed_yaw = yaw;
-            graphics_draw_mode(this_->gra, draw_mode_end);
-        } else {
-            graphics_draw_mode(this_->gra, draw_mode_end);
         }
+        /* Flush the presented offset. A display-list replay owns its open frame while busy;
+         * an end here would close it early and expose the partial command list. */
+        if (!graphics_displaylist_busy(this_->displaylist))
+            graphics_draw_mode(this_->gra, draw_mode_end);
     } else if (was_animating && !primary_animating) {
         struct point cursor_fixed2;
         this_->map_animating = 0;
@@ -798,6 +801,17 @@ void navit_draw_displaylist(struct navit *this_) {
     if (this_->ready == 3)
         graphics_displaylist_draw(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
                                   this_->graphics_flags | 1);
+}
+
+/* Replay the existing display list in slices. Unlike navit_draw_displaylist() this does not draw
+ * within the current frame: it keeps the surface showing the previous frame and yields between
+ * slices, so a full replay of a dense scene does not freeze the main thread. Only safe where the
+ * whole list is replayed without a clip (a clip set by the caller would be gone by the first
+ * slice). */
+void navit_draw_displaylist_async(struct navit *this_) {
+    if (this_->ready == 3)
+        graphics_displaylist_draw_async(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
+                                        this_->graphics_flags | 1);
 }
 
 /* Returns whether the current viewport is fully covered by the map selections the current
@@ -1082,31 +1096,49 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
                 navit_draw(this_);
             } else {
                 navit_set_timeout(this_);
+                /* The transformation now includes the release drag, but a surface still holding
+                 * a pre-release frame must be shifted by the same amount to keep tracking the
+                 * cursor. Fold it into the drift before choosing a strategy so no path loses it.
+                 * pressed follows the fold, so the residual offset starts from zero. */
+                this_->pan_drift.x += this_->current.x - this_->pressed.x;
+                this_->pan_drift.y += this_->current.y - this_->pressed.y;
+                this_->pressed = *p;
                 if (this_->pan_rebuild) {
                     /* A rebuild from the last recenter is in flight and the surface still holds
                      * the frame drawn before it. Keep the offset; navit_pan_rebuild_done applies
                      * the residual drag once the fresh frame lands. A rebuild requested during
                      * the gesture stays deferred and is flushed by the next release. */
-                } else if (navit_displaylist_covers(this_) && !this_->redraw_pending) {
+                } else if (navit_displaylist_covers(this_) && !this_->redraw_pending
+                           && graphics_can_scroll(this_->gra)) {
                     /* Cheap synchronous repaint of the existing list: dropping the offset and
-                     * repainting happen without a frame in between. */
+                     * repainting happen without a frame in between. This is only cheap when the
+                     * driver repaints incrementally; without a scrollable surface the replay of
+                     * the list stalls the caller for seconds at dense zoom levels, and the
+                     * asynchronous rebuild below does the same work off the main thread. */
                     graphics_draw_drag(this_->gra, NULL);
                     this_->pan_drift.x = 0;
                     this_->pan_drift.y = 0;
+                    this_->pan_rebuild_drift.x = 0;
+                    this_->pan_rebuild_drift.y = 0;
                     navit_draw_displaylist(this_);
                 } else {
                     /* The rebuild is asynchronous and the surface keeps the pre-release frame
-                     * until it lands. Hold the offset that positions that frame and let the
-                     * callback drop it; the frame is built for the current transformation, so the
-                     * residual is zero. */
+                     * until it lands. The frame is built for the transformation at request time,
+                     * so any fold after that still displaces it: remember the drift then, and
+                     * navit_pan_rebuild_done subtracts it to leave only the later folds. */
                     this_->redraw_pending = 0;
-                    this_->pressed = *p;
+                    this_->pan_rebuild_drift = this_->pan_drift;
                     if (!this_->pan_rebuild_cb)
                         this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
                     this_->pan_rebuild =
                         navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
-                    if (!this_->pan_rebuild)
+                    if (!this_->pan_rebuild) {
                         graphics_draw_drag(this_->gra, NULL);
+                        this_->pan_drift.x = 0;
+                        this_->pan_drift.y = 0;
+                        this_->pan_rebuild_drift.x = 0;
+                        this_->pan_rebuild_drift.y = 0;
+                    }
                 }
             }
         } else
@@ -1132,14 +1164,27 @@ static void navit_pan_rebuild_done(struct navit *this_, int cancel) {
     if (!this_->pan_rebuild)
         return;
     this_->pan_rebuild = 0;
-    this_->pan_drift.x = 0;
-    this_->pan_drift.y = 0;
-    if (cancel)
+    if (cancel) {
+        this_->pan_drift.x = 0;
+        this_->pan_drift.y = 0;
+        this_->pan_rebuild_drift.x = 0;
+        this_->pan_rebuild_drift.y = 0;
+        /* A sliced replay leaves its frame open across main-loop iterations; close it here as
+         * no further draw is guaranteed to follow. */
+        graphics_draw_mode(this_->gra, draw_mode_end);
         return;
-    point.x = this_->current.x - this_->pressed.x;
-    point.y = this_->current.y - this_->pressed.y;
+    }
+    /* The fresh frame is built for the transformation the rebuild was requested at, so only the
+     * folds since then still displace it: subtract the drift recorded at request time instead of
+     * dropping the whole drift, which would expose the frame at the wrong position under a
+     * release that landed while the replay was still running. */
+    this_->pan_drift.x -= this_->pan_rebuild_drift.x;
+    this_->pan_drift.y -= this_->pan_rebuild_drift.y;
+    this_->pan_rebuild_drift.x = 0;
+    this_->pan_rebuild_drift.y = 0;
+    point.x = this_->current.x - this_->pressed.x + this_->pan_drift.x;
+    point.y = this_->current.y - this_->pressed.y + this_->pan_drift.y;
     graphics_draw_drag(this_->gra, &point);
-    graphics_draw_mode(this_->gra, draw_mode_end);
 }
 
 static void navit_motion_timeout(struct navit *this_) {
@@ -1183,16 +1228,27 @@ static void navit_motion_timeout(struct navit *this_) {
                         navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
                     if (this_->pan_rebuild) {
                         /* Hold the offset until the rebuilt frame arrives, otherwise the stale
-                         * frame is shown at the wrong position in the meantime. */
-                        this_->pan_drift.x = drag_dx;
-                        this_->pan_drift.y = drag_dy;
+                         * frame is shown at the wrong position in the meantime. The fold adds to
+                         * any drift a previous landing left behind, and that total is the
+                         * staleness the frame carries when the rebuild is requested. */
+                        this_->pan_drift.x += drag_dx;
+                        this_->pan_drift.y += drag_dy;
+                        this_->pan_rebuild_drift = this_->pan_drift;
                     } else {
                         graphics_draw_drag(this_->gra, NULL);
+                        this_->pan_drift.x = 0;
+                        this_->pan_drift.y = 0;
                     }
                 } else {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
                     graphics_draw_drag(this_->gra, NULL);
+                    /* The clipped repaint draws the frame at the folded transformation, so no
+                     * offset or carried-over drift remains to position a stale surface. */
+                    this_->pan_drift.x = 0;
+                    this_->pan_drift.y = 0;
+                    this_->pan_rebuild_drift.x = 0;
+                    this_->pan_rebuild_drift.y = 0;
                     if (drag_dx != 0) {
                         clip_p1.x = drag_dx > 0 ? 0 : sw + drag_dx;
                         clip_p1.y = 0;
@@ -1221,7 +1277,10 @@ static void navit_motion_timeout(struct navit *this_) {
                 }
             }
             graphics_overlay_disable(this_->gra, 1);
-            graphics_draw_mode(this_->gra, draw_mode_end);
+            /* A display-list replay owns the open frame; an end here would close it and expose
+             * the partial command list to a texture rebuild. draw_drag queues the present. */
+            if (!graphics_displaylist_busy(this_->displaylist))
+                graphics_draw_mode(this_->gra, draw_mode_end);
             this_->moved = 1;
             this_->motion_timeout = NULL;
             return;
