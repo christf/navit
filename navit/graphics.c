@@ -4096,7 +4096,10 @@ static int graphics_load_mapset(struct graphics *gra, struct displaylist *displa
     if (displaylist->busy) {
         if (async == 1)
             return 0;
-        do_draw(displaylist, 1, flags);
+        if (displaylist->replay_sliced)
+            graphics_displaylist_replay_finish(displaylist);
+        else
+            do_draw(displaylist, 1, flags);
     }
     xdisplay_free(displaylist);
     dbg(lvl_debug, "order=%d", order);
