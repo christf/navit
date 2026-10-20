@@ -2170,7 +2170,7 @@ void gui_internal_check_exit(struct gui_priv *this) {
             if (this->redraw)
                 navit_draw(this->nav);
             else
-                navit_draw_displaylist(this->nav);
+                navit_draw_displaylist_async(this->nav);
         }
     }
 }
