@@ -1512,6 +1512,31 @@ void navit_pinch_to(struct navit *this_, long scale, struct point *base, struct 
     navit_set_center_screen(this_, &q, 0);
 }
 
+/**
+ * @brief Compute the integer zoom level a pinch gesture commits to
+ *
+ * The display list keeps showing the frame captured at @p base_scale while the fingers move, so
+ * the preview is rendered at a snapped zoom level and lifting the fingers re-renders that very
+ * view instead of jumping by the rounding remainder. The result is clamped to the same range
+ * navit_scale() enforces, otherwise pinching past a configured limit would still jump on release.
+ *
+ * @param this_ The navit instance
+ * @param base_scale The scale the preview frame was captured at
+ * @param factor The gesture spread factor (finger distance now over distance at start)
+ * @returns The clamped target scale
+ */
+long navit_pinch_target(struct navit *this_, long base_scale, double factor) {
+    long target;
+    if (factor <= 0.0)
+        return navit_get_scale(this_);
+    target = (long)(base_scale / factor + 0.5);
+    if (target < this_->zoom_min)
+        target = this_->zoom_min;
+    if (target > this_->zoom_max)
+        target = this_->zoom_max;
+    return target;
+}
+
 long navit_get_scale(struct navit *this_) {
     return transform_get_scale(this_->trans);
 }

@@ -84,6 +84,7 @@ void navit_zoom_in(struct navit *this_, int factor, struct point *p);
 void navit_zoom_out(struct navit *this_, int factor, struct point *p);
 void navit_pinch_begin(struct navit *this_);
 void navit_pinch_to(struct navit *this_, long scale, struct point *base, struct point *now);
+long navit_pinch_target(struct navit *this_, long base_scale, double factor);
 long navit_get_scale(struct navit *this_);
 void navit_zoom_in_cursor(struct navit *this_, int factor);
 void navit_zoom_out_cursor(struct navit *this_, int factor);
