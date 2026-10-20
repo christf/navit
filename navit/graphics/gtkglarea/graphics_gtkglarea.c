@@ -29,6 +29,7 @@
 #include <gdk/gdk.h>
 #include <glib.h>
 #include <gtk/gtk.h>
+#include <stdlib.h>
 #include <sys/time.h>
 
 #include "attr.h"
@@ -78,6 +79,12 @@ static const char fragment_src[] = "precision mediump float;\n"
 /* Hard cap to prevent runaway allocation (~256 MB for vertices + commands) */
 #define MAX_VERTICES_HARD (MAX_VERTICES * 16)
 #define CIRCLE_SEGMENTS 72
+/* Separates the strips of a merged indexed line-strip draw. Valid because the vertex count is
+ * far below 2^32. */
+#define GL_RESTART_INDEX 0xFFFFFFFFu
+/* Margin around the viewport kept in the retained map texture, as a divisor of the larger screen
+ * dimension. Mirrors the cairo backend's RENDER_MARGIN_DEFAULT_DIVISOR. */
+#define GTKGL_MAP_MARGIN_DIVISOR 4
 
 /* Vertex: position (x,y) + texcoord (u,v) */
 typedef struct {
@@ -110,7 +117,18 @@ typedef struct {
     float r, g, b, a;                   /* color for this command */
     float linewidth;                    /* for the line commands (CMD_LINES/STRIP/LOOP) */
     int clip_x, clip_y, clip_w, clip_h; /* for CMD_CLIP_RECT */
+    /* Screen-space bounds of the command's vertices, used to skip geometry that cannot touch the
+     * region being rendered. */
+    float min_x, min_y, max_x, max_y;
 } DrawCmd;
+
+/* A run of consecutive line-strip commands with identical state, drawn from the vertex buffer
+ * through an index range that separates the strips with the primitive-restart marker. */
+struct line_run {
+    int index_start;
+    int index_count;
+    int span;
+};
 
 /* Graphics GC (drawing context — color, linewidth, dashes) */
 struct graphics_gc_priv {
@@ -146,6 +164,11 @@ struct graphics_priv {
     /* GL resources */
     GLuint program;
     GLuint vbo;
+    GLuint index_vbo;
+    GLuint *index_buf;
+    int index_capacity;
+    struct line_run *line_runs;
+    int line_runs_capacity;
     GLint mvp_loc;
     GLint pos_loc;
     GLint tex_pos_loc;
@@ -164,6 +187,21 @@ struct graphics_priv {
     int msaa_samples;
     GLenum msaa_color_format;
     int msaa_alloc_w, msaa_alloc_h;
+
+    /* Retained map frame. The root display list is rendered once into this off-screen target,
+     * padded by render_margin on every side, and then presented translated by the drag offset
+     * (and the pinch preview transform) instead of re-issuing every draw command on each pan
+     * frame. This is the GL equivalent of the cairo backend's scroll_surface; it keeps panning
+     * cheap at dense zoom levels, where replaying the retained command list costs ~150ms/frame. */
+    GLuint map_msaa_fbo;
+    GLuint map_msaa_color_rb;
+    GLuint map_msaa_stencil_rb;
+    GLuint map_fbo;
+    GLuint map_tex;
+    GLuint map_stencil_rb;
+    int map_alloc_w, map_alloc_h;
+    int map_valid;
+    int render_margin; /* logical margin kept around the viewport in the map texture */
 
     /* MVP matrix */
     float mvp[16];
@@ -186,6 +224,11 @@ struct graphics_priv {
     DrawCmd *commands;
     int cmd_count;
     int cmd_capacity;
+    /* Scratch buffers for the culled subset that is actually uploaded for a render. */
+    DrawCmd *batch_commands;
+    int batch_cmd_capacity;
+    Vertex *batch_vertices;
+    int batch_vertex_capacity;
     int dirty;
     int draw_depth; /* guard against nested draw_mode_begin (gui_internal_highlight_do) */
 
@@ -251,6 +294,9 @@ struct graphics_priv {
 static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_methods *meth);
 static void get_data_window(struct graphics_priv *this, unsigned int xid);
 static void msaa_destroy(struct graphics_priv *gr);
+static void map_destroy(struct graphics_priv *gr);
+static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_count, Vertex *vertices,
+                           int vertex_count, GLuint vbo, float *mvp);
 
 /* ----------------------------------------------------------------
  * GL shader helpers
@@ -299,6 +345,7 @@ static void setup_program(struct graphics_priv *gr) {
 
     /* Create VBO */
     glGenBuffers(1, &gr->vbo);
+    glGenBuffers(1, &gr->index_vbo);
 
     /* Create a 1x1 white texture for solid-color draws */
     unsigned char white[] = {255, 255, 255, 255};
@@ -339,10 +386,10 @@ static void mvp_mul(float *out, const float *a, const float *b) {
     }
 }
 
-static void compute_mvp(struct graphics_priv *gr) {
+static void compute_mvp(struct graphics_priv *gr, float *out) {
     float tmp[16], tmp2[16];
 
-    mvp_ortho(gr->mvp, 0, gr->width, (float)gr->height, 0, -1.0f, 1.0f);
+    mvp_ortho(out, 0, gr->width, (float)gr->height, 0, -1.0f, 1.0f);
 
     /* Drag offset is a pure screen-space translation */
     if (gr->dx || gr->dy) {
@@ -350,8 +397,8 @@ static void compute_mvp(struct graphics_priv *gr) {
         mvp_identity(d);
         d[12] = gr->dx;
         d[13] = gr->dy;
-        mvp_mul(tmp, gr->mvp, d);
-        memcpy(gr->mvp, tmp, sizeof(tmp));
+        mvp_mul(tmp, out, d);
+        memcpy(out, tmp, sizeof(tmp));
     }
 
     /* Pinch preview transforms the retained frame until the gesture ends, so the map tracks the
@@ -365,8 +412,8 @@ static void compute_mvp(struct graphics_priv *gr) {
         c[5] = s;
         c[12] = gr->preview_cx - s * gr->pinch_base_cx;
         c[13] = gr->preview_cy - s * gr->pinch_base_cy;
-        mvp_mul(tmp, gr->mvp, c);
-        memcpy(gr->mvp, tmp, sizeof(tmp));
+        mvp_mul(tmp, out, c);
+        memcpy(out, tmp, sizeof(tmp));
     }
 
     /* Rotate the projected scene around the vehicle cursor, matching the cairo backend:
@@ -387,9 +434,9 @@ static void compute_mvp(struct graphics_priv *gr) {
         from_center[12] = -cx;
         from_center[13] = -cy;
 
-        mvp_mul(tmp, gr->mvp, to_center);
+        mvp_mul(tmp, out, to_center);
         mvp_mul(tmp2, tmp, rot);
-        mvp_mul(gr->mvp, tmp2, from_center);
+        mvp_mul(out, tmp2, from_center);
     }
 }
 
@@ -440,6 +487,153 @@ static void submit_color(struct graphics_priv *gr, struct graphics_gc_priv *gc) 
     gr->cur_linewidth = gc->linewidth;
 }
 
+static void vertex_bounds(const Vertex *verts, int count, float *min_x, float *min_y, float *max_x, float *max_y) {
+    *min_x = *max_x = verts[0].x;
+    *min_y = *max_y = verts[0].y;
+    for (int i = 1; i < count; i++) {
+        if (verts[i].x < *min_x)
+            *min_x = verts[i].x;
+        if (verts[i].x > *max_x)
+            *max_x = verts[i].x;
+        if (verts[i].y < *min_y)
+            *min_y = verts[i].y;
+        if (verts[i].y > *max_y)
+            *max_y = verts[i].y;
+    }
+}
+
+static int is_draw_cmd(enum draw_cmd_type type) {
+    return type == CMD_TRIANGLES || type == CMD_LINES || type == CMD_LINE_STRIP || type == CMD_LINE_LOOP
+           || type == CMD_TEXTURED_QUADS;
+}
+
+static void ensure_batch_capacity(struct graphics_priv *gr, int cmd_need, int vertex_need) {
+    if (cmd_need > gr->batch_cmd_capacity) {
+        int new_cap = gr->batch_cmd_capacity ? gr->batch_cmd_capacity : 4096;
+        while (new_cap < cmd_need)
+            new_cap *= 2;
+        gr->batch_commands = g_realloc(gr->batch_commands, new_cap * sizeof(DrawCmd));
+        gr->batch_cmd_capacity = new_cap;
+    }
+    if (vertex_need > gr->batch_vertex_capacity) {
+        int new_cap = gr->batch_vertex_capacity ? gr->batch_vertex_capacity : 16384;
+        while (new_cap < vertex_need)
+            new_cap *= 2;
+        gr->batch_vertices = g_realloc(gr->batch_vertices, new_cap * sizeof(Vertex));
+        gr->batch_vertex_capacity = new_cap;
+    }
+}
+
+static void batch_append_span(struct graphics_priv *gr, const DrawCmd *src, int first, int count, int *cc, int *vc) {
+    ensure_batch_capacity(gr, *cc + 1, *vc + count);
+    float min_x, min_y, max_x, max_y;
+    vertex_bounds(&gr->vertices[first], count, &min_x, &min_y, &max_x, &max_y);
+    DrawCmd *prev = *cc > 0 ? &gr->batch_commands[*cc - 1] : NULL;
+    if (prev && prev->type == src->type && prev->tex == src->tex && prev->r == src->r && prev->g == src->g
+        && prev->b == src->b && prev->a == src->a && prev->linewidth == src->linewidth && src->type != CMD_LINE_STRIP
+        && src->type != CMD_LINE_LOOP) {
+        prev->count += count;
+        if (min_x < prev->min_x)
+            prev->min_x = min_x;
+        if (min_y < prev->min_y)
+            prev->min_y = min_y;
+        if (max_x > prev->max_x)
+            prev->max_x = max_x;
+        if (max_y > prev->max_y)
+            prev->max_y = max_y;
+    } else {
+        gr->batch_commands[*cc] = *src;
+        gr->batch_commands[*cc].first = *vc;
+        gr->batch_commands[*cc].count = count;
+        gr->batch_commands[*cc].min_x = min_x;
+        gr->batch_commands[*cc].min_y = min_y;
+        gr->batch_commands[*cc].max_x = max_x;
+        gr->batch_commands[*cc].max_y = max_y;
+        (*cc)++;
+    }
+    memcpy(&gr->batch_vertices[*vc], &gr->vertices[first], count * sizeof(Vertex));
+    *vc += count;
+}
+
+/* Copy the commands that can touch the given screen-space rectangle into the scratch batch,
+ * compacting their vertices so that only the visible subset is uploaded. State commands (clip,
+ * stencil) are kept verbatim so the sequences stay valid. Line strips are split into the runs of
+ * segments that cross the rectangle: a road spanning the whole map has a huge bounding box but
+ * usually only a few segments inside one rectangle. submit_vertices merges adjacent same-state
+ * primitives, so a merged building/landuse command has a map-wide bounding box as well; those are
+ * culled per triangle (or line pair) instead of per command. */
+static int build_culled_batch(struct graphics_priv *gr, float min_x, float min_y, float max_x, float max_y,
+                              int *out_vertex_count) {
+    int vc = 0, cc = 0;
+    for (int i = 0; i < gr->cmd_count; i++) {
+        DrawCmd *cmd = &gr->commands[i];
+        if (!is_draw_cmd(cmd->type)) {
+            ensure_batch_capacity(gr, cc + 1, vc);
+            gr->batch_commands[cc] = *cmd;
+            cc++;
+            continue;
+        }
+        if (cmd->max_x < min_x || cmd->min_x > max_x || cmd->max_y < min_y || cmd->min_y > max_y)
+            continue;
+        if (cmd->type == CMD_LINE_STRIP && cmd->count >= 2) {
+            int run_start = -1;
+            for (int k = 0; k < cmd->count - 1; k++) {
+                const Vertex *v0 = &gr->vertices[cmd->first + k];
+                const Vertex *v1 = &gr->vertices[cmd->first + k + 1];
+                float sx0 = v0->x < v1->x ? v0->x : v1->x;
+                float sx1 = v0->x < v1->x ? v1->x : v0->x;
+                float sy0 = v0->y < v1->y ? v0->y : v1->y;
+                float sy1 = v0->y < v1->y ? v1->y : v0->y;
+                int hit = sx1 >= min_x && sx0 <= max_x && sy1 >= min_y && sy0 <= max_y;
+                if (hit) {
+                    if (run_start < 0)
+                        run_start = k;
+                } else if (run_start >= 0) {
+                    batch_append_span(gr, cmd, cmd->first + run_start, k - run_start + 1, &cc, &vc);
+                    run_start = -1;
+                }
+            }
+            if (run_start >= 0)
+                batch_append_span(gr, cmd, cmd->first + run_start, cmd->count - run_start, &cc, &vc);
+        } else if (cmd->type == CMD_TRIANGLES || cmd->type == CMD_TEXTURED_QUADS || cmd->type == CMD_LINES) {
+            int group = cmd->type == CMD_LINES ? 2 : (cmd->type == CMD_TEXTURED_QUADS ? 6 : 3);
+            int run_start = -1;
+            int k = 0;
+            while (k + group <= cmd->count) {
+                float sx0 = gr->vertices[cmd->first + k].x, sx1 = sx0;
+                float sy0 = gr->vertices[cmd->first + k].y, sy1 = sy0;
+                for (int j = 1; j < group; j++) {
+                    const Vertex *v = &gr->vertices[cmd->first + k + j];
+                    if (v->x < sx0)
+                        sx0 = v->x;
+                    if (v->x > sx1)
+                        sx1 = v->x;
+                    if (v->y < sy0)
+                        sy0 = v->y;
+                    if (v->y > sy1)
+                        sy1 = v->y;
+                }
+                int hit = sx1 >= min_x && sx0 <= max_x && sy1 >= min_y && sy0 <= max_y;
+                if (hit) {
+                    if (run_start < 0)
+                        run_start = k;
+                } else if (run_start >= 0) {
+                    batch_append_span(gr, cmd, cmd->first + run_start, k - run_start, &cc, &vc);
+                    run_start = -1;
+                }
+                k += group;
+            }
+            if (run_start >= 0)
+                batch_append_span(gr, cmd, cmd->first + run_start, k - run_start, &cc, &vc);
+        } else {
+            batch_append_span(gr, cmd, cmd->first, cmd->count, &cc, &vc);
+        }
+    }
+    *out_vertex_count = vc;
+    dbg(lvl_debug, "cull: rect=[%.0f,%.0f..%.0f,%.0f] out=%dcmds/%dverts", min_x, min_y, max_x, max_y, cc, vc);
+    return cc;
+}
+
 static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GLuint tex, const Vertex *verts,
                            int count) {
     ensure_vertex_capacity(gr, gr->vertex_count + count);
@@ -449,12 +643,22 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
             gr->vertex_capacity);
         return -1;
     }
+    float min_x, min_y, max_x, max_y;
+    vertex_bounds(verts, count, &min_x, &min_y, &max_x, &max_y);
     if (gr->cmd_count > 0) {
         DrawCmd *prev = &gr->commands[gr->cmd_count - 1];
         if (prev->type == type && prev->tex == tex && prev->r == gr->cur_r && prev->g == gr->cur_g
             && prev->b == gr->cur_b && prev->a == gr->cur_a && prev->linewidth == gr->cur_linewidth
             && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
             prev->count += count;
+            if (min_x < prev->min_x)
+                prev->min_x = min_x;
+            if (min_y < prev->min_y)
+                prev->min_y = min_y;
+            if (max_x > prev->max_x)
+                prev->max_x = max_x;
+            if (max_y > prev->max_y)
+                prev->max_y = max_y;
             memcpy(&gr->vertices[gr->vertex_count], verts, count * sizeof(Vertex));
             gr->vertex_count += count;
             return gr->vertex_count - count;
@@ -473,6 +677,10 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
     cmd->b = gr->cur_b;
     cmd->a = gr->cur_a;
     cmd->linewidth = gr->cur_linewidth;
+    cmd->min_x = min_x;
+    cmd->min_y = min_y;
+    cmd->max_x = max_x;
+    cmd->max_y = max_y;
     gr->cmd_count++;
     return first;
 }
@@ -1014,6 +1222,9 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
         gr->dx = 0;
         gr->dy = 0;
     }
+    /* The offset only shifts the retained texture at present time, so queue the present here;
+     * the caller may skip its draw_mode_end while a display-list replay owns the open frame. */
+    gtk_widget_queue_draw(gr->glarea);
 }
 
 static int emit_cmd(struct graphics_priv *gr, enum draw_cmd_type type) {
@@ -1024,6 +1235,10 @@ static int emit_cmd(struct graphics_priv *gr, enum draw_cmd_type type) {
     gr->commands[gr->cmd_count].tex = 0;
     gr->commands[gr->cmd_count].first = 0;
     gr->commands[gr->cmd_count].count = 0;
+    gr->commands[gr->cmd_count].min_x = 0;
+    gr->commands[gr->cmd_count].min_y = 0;
+    gr->commands[gr->cmd_count].max_x = 0;
+    gr->commands[gr->cmd_count].max_y = 0;
     gr->cmd_count++;
     return 0;
 }
@@ -1176,93 +1391,6 @@ static void set_display_rotation(struct graphics_priv *gr, double angle_degrees,
 }
 
 /* ----------------------------------------------------------------
- * Clip and scroll (GL scissor + MVP translation)
- * ---------------------------------------------------------------- */
-
-static void set_clip(struct graphics_priv *gr, struct point *p, int w, int h) {
-    ensure_cmd_capacity(gr, gr->cmd_count + 2);
-    if (gr->cmd_count < gr->cmd_capacity) {
-        gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
-        gr->cmd_count++;
-    }
-    if (gr->cmd_count < gr->cmd_capacity) {
-        /* Convert from top-left origin to GL scissor (bottom-left origin) */
-        struct graphics_priv *cur;
-        int off_x = 0, off_y = 0;
-        for (cur = gr; cur->parent; cur = cur->parent) {
-            off_x += cur->p.x;
-            off_y += cur->p.y;
-        }
-        /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
-         * rect and flip the y axis using the framebuffer height. */
-        int sc = cur->scale > 0 ? cur->scale : 1;
-        int dev_h = cur->phys_h;
-        gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = (p->x + off_x) * sc;
-        gr->commands[gr->cmd_count].clip_y = dev_h - (p->y + h + off_y) * sc;
-        gr->commands[gr->cmd_count].clip_w = w * sc;
-        gr->commands[gr->cmd_count].clip_h = h * sc;
-        gr->cmd_count++;
-    }
-}
-
-static void set_clip_rects(struct graphics_priv *gr, struct point *p1, int w1, int h1, struct point *p2, int w2,
-                           int h2) {
-    /* GL doesn't support two scissor rects; use the union bounding box */
-    struct graphics_priv *cur;
-    int off_x = 0, off_y = 0;
-    for (cur = gr; cur->parent; cur = cur->parent) {
-        off_x += cur->p.x;
-        off_y += cur->p.y;
-    }
-    int x_min = (p1->x < p2->x ? p1->x : p2->x) + off_x;
-    int y_min = (p1->y < p2->y ? p1->y : p2->y) + off_y;
-    int x_max1 = p1->x + w1 + off_x;
-    int y_max1 = p1->y + h1 + off_y;
-    int x_max2 = p2->x + w2 + off_x;
-    int y_max2 = p2->y + h2 + off_y;
-    int x_max = x_max1 > x_max2 ? x_max1 : x_max2;
-    int y_max = y_max1 > y_max2 ? y_max1 : y_max2;
-    /* navit works in logical (GTK) coordinates, but glScissor takes device pixels: scale the
-     * rect and flip the y axis using the framebuffer height. */
-    int sc = cur->scale > 0 ? cur->scale : 1;
-    int dev_h = cur->phys_h;
-    ensure_cmd_capacity(gr, gr->cmd_count + 2);
-    if (gr->cmd_count < gr->cmd_capacity) {
-        gr->commands[gr->cmd_count].type = CMD_CLIP_ON;
-        gr->cmd_count++;
-    }
-    if (gr->cmd_count < gr->cmd_capacity) {
-        gr->commands[gr->cmd_count].type = CMD_CLIP_RECT;
-        gr->commands[gr->cmd_count].clip_x = x_min * sc;
-        gr->commands[gr->cmd_count].clip_y = dev_h - y_max * sc;
-        gr->commands[gr->cmd_count].clip_w = (x_max - x_min) * sc;
-        gr->commands[gr->cmd_count].clip_h = (y_max - y_min) * sc;
-        gr->cmd_count++;
-    }
-}
-
-static void clear_clip(struct graphics_priv *gr) {
-    ensure_cmd_capacity(gr, gr->cmd_count + 1);
-    if (gr->cmd_count < gr->cmd_capacity) {
-        gr->commands[gr->cmd_count].type = CMD_CLIP_OFF;
-        gr->cmd_count++;
-    }
-}
-
-static int scroll_surface(struct graphics_priv *gr, int dx, int dy) {
-    (void)gr;
-    (void)dx;
-    (void)dy;
-    /* This backend keeps no scrollable surface: the frame is rebuilt from the retained command
-     * list on every render. Reporting success here would send navit into its scroll+clip+redraw
-     * flow, which redraws the whole display list synchronously on every recenter and stalls the
-     * gesture at dense zoom levels. Return 0 so navit falls back to its async retained-frame
-     * rebuild, which keeps the current frame on screen and off the main thread. */
-    return 0;
-}
-
-/* ----------------------------------------------------------------
  * DPI
  * ---------------------------------------------------------------- */
 
@@ -1361,16 +1489,23 @@ static void graphics_destroy(struct graphics_priv *gr) {
         glDeleteProgram(gr->program);
     if (gr->vbo)
         glDeleteBuffers(1, &gr->vbo);
+    if (gr->index_vbo)
+        glDeleteBuffers(1, &gr->index_vbo);
     if (gr->white_tex)
         glDeleteTextures(1, &gr->white_tex);
     /* Deleting the multisample objects needs the widget's context current. gtk_gl_area_make_current
      * is a no-op on an unrealized widget, so only bother when the area is realized. */
-    if (gr->msaa_fbo && gr->glarea && gtk_widget_get_realized(gr->glarea)) {
+    if ((gr->msaa_fbo || gr->map_fbo) && gr->glarea && gtk_widget_get_realized(gr->glarea)) {
         gtk_gl_area_make_current(GTK_GL_AREA(gr->glarea));
         msaa_destroy(gr);
+        map_destroy(gr);
     }
     g_free(gr->vertices);
     g_free(gr->commands);
+    g_free(gr->batch_vertices);
+    g_free(gr->batch_commands);
+    g_free(gr->index_buf);
+    g_free(gr->line_runs);
     g_free(gr);
 }
 
@@ -1459,6 +1594,124 @@ static void msaa_destroy(struct graphics_priv *gr) {
 }
 
 /* ----------------------------------------------------------------
+ * Retained map frame
+ *
+ * The root display list is rendered into map_tex once per rebuild and afterwards presented
+ * translated by the drag offset (and pinch preview transform). The texture is padded by
+ * render_margin on every side so a drag within that margin shows new content without redrawing;
+ * navit recenters before the offset can exceed the margin. This is the GL counterpart of the
+ * cairo backend's scroll_surface and keeps a pan frame at the cost of one textured quad instead
+ * of replaying the whole retained command list.
+ * ---------------------------------------------------------------- */
+
+static void map_destroy(struct graphics_priv *gr) {
+    if (gr->map_msaa_fbo)
+        glDeleteFramebuffers(1, &gr->map_msaa_fbo);
+    if (gr->map_msaa_color_rb)
+        glDeleteRenderbuffers(1, &gr->map_msaa_color_rb);
+    if (gr->map_msaa_stencil_rb)
+        glDeleteRenderbuffers(1, &gr->map_msaa_stencil_rb);
+    if (gr->map_stencil_rb)
+        glDeleteRenderbuffers(1, &gr->map_stencil_rb);
+    if (gr->map_fbo)
+        glDeleteFramebuffers(1, &gr->map_fbo);
+    if (gr->map_tex)
+        glDeleteTextures(1, &gr->map_tex);
+    gr->map_msaa_fbo = gr->map_msaa_color_rb = gr->map_msaa_stencil_rb = 0;
+    gr->map_fbo = gr->map_tex = gr->map_stencil_rb = 0;
+    gr->map_alloc_w = gr->map_alloc_h = 0;
+    gr->map_valid = 0;
+}
+
+static void map_alloc(struct graphics_priv *gr, int width, int height) {
+    if (width <= 0 || height <= 0)
+        return;
+    if (gr->map_fbo && gr->map_alloc_w == width && gr->map_alloc_h == height)
+        return;
+
+    GLint prev = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+    map_destroy(gr);
+
+    /* Single-sampled texture the map is resolved into and sampled from when presenting. */
+    GLenum tex_ifmt = (epoxy_gl_version() >= 30 || epoxy_has_gl_extension("GL_OES_rgb8_rgba8")) ? GL_RGBA8 : GL_RGBA;
+    glGenTextures(1, &gr->map_tex);
+    glBindTexture(GL_TEXTURE_2D, gr->map_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, tex_ifmt, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenFramebuffers(1, &gr->map_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, gr->map_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gr->map_tex, 0);
+    glGenRenderbuffers(1, &gr->map_stencil_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, gr->map_stencil_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gr->map_stencil_rb);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        dbg(lvl_error, "gtkglarea: map framebuffer incomplete at %dx%d", width, height);
+        map_destroy(gr);
+        glBindFramebuffer(GL_FRAMEBUFFER, prev);
+        return;
+    }
+
+    if (gr->msaa_samples > 0) {
+        glGenFramebuffers(1, &gr->map_msaa_fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, gr->map_msaa_fbo);
+        glGenRenderbuffers(1, &gr->map_msaa_color_rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, gr->map_msaa_color_rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, gr->msaa_samples, gr->msaa_color_format, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, gr->map_msaa_color_rb);
+        glGenRenderbuffers(1, &gr->map_msaa_stencil_rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, gr->map_msaa_stencil_rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, gr->msaa_samples, GL_STENCIL_INDEX8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gr->map_msaa_stencil_rb);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            dbg(lvl_warning, "gtkglarea: multisample map framebuffer incomplete at %dx%d", width, height);
+            glDeleteFramebuffers(1, &gr->map_msaa_fbo);
+            glDeleteRenderbuffers(1, &gr->map_msaa_color_rb);
+            glDeleteRenderbuffers(1, &gr->map_msaa_stencil_rb);
+            gr->map_msaa_fbo = gr->map_msaa_color_rb = gr->map_msaa_stencil_rb = 0;
+        }
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, prev);
+    gr->map_alloc_w = width;
+    gr->map_alloc_h = height;
+    gr->map_valid = 0;
+    dbg(lvl_debug, "gtkglarea: map texture %dx%d (msaa=%d)", width, height, gr->map_msaa_fbo != 0);
+}
+
+/* Draw the retained map texture, transformed by mvp, as a single quad covering the padded
+ * drawable rect. Reuses the command executor so shader state and the vertex format stay in one
+ * place. */
+static void present_map(struct graphics_priv *gr, float *mvp) {
+    float m = (float)gr->render_margin;
+    float w = (float)gr->width;
+    float h = (float)gr->height;
+    /* y is down in drawable space but the texture's v = 0 is its bottom row, hence v = 1 at the
+     * top (y = -margin). */
+    Vertex quad[6] = {
+        {-m,    -m,    0.0f, 1.0f},
+        {w + m, -m,    1.0f, 1.0f},
+        {w + m, h + m, 1.0f, 0.0f},
+        {-m,    -m,    0.0f, 1.0f},
+        {w + m, h + m, 1.0f, 0.0f},
+        {-m,    h + m, 0.0f, 0.0f},
+    };
+    DrawCmd cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.type = CMD_TEXTURED_QUADS;
+    cmd.tex = gr->map_tex;
+    cmd.first = 0;
+    cmd.count = 6;
+    cmd.r = cmd.g = cmd.b = cmd.a = 1.0f;
+    exec_draw_cmds(gr, &cmd, 1, quad, 6, gr->vbo, mvp);
+}
+
+/* ----------------------------------------------------------------
  * GtkGLArea callbacks
  * ---------------------------------------------------------------- */
 
@@ -1484,8 +1737,53 @@ static gboolean on_glarea_realize(GtkWidget *widget, gpointer data) {
     return FALSE;
 }
 
-static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_count, Vertex *vertices,
-                           int vertex_count, GLuint vbo, float *mvp) {
+static void ensure_line_run_buffers(struct graphics_priv *gr, int run_capacity, int index_capacity) {
+    if (run_capacity > gr->line_runs_capacity) {
+        gr->line_runs = g_realloc(gr->line_runs, run_capacity * sizeof(*gr->line_runs));
+        gr->line_runs_capacity = run_capacity;
+    }
+    if (index_capacity > gr->index_capacity) {
+        gr->index_buf = g_realloc(gr->index_buf, index_capacity * sizeof(*gr->index_buf));
+        gr->index_capacity = index_capacity;
+    }
+}
+
+/* Collapse runs of consecutive line-strip commands with identical state into index ranges. The
+ * strips of a run are separated by GL_RESTART_INDEX so a single indexed draw can emit all of them
+ * without connecting the end of one strip to the start of the next. Line strips are the bulk of a
+ * dense map frame; batching them cuts the per-frame draw-call count by an order of magnitude.
+ * Non-indexed drawing stays the fallback where primitive restart is unavailable. */
+static int build_line_runs(struct graphics_priv *gr, DrawCmd *commands, int cmd_count) {
+    memset(gr->line_runs, 0, cmd_count * sizeof(*gr->line_runs));
+    int index = 0;
+    for (int i = 0; i < cmd_count;) {
+        DrawCmd *first = &commands[i];
+        if (first->type != CMD_LINE_STRIP) {
+            i++;
+            continue;
+        }
+        int index_start = index;
+        int j = i;
+        while (j < cmd_count) {
+            DrawCmd *run = &commands[j];
+            if (run->type != CMD_LINE_STRIP || run->tex != first->tex || run->r != first->r || run->g != first->g
+                || run->b != first->b || run->a != first->a || run->linewidth != first->linewidth)
+                break;
+            for (int k = 0; k < run->count; k++)
+                gr->index_buf[index++] = (GLuint)(run->first + k);
+            gr->index_buf[index++] = GL_RESTART_INDEX;
+            j++;
+        }
+        gr->line_runs[i].index_start = index_start;
+        gr->line_runs[i].index_count = index - index_start;
+        gr->line_runs[i].span = j - i;
+        i = j;
+    }
+    return index;
+}
+
+static int prepare_draw(struct graphics_priv *gr, DrawCmd *commands, int cmd_count, Vertex *vertices, int vertex_count,
+                        GLuint vbo, float *mvp, int *merge_strips_out) {
     glUseProgram(gr->program);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -1501,6 +1799,30 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
         glEnableVertexAttribArray(gr->tex_pos_loc);
         glVertexAttribPointer(gr->tex_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(2 * sizeof(float)));
     }
+
+    int merge_strips = epoxy_gl_version() >= 30 && cmd_count > 0 && !getenv("NAVIT_NO_MERGE");
+    *merge_strips_out = merge_strips;
+    int index_count = 0;
+    if (merge_strips) {
+        ensure_line_run_buffers(gr, cmd_count, vertex_count + cmd_count);
+        index_count = build_line_runs(gr, commands, cmd_count);
+        if (index_count > 0) {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gr->index_vbo);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * sizeof(GLuint), gr->index_buf, GL_DYNAMIC_DRAW);
+            if (epoxy_is_desktop_gl()) {
+                glEnable(GL_PRIMITIVE_RESTART);
+                glPrimitiveRestartIndex(GL_RESTART_INDEX);
+            } else {
+                /* ES 3.0 has no glPrimitiveRestartIndex; the restart value is fixed to the
+                 * maximum index for the element type. */
+                glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+            }
+        }
+    }
+    return index_count;
+}
+
+static void draw_commands(struct graphics_priv *gr, DrawCmd *commands, int cmd_count, int merge_strips) {
 
     float last_r = -1, last_g = -1, last_b = -1, last_a = -1;
 
@@ -1587,11 +1909,34 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
              * decide the rest. */
             glLineWidth(w);
         }
-        glDrawArrays(mode, cmd->first, cmd->count);
+        if (merge_strips && cmd->type == CMD_LINE_STRIP && gr->line_runs[i].span > 1) {
+            glDrawElements(mode, gr->line_runs[i].index_count, GL_UNSIGNED_INT,
+                           (void *)(size_t)(gr->line_runs[i].index_start * sizeof(GLuint)));
+            i += gr->line_runs[i].span - 1;
+        } else {
+            glDrawArrays(mode, cmd->first, cmd->count);
+        }
     }
+}
 
+static void finish_draw(struct graphics_priv *gr, int index_count) {
+    if (index_count > 0) {
+        if (epoxy_is_desktop_gl())
+            glDisable(GL_PRIMITIVE_RESTART);
+        else
+            glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glUseProgram(0);
+}
+
+static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_count, Vertex *vertices,
+                           int vertex_count, GLuint vbo, float *mvp) {
+    int merge_strips = 0;
+    int index_count = prepare_draw(gr, commands, cmd_count, vertices, vertex_count, vbo, mvp, &merge_strips);
+    draw_commands(gr, commands, cmd_count, merge_strips);
+    finish_draw(gr, index_count);
 }
 
 static void render_overlay(struct graphics_priv *root_gr, struct graphics_priv *ov) {
@@ -1625,13 +1970,15 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     struct graphics_priv *gr = data;
     (void)glarea;
     (void)context;
+    int batch_verts = 0;
 
-    /* Skip while a frame is being constructed to avoid showing partial/incomplete state.
+    /* While a frame is under construction the sliced replay holds draw_depth open across
+     * main-loop iterations. Present the retained texture at the current offset so a pan keeps
+     * tracking the cursor, but never bake the partial command list into the map texture.
      * Return FALSE (not TRUE): ::render uses the default true_handled accumulator, so a
      * TRUE return would halt emission and silently suppress any other ::render handler
      * (and GTK's own render closure, which performs the frame error check). */
-    if (gr->draw_depth > 0)
-        return FALSE;
+    int frame_open = gr->draw_depth > 0;
 
     /* GtkGLArea renders into its own framebuffer (not the default 0); remember it so the
      * multisampled scene can be resolved into it at the end. */
@@ -1640,24 +1987,64 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
 
     int msaa = gr->msaa_samples > 0 && gr->msaa_fbo && gr->phys_w > 0 && gr->phys_h > 0
                && gr->msaa_alloc_w == gr->phys_w && gr->msaa_alloc_h == gr->phys_h;
+
+    /* Render the retained map frame into its off-screen texture, but only when its content
+     * changed. A drag or pinch preview only changes the MVP, so those frames reuse the texture
+     * and cost a single textured quad instead of replaying the whole display list. */
+    int margin_px = gr->render_margin * (gr->scale > 0 ? gr->scale : 1);
+    int map_w = gr->phys_w + 2 * margin_px;
+    int map_h = gr->phys_h + 2 * margin_px;
+    if (gr->phys_w > 0 && gr->phys_h > 0 && !frame_open)
+        map_alloc(gr, map_w, map_h);
+
+    if (gr->map_fbo && !frame_open && (gr->dirty || !gr->map_valid)) {
+        if (gr->bg_gc)
+            glClearColor(gr->bg_gc->c.r / 65535.0f, gr->bg_gc->c.g / 65535.0f, gr->bg_gc->c.b / 65535.0f, 1.0f);
+        else
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glBindFramebuffer(GL_FRAMEBUFFER, gr->map_msaa_fbo ? gr->map_msaa_fbo : gr->map_fbo);
+        glViewport(0, 0, map_w, map_h);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        if (gr->vertex_count > 0 || gr->cmd_count > 0) {
+            /* Ortho over the padded drawable rect: x in [-margin, width+margin],
+             * y in [height+margin, -margin] (screen y down). Cull to that rect: the display list
+             * covers the larger pan prefetch area, whose outer part is never visible here. */
+            float base[16];
+            mvp_ortho(base, -(float)gr->render_margin, (float)(gr->width + gr->render_margin),
+                      (float)(gr->height + gr->render_margin), -(float)gr->render_margin, -1.0f, 1.0f);
+            int batch_cmds = build_culled_batch(gr, -(float)gr->render_margin - 2.0f, -(float)gr->render_margin - 2.0f,
+                                                (float)(gr->width + gr->render_margin) + 2.0f,
+                                                (float)(gr->height + gr->render_margin) + 2.0f, &batch_verts);
+            if (batch_cmds > 0)
+                exec_draw_cmds(gr, gr->batch_commands, batch_cmds, gr->batch_vertices, batch_verts, gr->vbo, base);
+        }
+        if (gr->map_msaa_fbo) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, gr->map_msaa_fbo);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gr->map_fbo);
+            glBlitFramebuffer(0, 0, map_w, map_h, 0, 0, map_w, map_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        }
+        gr->map_valid = 1;
+        gr->dirty = 0;
+    }
+
+    /* Present the retained map, then the overlays on top of it. */
     if (msaa)
         glBindFramebuffer(GL_FRAMEBUFFER, gr->msaa_fbo);
+    else
+        glBindFramebuffer(GL_FRAMEBUFFER, screen_fb);
+    glViewport(0, 0, gr->phys_w, gr->phys_h);
 
-    /* Clear to the map backdrop. The background rectangle from the vertex buffer covers the
-     * viewport, but display rotation leaves the corners outside it, so clearing to black would
-     * expose black wedges there. */
     if (gr->bg_gc)
         glClearColor(gr->bg_gc->c.r / 65535.0f, gr->bg_gc->c.g / 65535.0f, gr->bg_gc->c.b / 65535.0f, 1.0f);
     else
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    /* Render root draw commands — data persists between renders until overwritten */
-    if (gr->vertex_count > 0 || gr->cmd_count > 0) {
-        float root_mvp[16];
-        compute_mvp(gr);
-        memcpy(root_mvp, gr->mvp, sizeof(root_mvp));
-        exec_draw_cmds(gr, gr->commands, gr->cmd_count, gr->vertices, gr->vertex_count, gr->vbo, root_mvp);
+    if (gr->map_valid && gr->map_tex) {
+        float present[16];
+        compute_mvp(gr, present);
+        present_map(gr, present);
     }
 
     /* Draw overlays (recursively for nested overlays) */
@@ -1694,7 +2081,11 @@ static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer 
 
     msaa_alloc(gr, width, height);
 
-    navit_set_render_margin(gr->nav, (gr->width > gr->height ? gr->width : gr->height) / 4);
+    /* Margin kept around the viewport in the retained map texture; must match what navit uses
+     * for its pan recenter threshold so a drag is always still inside the texture. */
+    gr->render_margin = (gr->width > gr->height ? gr->width : gr->height) / GTKGL_MAP_MARGIN_DIVISOR;
+
+    navit_set_render_margin(gr->nav, gr->render_margin);
 
     callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(gr->width), GINT_TO_POINTER(gr->height));
 }
@@ -2027,10 +2418,13 @@ static struct graphics_methods graphics_methods = {
     get_dpi,                 /* get_dpi */
     draw_polygon_with_holes, /* draw_polygon_with_holes */
     set_display_rotation,    /* set_display_rotation */
-    set_clip,                /* set_clip */
-    set_clip_rects,          /* set_clip_rects */
-    clear_clip,              /* clear_clip */
-    scroll_surface,          /* scroll */
+    /* No set_clip/clear_clip/scroll: navit's scroll+clip recenter path replays the whole display
+     * list on the calling thread (seconds at dense zoom levels), while the async rebuild replays
+     * it on a worker. Returning NULL makes graphics_scroll() fail and navit use that path. */
+    NULL, /* set_clip */
+    NULL, /* set_clip_rects */
+    NULL, /* clear_clip */
+    NULL, /* scroll */
 };
 
 static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_methods *meth) {
