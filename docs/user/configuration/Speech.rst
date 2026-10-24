@@ -84,11 +84,11 @@ Mbrola on Raspbian
 get mbrola working on Raspbian Jessie
 -------------------------------------
 
--  found in the Raspberry Pi Forum
+- found in the `Raspberry Pi Forum <https://www.raspberrypi.org/forums/viewtopic.php?f=66&t=148096>`__
 
-(https://www.raspberrypi.org/forums/viewtopic.php?f=66&t=148096)
+::
 
-| ``wget ``\ `http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb <http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb>`__
+   wget http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb
 
 .. _unzip_the_voice_package_and_put_the_binary_file_e.g._en1_to_usrsharembrolaen1:
 
@@ -257,10 +257,9 @@ There is a good howto about setting **kttsd** up to speak german:
 
 Running Debian Lenny, the mbrola-packages can be installed with apt-get
 (or synaptic, or aptitude, ...). I have just installed all the stuff
-with "*apt-get install kttsd kttsd-contrib-plugins kmouth ksayit mbrola
-mbrola-de6 mbrola-de7*" and installed and configured the "*txt2pho*"
+with ``apt-get install kttsd kttsd-contrib-plugins kmouth ksayit mbrola mbrola-de6 mbrola-de7`` and installed and configured the ``txt2pho``
 like described in the howto and got a full functioning, german speech
-synthesis in KDE. Which Navit (with the **) uses without problems.
+synthesis in KDE. Which Navit uses without problems.
 
 .. _use_google_translate_online_to_speak_directions:
 
