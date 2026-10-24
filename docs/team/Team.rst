@@ -115,7 +115,7 @@ guys!
      -
      -
    * - Xenos198
-     - :ref:`maintained/TomTom` port
+     - :ref:`TomTom <_tomtom>` port
      - Manuel Hohmann
      -
      -
@@ -206,7 +206,7 @@ guys!
      -
      -
    * - Kamikaaze
-     - :ref:`maintained/android` port
+     - :ref:`Android <_android>` port
      -
      -
      -
