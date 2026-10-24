@@ -91,13 +91,8 @@ This part is WIP
 
 Typical description of object in .layout file
 
-| ``       ``\
-| ``           ``\
-| ``           ``\
-| ``   ``\
-
 -  UnifiedAreaRect - sth here must be added
--  "UnifiedAreaRect" Value - tell's Navit where parts of skin must be
+-  "UnifiedAreaRect" Value - tells Navit where parts of skin must be
    placed in the app. Starting from left 635 is X and 1 Y position of
    upper left corner. Then 800 and 600 are X,Y position of bottom right
    corner of skin element
