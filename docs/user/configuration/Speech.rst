@@ -255,11 +255,17 @@ german words.
 There is a good howto about setting **kttsd** up to speak german:
 `deutsche-sprachausgabe-in-kde <http://kanotix.wordpress.com/2006/08/14/deutsche-sprachausgabe-in-kde/>`__
 
-Running Debian Lenny, the mbrola-packages can be installed with apt-get
-(or synaptic, or aptitude, ...). I have just installed all the stuff
-with ``apt-get install kttsd kttsd-contrib-plugins kmouth ksayit mbrola mbrola-de6 mbrola-de7`` and installed and configured the ``txt2pho``
-like described in the howto and got a full functioning, german speech
-synthesis in KDE. Which Navit uses without problems.
+On Debian Bookworm, mbrola packages are available in the repositories.
+They can be installed with apt:
+
+::
+
+   apt install mbrola mbrola-de6 mbrola-de7
+
+For KDE text-to-speech, kttsd has been replaced by speech-dispatcher in
+modern KDE versions. A working setup typically uses speech-dispatcher
+with an appropriate voice. See the speech-dispatcher documentation for
+current instructions.
 
 .. _use_google_translate_online_to_speak_directions:
 
