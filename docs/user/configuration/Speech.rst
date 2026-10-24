@@ -25,22 +25,21 @@ repository
 manually (done with Ubuntu Natty)
 ---------------------------------
 
-| ``apt-get remove espeak``
-| ``apt-get remove espeak-data``
-| ``apt-get remove libportaudio0``
-| ``apt-get install portaudio19-dev``
-| ``apt-get install libportaudio2``
-| ``apt-get install debhelper``
-| ``# download the latest version from http://espeak.sourceforge.net/test/latest.html``
-| ``unzip espeak-*.zip``
-| ``cd /usr/lib64``
-| ``ln -s libaudio.so.2 libaudio.so``
-| ``cd -``
-| ``cd espeak-*/src/``
-| ``cp portaudio19.h portaudio.h                    # ReadMe is obsolete for Ubuntu Natty``
-| ``make``
-| ``make install``
-| ``cd -``
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Mbrola
 ======
@@ -57,17 +56,16 @@ install mbrola from the repositories
 get a mbrola voice
 ------------------
 
-```http://www.tcts.fpms.ac.be/synthesis/mbrola/mbrcopybin.html`` <http://www.tcts.fpms.ac.be/synthesis/mbrola/mbrcopybin.html>`__
+`http://www.tcts.fpms.ac.be/synthesis/mbrola/mbrcopybin.html <http://www.tcts.fpms.ac.be/synthesis/mbrola/mbrcopybin.html>`__
 
-```http://tcts.fpms.ac.be/synthesis/mbrola.html`` <http://tcts.fpms.ac.be/synthesis/mbrola.html>`__
+`http://tcts.fpms.ac.be/synthesis/mbrola.html <http://tcts.fpms.ac.be/synthesis/mbrola.html>`__
 
 .. _create_the_needed_folders:
 
 create the needed folders
 -------------------------
 
-| ``mkdir /usr/share/mbrola/``
-| ``mkdir /usr/share/mbrola/voices/``
+
 
 .. _unzip_the_voice_package_and_put_the_binary_file_e.g._en1_to_usrsharembrolavoices:
 
@@ -90,8 +88,7 @@ get mbrola working on Raspbian Jessie
 
 (https://www.raspberrypi.org/forums/viewtopic.php?f=66&t=148096)
 
-| ``wget ``\ ```http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb`` <http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb>`__
-| ``sudo dpkg -i mbrola3.0.1h_armhf.deb``
+| ``wget ``\ `http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb <http://steinerdatenbank.de/software/mbrola3.0.1h_armhf.deb>`__
 
 .. _unzip_the_voice_package_and_put_the_binary_file_e.g._en1_to_usrsharembrolaen1:
 
@@ -116,21 +113,18 @@ Speech output
 -  Speech.sh could have the following entry: **(don't forget to chmod
    u+x the script!)**
 
-| ``#!/bin/bash/``
-| ``aplay -r 44100 /home/CHANGEME/.navit/sound.wav ``
-| ``espeak -vmb-en1 -s 150 -a 150 -p 50 "$1"``
+
+
 
 -  Note that espeak will take 1-2 seconds to start if you put the
    command in a new line. For an instant play use:
 
-| ``#!/bin/bash/``
-| ``aplay -r 44100 /home/CHANGEME/.navit/sound.wav & espeak -vmb-en1 -s 150 -a 150 -p 50 "$1"``
+
 
 -  For an eSpeak version **below** 1.44 (repository version of lucid)
    the pipe would look like:
 
-| ``#!/bin/bash/``
-| ``espeak -vmb-en1 -s 150 -p 45 "$1" | mbrola -e /usr/share/mbrola/voices/en1 - - | aplay -r16550 -fs16 >> /dev/null``
+
 
 -  -s sets the speed
 -  -a sets the volume(av. 100)
@@ -285,9 +279,8 @@ vlc.exe somewhere in you're navit folder. You only need the exe itself.
 Open a texteditor and copy the next script in it and save as .bat
 somewhere in the navit folder.
 
-| ``set ESCAPED=%~1%``
-| ``wget -q -U Mozilla -O output.mp3 "``\ ```http://translate.google.com/translate_tts?ie=UTF-8&tl=en&q=%ESCAPED%`` <http://translate.google.com/translate_tts?ie=UTF-8&tl=en&q=%ESCAPED%>`__\ ``"``
-| ``FULL-PATH-TO/vlc.exe --qt-start-minimized --play-and-exit -q output.mp3``
+
+| ``wget -q -U Mozilla -O output.mp3 "``\ `http://translate.google.com/translate_tts?ie=UTF-8&tl=en&q=%ESCAPED% <http://translate.google.com/translate_tts?ie=UTF-8&tl=en&q=%ESCAPED%>`__\ ``"``
 
 change the path-to=vlc.exe to the FULL path to the exe.
 
