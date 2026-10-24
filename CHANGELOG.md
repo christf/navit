@@ -283,7 +283,7 @@ allowed
 * Build:Fdroid buildenviroment has no CXX and failes doue to this/CXX not needed anyway. [jkoan]
 * Graphics/android: polygons with hole drawing (#973) [Stefan Wildemann]
 * Plugins: too few arguments to functions navit\_attr\_iter\_new and config\_attr\_iter\_new (#966) [Joseph Herlant]
-* Port/android:Use new icon for notification (#963) [mvglasow]
+* Port/android: Use new icon for notification (#963) [mvglasow]
 
 ### Other
 
