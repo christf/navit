@@ -247,7 +247,7 @@ allowed
 * Add:layout:add textures for quarry and scrub. (#997) [Stefan Wildemann]
 * Add:Core:Add mapfeatures (#990) [Stefan Wildemann]
 * Add:Core+Graphics+Qt5:Add support for textured polygons (#989) [Stefan Wildemann]
-* Add:build:Android build and signing. Also add fastlane for metadata. Set execute on scripts/\*.sh. [jkoan]
+* Add:build:Android build and signing. Also add fastlane for metadata. Set execute on scripts/\\*.sh. [jkoan]
 * Add:cmake: add compilation flags to harden the security of navit (#969) [Joseph Herlant]
 
 ### Changed
@@ -283,7 +283,7 @@ allowed
 * Build:Fdroid buildenviroment has no CXX and failes doue to this/CXX not needed anyway. [jkoan]
 * Graphics/android: polygons with hole drawing (#973) [Stefan Wildemann]
 * Plugins: too few arguments to functions navit\_attr\_iter\_new and config\_attr\_iter\_new (#966) [Joseph Herlant]
-* Port/android: Use new icon for notification (#963) [mvglasow]
+* Port/android:Use new icon for notification (#963) [mvglasow]
 
 ### Other
 
