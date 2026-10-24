@@ -23,41 +23,41 @@ guys!
      - Devices
      - OS
      - state
-   * - 
-     - 
+   * -
+     -
      - Name
      - name
-     - 
-     - 
-     - 
+     -
+     -
+     -
    * - Cp15
      - maintainer,
      - Martin
      - martin-s
-     - 
-     - 
+     -
+     -
      - busy
-   * - 
+   * -
      - server
      - Schaller
-     - 
-     - 
-     - 
-     - 
-   * - 
+     -
+     -
+     -
+     -
+   * -
      - admin,
-     - 
-     - 
-     - 
-     - 
-     - 
-   * - 
+     -
+     -
+     -
+     -
+     -
+   * -
      - dev, ...
-     - 
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
+     -
    * - KaZeR
      - trac admin,
      - Pierre
@@ -65,83 +65,83 @@ guys!
      - Epi
      - Gentoo
      - busy
-   * - 
+   * -
      - launchpad
      - Grandin
-     - 
+     -
      - aM1000,
-     - 
-     - 
-   * - 
+     -
+     -
+   * -
      - admin
-     - 
-     - 
+     -
+     -
      - Free
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - runner,
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - Cubox,
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - raspberry
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - pi,
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - iphone
-     - 
-     - 
+     -
+     -
    * - Xenos198
      - :ref:`tomtom` port
      - Manuel Hohmann
-     - 
-     - 
-     - 
+     -
+     -
+     -
      - busy
    * - tryagain
-     - 
-     - 
+     -
+     -
      - mdankov
-     - 
-     - 
+     -
+     -
      - ?
    * - sleske
      - `trac <trac>`__,
      - Sebastian
      - sleske
-     - 
+     -
      - Debian
      - ?
-   * - 
+   * -
      - code
      - Leske
-     - 
-     - 
+     -
+     -
      - Linux
-     - 
+     -
    * - Number6
      - twitter, press, media, patches,...
      - Nick Geoghegan
@@ -151,130 +151,130 @@ guys!
      - ?
    * - Korrosa
      - Wiki
-     - 
-     - 
+     -
+     -
      - Ubuntu
-     - 
+     -
      - ?
-   * - 
+   * -
      - Trac
-     - 
-     - 
+     -
+     -
      - 32
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - Netbook
-     - 
-     - 
-   * - 
-     - 
-     - 
-     - 
+     -
+     -
+   * -
+     -
+     -
+     -
      - Remix
-     - 
-     - 
+     -
+     -
    * - Usul
      - Wiki Trac planning
-     - 
-     - 
+     -
+     -
      - Ubuntu 64 laptop, `OpenPandora <OpenPandora>`__
-     - 
+     -
      - pending
    * - pini
      - official
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
      - busy
-   * - 
+   * -
      - debian
-     - 
-     - 
-     - 
-     - 
-     - 
-   * - 
+     -
+     -
+     -
+     -
+     -
+   * -
      - packager
-     - 
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
+     -
    * - Kamikaaze
      - :ref:`Android` port
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
      - ?
    * - Horwitz
-     - 
+     -
      - Michael
-     - 
-     - 
-     - 
+     -
+     -
+     -
      - ?
-   * - 
-     - 
+   * -
+     -
      - Fa
-     - 
-     - 
-     - 
-     - 
-   * - 
-     - 
+     -
+     -
+     -
+     -
+   * -
+     -
      - rmbauer
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
    * - jkoan
      - everything
-     - 
-     - 
+     -
+     -
      - TomTom, WinCE
      - Android, Manajaro, Windows
-     - 
+     -
    * - `User:Mineque <User:Mineque>`__
      - Design `Internal GUI <Internal_GUI>`__ / `OSD <OSD>`__
      - Michael Madej
-     - 
+     -
      - Vista 32bit, Ubuntu 64bit
-     - 
-     - 
+     -
+     -
    * - `User:rphlx <User:rphlx>`__ / bcr
-     - 
+     -
      - Bryan Rittmeyer
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
    * - `user:Zaxl <user:Zaxl>`__
-     - 
+     -
      - Alexander Atanasov
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
    * - `User:Zilux <User:Zilux>`__
      - `Openmoko <Openmoko>`__ port
      - Gilles Casse
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
    * - `User:Afaber <User:Afaber>`__
      - `Windows <Windows>`__ port
-     - 
-     - 
-     - 
-     - 
-     - 
+     -
+     -
+     -
+     -
+     -
 
 
 .. _hall_of_fame:
