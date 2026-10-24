@@ -971,7 +971,7 @@ Release 0.5.2 had issues with the version not properly updated in the `CMakeList
 * [POI] Improve Attraction, Cemetery, Heliport, Hotel, Parking and Pharmacy icons (#293) [Johan Fitié]
 * [POI] Improve Emergency, Golf, Pharmacy, Picnic and Wifi icons (#291) [Johan Fitié]
 * [POI] Improve Parking, Shop computer, Shop department, Zoo, TEC common, Unknown and Sport icons (#290) [Johan Fitié]
-* [POI] Improve Attraction, Bicycle shop, Boat ramp, Bus, Cemetery and Cinema icons (#289) [Johan Fitié]
+- [POI] Improve Attraction, Bicycle shop, Boat ramp, Bus, Cemetery and Cinema icons (#289) [Johan Fitié]
 * [POI] Improve Car dealer, Castle, Fountain, Hospital, Parking, Peak and Pharmacy icons (#288) [Johan Fitié]
 * [POI] Improve Drinking water, Fastfood, Theater, Information, Museum, Shop grocery, Taxi, Toilets and Townhall icons (#287) [Johan Fitié]
 * [POI] Improve Bar, Beer, Bus stop, Fountain, Level crossing, Library, Memorial, Post, Repair service, Shopping and Stadium icons (#286) [Johan Fitié]
