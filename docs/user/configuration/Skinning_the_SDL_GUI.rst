@@ -145,12 +145,7 @@ Structure of \*.imageset files
 | ``   * XPos, YPos - position (X,Y) of texture parts in image file it is counted from upper left corner``
 | ``   * Width, Height - skin part dimension``
 
-| ``   ``\
-| ``   ``\
-| ``   ``\
 
-| ``   ``\
-|
 
 It's nice to make code more readable by splitting it like below
 
@@ -180,28 +175,7 @@ And that is example of finished .imageset file
 
    <?xml version="1.0" ?>
 
-|
 | `` ``
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-| ``   ``\
-|
 
 .. _about_the_looknfeel:
 
