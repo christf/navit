@@ -35,7 +35,7 @@ for module in \
     speech/dbus speech/speech_dispatcher \
     support/shapefile \
     traffic/traff_http \
-    vehicle/demo vehicle/file vehicle/geoclue vehicle/gpsd vehicle/gpsd_dbus; do
+    vehicle/file vehicle/geoclue vehicle/gpsd vehicle/gpsd_dbus; do
     cmake_opts+=("-D${module}:BOOL=FALSE")
 done
 
