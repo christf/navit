@@ -35,11 +35,6 @@ struct item_data {
     struct coord c;
 };
 
-struct selector {
-    char *icon;
-    char *name;
-    enum item_type *types;  // even items are start, odd ones are end of selection
-};
 static enum item_type selectors_BankTypes[] = {type_poi_bank, type_poi_bank, type_poi_atm, type_poi_atm, type_none};
 static enum item_type selectors_FuelTypes[] = {type_poi_fuel, type_poi_fuel, type_none};
 static enum item_type selectors_Charging[] = {type_poi_charging_station, type_poi_charging_station, type_none};
@@ -151,6 +146,7 @@ struct selector selectors[] = {
     {"unknown",          "Other",            selectors_OtherTypes       },
     /*	{"unknown","Unknown",selectors_UnknownTypes},*/
 };
+const int selector_count = sizeof(selectors) / sizeof(struct selector);
 /**
  * @brief Get icon for given POI type.
  *
@@ -186,7 +182,7 @@ static struct graphics_image *gui_internal_poi_icon_custom(struct gui_priv *this
     return img;
 }
 
-static struct graphics_image *gui_internal_poi_icon(struct gui_priv *this, struct item *item) {
+struct graphics_image *gui_internal_poi_icon(struct gui_priv *this, struct item *item) {
     struct attr layout;
     GList *layer;
     navit_get_attr(this->nav, attr_layout, &layout, NULL);
@@ -249,7 +245,7 @@ void gui_internal_poi_param_free(void *p) {
  * @return  Cloned object reference.
  */
 
-static struct poi_param *gui_internal_poi_param_clone(struct poi_param *p) {
+struct poi_param *gui_internal_poi_param_clone(struct poi_param *p) {
     struct poi_param *r = g_new(struct poi_param, 1);
     GList *l = p->filter;
     memcpy(r, p, sizeof(struct poi_param));
@@ -433,7 +429,7 @@ char *gui_internal_compose_item_address_string(struct item *item, int prependPos
     return s;
 }
 
-static int gui_internal_cmd_pois_item_selected(struct poi_param *param, struct item *item) {
+int gui_internal_pois_item_selected(struct poi_param *param, struct item *item) {
     enum item_type *types;
     struct selector *sel = param->sel ? &selectors[param->selnb] : NULL;
     enum item_type type = item->type;
@@ -847,7 +843,7 @@ static void gui_internal_pois_idle_process(struct poi_search_state *state) {
             state->selm = map_selection_dup_pro(state->sel, state->pro, map_projection(state->m));
             state->mr = map_rect_new(state->m, state->selm);
         }
-        if (gui_internal_cmd_pois_item_selected(state->param, item) && item_coord_get_pro(item, &c, 1, state->pro)
+        if (gui_internal_pois_item_selected(state->param, item) && item_coord_get_pro(item, &c, 1, state->pro)
             && coord_rect_contains(&state->sel->u.c_rect, &c)
             && (idist = transform_distance(state->pro, &state->center, &c)) < state->dist) {
             item_attr_rewind(item);
