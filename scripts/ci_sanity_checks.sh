@@ -82,6 +82,31 @@ for f in $(git --no-pager diff --name-only refs/remotes/origin/trunk | sort -u);
         if [[ "${f: -2}" == ".h" ]] || [[ "${f: -2}" == ".c" ]] || [[ "${f: -4}" == ".cpp" ]]; then
             echo "[INFO] Checking for indentation and style compliance on ${f}..."
             clang-format -i "${f}"
+
+            # Reject assignments embedded in function call arguments, e.g.
+            #   foo(bar(baz = qux()));
+            # Such an assignment makes the line longer and the assignment harder to read; it should be
+            # unrolled into a separate statement before the call. Assignments in control-flow conditions (if/while/for/
+            # switch) are accepted C idioms and are not flagged. clang-format cannot detect this, as it
+            # only reformats whitespace and never rejects a construct.
+            echo "[INFO] Checking for assignment in function call arguments on ${f}..."
+            if [[ "${f}" == *"/vehicle/wince/"* ]]; then
+                continue
+            fi
+            assignments="$(grep -nE '[,(][[:space:]]*[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z0-9_]+[[:space:]]*=[^=]' "${f}" | grep -vE '\b(if|while|for|switch)[[:space:]]*\(' | python3 -c "
+import sys,re
+def s(c):
+    c=re.sub(r'//.*$','',c,flags=re.M);c=re.sub(r'/\*.*?\*/','',c,flags=re.S);c=re.sub(r'\"(?:\\\\.|[^\"\\\\])*\"','',c);c=re.sub(r\"'(?:\\\\.|[^'\\\\])*'\",'',c)
+    return c
+for l in sys.stdin:
+    if re.search(r'[,(][[:space:]]*[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z0-9_]+[[:space:]]*=[^=]', s(l)) and not re.search(r'\b(if|while|for|switch)[[:space:]]*\(', s(l)): print(l.rstrip())
+" 2>/dev/null || true)"
+            if [[ -n "${assignments}" ]]; then
+                echo "[ERROR] found assignment in function call argument in ${f}:" >&2
+                echo "${assignments}" >&2
+                echo "[ERROR] unroll the assignment into a separate statement before the call" >&2
+                return_code=4
+            fi
         fi
 
        fi
