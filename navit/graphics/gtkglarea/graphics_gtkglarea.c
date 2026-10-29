@@ -108,6 +108,7 @@ typedef struct {
     int first;
     int count;
     float r, g, b, a;                   /* color for this command */
+    float linewidth;                    /* for the line commands (CMD_LINES/STRIP/LOOP) */
     int clip_x, clip_y, clip_w, clip_h; /* for CMD_CLIP_RECT */
 } DrawCmd;
 
@@ -177,6 +178,9 @@ struct graphics_priv {
 
     /* Current color */
     float cur_r, cur_g, cur_b, cur_a;
+
+    /* Current line width, only meaningful for the line commands */
+    float cur_linewidth;
 
     /* Deferred texture deletion */
     TexDelete *tex_delete_list;
@@ -382,6 +386,7 @@ static void submit_color(struct graphics_priv *gr, struct graphics_gc_priv *gc) 
     gr->cur_g = gc->fg;
     gr->cur_b = gc->fb;
     gr->cur_a = gc->fa;
+    gr->cur_linewidth = gc->linewidth;
 }
 
 static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GLuint tex, const Vertex *verts,
@@ -396,7 +401,8 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
     if (gr->cmd_count > 0) {
         DrawCmd *prev = &gr->commands[gr->cmd_count - 1];
         if (prev->type == type && prev->tex == tex && prev->r == gr->cur_r && prev->g == gr->cur_g
-            && prev->b == gr->cur_b && prev->a == gr->cur_a && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
+            && prev->b == gr->cur_b && prev->a == gr->cur_a && prev->linewidth == gr->cur_linewidth
+            && type != CMD_LINE_STRIP && type != CMD_LINE_LOOP) {
             prev->count += count;
             memcpy(&gr->vertices[gr->vertex_count], verts, count * sizeof(Vertex));
             gr->vertex_count += count;
@@ -415,6 +421,7 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
     cmd->g = gr->cur_g;
     cmd->b = gr->cur_b;
     cmd->a = gr->cur_a;
+    cmd->linewidth = gr->cur_linewidth;
     gr->cmd_count++;
     return first;
 }
@@ -560,10 +567,14 @@ static void draw_circle(struct graphics_priv *gr, struct graphics_gc_priv *gc, s
     if (segments > gr->vertex_capacity - gr->vertex_count)
         segments = gr->vertex_capacity - gr->vertex_count;
     Vertex *verts = g_new(Vertex, segments);
+    /* navit's draw_circle() passes a DIAMETER, not a radius: every other backend halves it
+     * (gtk_drawing_area's cairo_arc(r/2), win32's r = r/2, svg_debug's r/2, qt's r/2 width).
+     * Using r as the radius makes every circle twice as large as the reference backends. */
+    float radius = r / 2.0f;
     for (int i = 0; i < segments; i++) {
         float angle = 2.0f * G_PI * i / segments;
-        verts[i].x = p->x + r * cosf(angle);
-        verts[i].y = p->y + r * sinf(angle);
+        verts[i].x = p->x + radius * cosf(angle);
+        verts[i].y = p->y + radius * sinf(angle);
         verts[i].u = verts[i].v = 0;
     }
     submit_vertices(gr, CMD_LINE_LOOP, 0, verts, segments);
@@ -995,6 +1006,7 @@ static struct graphics_gc_priv *gc_new(struct graphics_priv *gr, struct graphics
     gc->fg = 1.0f;
     gc->fb = 1.0f;
     gc->fa = 1.0f;
+    gc->linewidth = 1;
     *meth = gc_methods;
     return gc;
 }
@@ -1336,6 +1348,15 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
         default:
             continue;
         }
+        if (cmd->type == CMD_LINES || cmd->type == CMD_LINE_STRIP || cmd->type == CMD_LINE_LOOP) {
+            /* Honour graphics_gc_set_linewidth(). Without this every line keeps the GL default
+             * of 1px, which is what made e.g. the speed warner's d/10 ring invisible. */
+            float w = cmd->linewidth > 0.0f ? cmd->linewidth : 1.0f;
+            /* Some drivers (notably llvmpipe/Mesa and ANGLE) silently clamp widths above 1 and
+             * just widen the line themselves, so only lower-bound it here and let the driver
+             * decide the rest. */
+            glLineWidth(w);
+        }
         glDrawArrays(mode, cmd->first, cmd->count);
     }
 
@@ -1375,9 +1396,12 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     (void)glarea;
     (void)context;
 
-    /* Skip while a frame is being constructed to avoid showing partial/incomplete state */
+    /* Skip while a frame is being constructed to avoid showing partial/incomplete state.
+     * Return FALSE (not TRUE): ::render uses the default true_handled accumulator, so a
+     * TRUE return would halt emission and silently suppress any other ::render handler
+     * (and GTK's own render closure, which performs the frame error check). */
     if (gr->draw_depth > 0)
-        return TRUE;
+        return FALSE;
 
     /* Clear to the map backdrop. The background rectangle from the vertex buffer covers the
      * viewport, but display rotation leaves the corners outside it, so clearing to black would
@@ -1399,7 +1423,7 @@ static gboolean on_glarea_render(GtkGLArea *glarea, GdkGLContext *context, gpoin
     /* Draw overlays (recursively for nested overlays) */
     render_overlay(gr, gr->overlays);
 
-    return TRUE;
+    return FALSE;
 }
 
 static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer data) {
