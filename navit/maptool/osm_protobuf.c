@@ -22,6 +22,8 @@
 #include "linguistics.h"
 #include "maptool.h"
 #include "osmformat.pb-c.h"
+#include "projection.h"
+#include "transform.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +32,8 @@
 #include <zlib.h>
 
 static double latlon_scale = 10000000.0;
+
+#define NANODEGREES_PER_DEGREE 1000000000.0
 
 /* Maximum length of a BlobHeader, see
  * http://wiki.openstreetmap.org/wiki/PBF_Format */
@@ -135,6 +139,22 @@ static int get_string(char *buffer, int buffer_size, OSMPBF__PrimitiveBlock *pri
 static void process_osmheader(OSMPBF__Blob *blob, unsigned char *data) {
     OSMPBF__HeaderBlock *header_block;
     header_block = osmpbf__header_block__unpack(NULL, blob->raw_size, data);
+    if (header_block->bbox) {
+        struct coord_geo geo;
+        struct coord c;
+        geo.lng = header_block->bbox->left / NANODEGREES_PER_DEGREE;
+        geo.lat = header_block->bbox->bottom / NANODEGREES_PER_DEGREE;
+        transform_from_geo(projection_mg, &geo, &c);
+        if (!map_bbox_valid) {
+            map_bbox.l = map_bbox.h = c;
+            map_bbox_valid = 1;
+        } else
+            bbox_extend(&c, &map_bbox);
+        geo.lng = header_block->bbox->right / NANODEGREES_PER_DEGREE;
+        geo.lat = header_block->bbox->top / NANODEGREES_PER_DEGREE;
+        transform_from_geo(projection_mg, &geo, &c);
+        bbox_extend(&c, &map_bbox);
+    }
     osmpbf__header_block__free_unpacked(header_block, NULL);
 }
 
