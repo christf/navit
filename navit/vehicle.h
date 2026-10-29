@@ -37,6 +37,10 @@ struct vehicle_methods {
     int (*set_attr)(struct vehicle_priv *priv, struct attr *attr);
 };
 
+/* Module-private state of a vehicle, for modules that need to reach their own
+ * struct back out of an opaque struct vehicle. */
+struct vehicle_priv *vehicle_get_priv(struct vehicle *this_);
+
 /* prototypes */
 enum attr_type;
 struct attr;
