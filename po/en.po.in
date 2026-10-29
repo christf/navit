@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2015-05-14 13:03+0200\n"
 "Last-Translator: Michael von Glasow <michael@vonglasow.com>\n"
 "Language-Team: English <en@li.org>\n"
@@ -188,9 +188,6 @@ msgstr "%sinto %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sinto the %s"
 
-msgid "When possible, please turn around"
-msgstr "When possible, please turn around"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -330,10 +327,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Take the %1$s road to the %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "after %i roads"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -382,11 +375,18 @@ msgstr "then you have reached your destination."
 msgid "You have reached your destination %s"
 msgstr "You have reached your destination %s"
 
+msgid "When possible, please turn around"
+msgstr "When possible, please turn around"
+
 msgid "Interchange"
 msgstr "Interchange"
 
 msgid "Exit"
 msgstr "Exit"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1554,6 +1554,8 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
 
@@ -1915,6 +1917,9 @@ msgstr ""
 msgid "POIs"
 msgstr ""
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr ""
 
@@ -2212,6 +2217,9 @@ msgid "Zoom to route"
 msgstr ""
 
 msgid "Description"
+msgstr ""
+
+msgid "POIs along Route"
 msgstr ""
 
 msgid ""
@@ -3008,6 +3016,10 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "after %i roads"
 
 #, c-format
 #~ msgid "%d m"

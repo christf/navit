@@ -15,7 +15,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2025-01-16 09:07+0000\n"
 "Last-Translator: jkoan <jkoan@gmx.de>\n"
 "Language-Team: Finnish <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -200,9 +200,6 @@ msgstr "%skadulle %s%s%s"
 msgid "%sinto the %s"
 msgstr "%stielle %s"
 
-msgid "When possible, please turn around"
-msgstr "Kun mahdollista, tee u-käännös"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -342,10 +339,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Valitse %1$s tie suuntaan %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%i tien jälkeen"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -394,11 +387,18 @@ msgstr "sitten olet perillä."
 msgid "You have reached your destination %s"
 msgstr "Olet saavuttanut kohteesi %s"
 
+msgid "When possible, please turn around"
+msgstr "Kun mahdollista, tee u-käännös"
+
 msgid "Interchange"
 msgstr ""
 
 msgid "Exit"
 msgstr "Poistumistie"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1567,6 +1567,8 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
 
@@ -1931,6 +1933,9 @@ msgstr ""
 msgid "POIs"
 msgstr "POIt"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Näytä kartalla"
 
@@ -2233,6 +2238,9 @@ msgstr ""
 
 msgid "Description"
 msgstr "Kuvaus"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3028,6 +3036,10 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%i tien jälkeen"
 
 #, c-format
 #~ msgid "Route %4.0fkm    %02d:%02d ETA"

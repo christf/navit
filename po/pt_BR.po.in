@@ -24,7 +24,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2025-06-21 13:01+0000\n"
 "Last-Translator: Helder Santana <helder.santana@systemsbr.com.br>\n"
 "Language-Team: Portuguese (Brazil) <https://hosted.weblate.org/projects/"
@@ -209,9 +209,6 @@ msgstr "%sem %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sna %s"
 
-msgid "When possible, please turn around"
-msgstr "Quando possível, favor retornar"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -351,10 +348,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Pegue a %1$s via para a %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "após %i vias"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -403,11 +396,18 @@ msgstr "então você chegará ao destino."
 msgid "You have reached your destination %s"
 msgstr "Você chegará ao destino %s"
 
+msgid "When possible, please turn around"
+msgstr "Quando possível, favor retornar"
+
 msgid "Interchange"
 msgstr "Trevo"
 
 msgid "Exit"
 msgstr "Saída"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1575,18 +1575,10 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
-"empregado no navit:\n"
-"navit [opções] [arquivo de configuração]\n"
-"\t-c <arquivo>: uso <arquivo> como arquivo de configuração, em vez de usar "
-"arquivo padrão.\n"
-"\t-d <n>: definir o nível de saída de depuração global para <n> (0=erro, "
-"1=aviso, 2=info, 3=depuração).\n"
-"\tConfigurações de arquivo de configuração ainda terão efeito quando "
-"montados num nível superior.\n"
-"\t-h: imprimir esta informação de utilização e sair.\n"
-"\t-v: imprimir a versão e sair.\n"
 
 #. We have not found an existing config file from all possibilities
 msgid "No config file navit.xml, navit.xml.local found"
@@ -1946,6 +1938,9 @@ msgstr "Definir como posição (e desativar veículo)"
 msgid "POIs"
 msgstr "Pontos de Interesse"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Ver no mapa"
 
@@ -2250,6 +2245,9 @@ msgstr ""
 
 msgid "Description"
 msgstr "Descrição"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3053,6 +3051,33 @@ msgstr "Sul + América Central"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Guiana Francesa"
+
+#~ msgid ""
+#~ "navit usage:\n"
+#~ "navit [options] [configfile]\n"
+#~ "\t-c <file>: use <file> as config file, instead of using the default "
+#~ "file.\n"
+#~ "\t-d <n>: set the global debug output level to <n> (0=error, 1=warning, "
+#~ "2=info, 3=debug).\n"
+#~ "\tSettings from config file will still take effect where they set a "
+#~ "higher level.\n"
+#~ "\t-h: print this usage info and exit.\n"
+#~ "\t-v: print the version and exit.\n"
+#~ msgstr ""
+#~ "empregado no navit:\n"
+#~ "navit [opções] [arquivo de configuração]\n"
+#~ "\t-c <arquivo>: uso <arquivo> como arquivo de configuração, em vez de "
+#~ "usar arquivo padrão.\n"
+#~ "\t-d <n>: definir o nível de saída de depuração global para <n> (0=erro, "
+#~ "1=aviso, 2=info, 3=depuração).\n"
+#~ "\tConfigurações de arquivo de configuração ainda terão efeito quando "
+#~ "montados num nível superior.\n"
+#~ "\t-h: imprimir esta informação de utilização e sair.\n"
+#~ "\t-v: imprimir a versão e sair.\n"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "após %i vias"
 
 #~ msgid "Searching..."
 #~ msgstr "Procurando..."

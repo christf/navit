@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2024-04-13 17:24+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Afrikaans <https://hosted.weblate.org/projects/navit/navit-"
@@ -198,9 +198,6 @@ msgstr "%sin die %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sin die %s in"
 
-msgid "When possible, please turn around"
-msgstr "Draai asseblief om wanneer moontlik"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -340,10 +337,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Neem die %1$s pad na %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "na %i paaie"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -392,11 +385,18 @@ msgstr "dan het jy jou bestemming bereik."
 msgid "You have reached your destination %s"
 msgstr "Jy het jou bestemming bereik %s"
 
+msgid "When possible, please turn around"
+msgstr "Draai asseblief om wanneer moontlik"
+
 msgid "Interchange"
 msgstr ""
 
 msgid "Exit"
 msgstr "Afrit"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1564,6 +1564,8 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
 
@@ -1925,6 +1927,9 @@ msgstr ""
 msgid "POIs"
 msgstr "Belangpunte"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Beloer op kaart"
 
@@ -2227,6 +2232,9 @@ msgstr ""
 
 msgid "Description"
 msgstr "Beskrywing"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3022,3 +3030,7 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "na %i paaie"

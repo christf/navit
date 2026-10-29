@@ -23,7 +23,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2024-04-13 17:24+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Czech <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -212,9 +212,6 @@ msgstr "%sdo %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sna %s"
 
-msgid "When possible, please turn around"
-msgstr "Až to bude možné, otočte se"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -354,10 +351,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Jeďte na %1$s silnici %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "za %i silnice"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -406,11 +399,18 @@ msgstr "pak budete v cíli."
 msgid "You have reached your destination %s"
 msgstr "%s dorazíte do cíle"
 
+msgid "When possible, please turn around"
+msgstr "Až to bude možné, otočte se"
+
 msgid "Interchange"
 msgstr "Sjezd"
 
 msgid "Exit"
 msgstr "Ukončit"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1578,18 +1578,10 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
-"použití navit:\n"
-"navit [možnosti] [configfile]\n"
-"\t-c <soubor>: použíjte <soubor> jako konfiguračnísoubor, místo použítí "
-"výchozího souboru.\n"
-"\t-d <n>: nastaví globální hodnotu ladění na <n> (0=chyba, 1=varování, "
-"2=informace, 3=ladění).\n"
-"\tNastavení z konfiguračního souboru budou použita tam kde nastavují vyšší "
-"hodnotu.\n"
-"\t-h: vytisknout tyto informace o použití a zavřít.\n"
-"\t-v: vytisknout verzi a zavřít.\n"
 
 #. We have not found an existing config file from all possibilities
 msgid "No config file navit.xml, navit.xml.local found"
@@ -1949,6 +1941,9 @@ msgstr "Nastavit jako polohu (a deaktivovat vozidlo)"
 msgid "POIs"
 msgstr "Body zájmu"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Zobrazit na mapě"
 
@@ -2253,6 +2248,9 @@ msgstr ""
 
 msgid "Description"
 msgstr "Popis"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3052,6 +3050,33 @@ msgstr "Jižní a Střední Amerika"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Francouzská Guyana"
+
+#~ msgid ""
+#~ "navit usage:\n"
+#~ "navit [options] [configfile]\n"
+#~ "\t-c <file>: use <file> as config file, instead of using the default "
+#~ "file.\n"
+#~ "\t-d <n>: set the global debug output level to <n> (0=error, 1=warning, "
+#~ "2=info, 3=debug).\n"
+#~ "\tSettings from config file will still take effect where they set a "
+#~ "higher level.\n"
+#~ "\t-h: print this usage info and exit.\n"
+#~ "\t-v: print the version and exit.\n"
+#~ msgstr ""
+#~ "použití navit:\n"
+#~ "navit [možnosti] [configfile]\n"
+#~ "\t-c <soubor>: použíjte <soubor> jako konfiguračnísoubor, místo použítí "
+#~ "výchozího souboru.\n"
+#~ "\t-d <n>: nastaví globální hodnotu ladění na <n> (0=chyba, 1=varování, "
+#~ "2=informace, 3=ladění).\n"
+#~ "\tNastavení z konfiguračního souboru budou použita tam kde nastavují "
+#~ "vyšší hodnotu.\n"
+#~ "\t-h: vytisknout tyto informace o použití a zavřít.\n"
+#~ "\t-v: vytisknout verzi a zavřít.\n"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "za %i silnice"
 
 #~ msgid "Searching..."
 #~ msgstr "Vyhledávání…"

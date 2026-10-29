@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2024-04-13 17:26+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Chinese (Traditional) <https://hosted.weblate.org/projects/"
@@ -187,9 +187,6 @@ msgstr "%s 往 %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s 往 %s"
 
-msgid "When possible, please turn around"
-msgstr "請盡可能迴轉"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -329,10 +326,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "進入 %1$s 往 %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "經過 %i 路"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -381,11 +374,18 @@ msgstr "然後你將抵達目的地"
 msgid "You have reached your destination %s"
 msgstr "%s 你將抵達目的地"
 
+msgid "When possible, please turn around"
+msgstr "請盡可能迴轉"
+
 msgid "Interchange"
 msgstr "交流道"
 
 msgid "Exit"
 msgstr "出口"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1553,15 +1553,10 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
-"navit 用法:\n"
-"navit [選項] [設定檔]\n"
-"\t-c <檔名>: 取代預設檔, 使用 <檔名> 為設定檔.\n"
-"\t-d <n>:  全域除錯輸出等級設為 <n> (0=錯誤, 1=警告, 2=訊息, 3=除錯).\n"
-"\t設定檔內之設定若等級較高則以為準.\n"
-"\t-h: 顯示用法資訊後停止.\n"
-"\t-v: 顯示版本資訊後停止.\n"
 
 #. We have not found an existing config file from all possibilities
 msgid "No config file navit.xml, navit.xml.local found"
@@ -1921,6 +1916,9 @@ msgstr "設為起點"
 msgid "POIs"
 msgstr "趣點"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "於地圖上顯示"
 
@@ -2225,6 +2223,9 @@ msgstr ""
 
 msgid "Description"
 msgstr "備註"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3024,6 +3025,30 @@ msgstr "中南美洲"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "法屬圭亞那"
+
+#~ msgid ""
+#~ "navit usage:\n"
+#~ "navit [options] [configfile]\n"
+#~ "\t-c <file>: use <file> as config file, instead of using the default "
+#~ "file.\n"
+#~ "\t-d <n>: set the global debug output level to <n> (0=error, 1=warning, "
+#~ "2=info, 3=debug).\n"
+#~ "\tSettings from config file will still take effect where they set a "
+#~ "higher level.\n"
+#~ "\t-h: print this usage info and exit.\n"
+#~ "\t-v: print the version and exit.\n"
+#~ msgstr ""
+#~ "navit 用法:\n"
+#~ "navit [選項] [設定檔]\n"
+#~ "\t-c <檔名>: 取代預設檔, 使用 <檔名> 為設定檔.\n"
+#~ "\t-d <n>:  全域除錯輸出等級設為 <n> (0=錯誤, 1=警告, 2=訊息, 3=除錯).\n"
+#~ "\t設定檔內之設定若等級較高則以為準.\n"
+#~ "\t-h: 顯示用法資訊後停止.\n"
+#~ "\t-v: 顯示版本資訊後停止.\n"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "經過 %i 路"
 
 #~ msgid "Searching..."
 #~ msgstr "搜尋中…"

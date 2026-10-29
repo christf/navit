@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2026-05-05 19:11+0000\n"
 "Last-Translator: Priit Jõerüüt <jrthwlate@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Estonian <https://hosted.weblate.org/projects/navit/navit-"
@@ -197,9 +197,6 @@ msgstr "%s %s%s%s tänavale"
 msgid "%sinto the %s"
 msgstr "%steele %s"
 
-msgid "When possible, please turn around"
-msgstr "Kui võimalik, palun pööra ümber"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -339,10 +336,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Vali %1$s tee, mis viib %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "pärast %i teed"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -391,11 +384,18 @@ msgstr "siis oled jõudnud sihtpunkti."
 msgid "You have reached your destination %s"
 msgstr "Sa oled jõudnud sihtpunkti %s"
 
+msgid "When possible, please turn around"
+msgstr "Kui võimalik, palun pööra ümber"
+
 msgid "Interchange"
 msgstr ""
 
 msgid "Exit"
 msgstr "Mahasõit"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1563,6 +1563,8 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
 
@@ -1924,6 +1926,9 @@ msgstr "Määra asukohaks (ja deaktiveeri sõiduk)"
 msgid "POIs"
 msgstr "Huvipunktid"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Näita kaardil"
 
@@ -2228,6 +2233,9 @@ msgstr "Suumi teekonnale"
 
 msgid "Description"
 msgstr "Kirjeldus"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3025,6 +3033,10 @@ msgstr "Lõuna+Kesk-Ameerika"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "Prantsuse Guajaana"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "pärast %i teed"
 
 #~ msgid "Searching..."
 #~ msgstr "Otsimine ..."

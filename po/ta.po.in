@@ -11,7 +11,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-11 19:15+0200\n"
 "PO-Revision-Date: 2026-03-02 06:09+0000\n"
 "Last-Translator: தமிழ்நேரம் <tamilneram247@gmail.com>\n"
 "Language-Team: Tamil <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -196,9 +196,6 @@ msgstr "%s உள் %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sசிண்டோ %s"
 
-msgid "When possible, please turn around"
-msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -338,10 +335,6 @@ msgstr "பிறகு %2$s க்கு %1$s சாலையில் செ�
 msgid "Take the %1$s road to the %2$s"
 msgstr "%2$s க்கு %1$s சாலையை எடுத்துக் கொள்ளுங்கள்"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%iநான் சாலைகளுக்குப் பிறகு"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -390,11 +383,18 @@ msgstr "நீங்கள் உங்கள் இலக்கை அடைந
 msgid "You have reached your destination %s"
 msgstr "நீங்கள் உங்கள் இலக்கை அடைந்துவிட்டீர்கள் %s"
 
+msgid "When possible, please turn around"
+msgstr "முடிந்தால், தயவுசெய்து திரும்பவும்"
+
 msgid "Interchange"
 msgstr "பரிமாற்றம்"
 
 msgid "Exit"
 msgstr "வெளியேறு"
+
+#, c-format
+msgid "Invalid position '%s', expected latitude,longitude"
+msgstr ""
 
 #. Android resource: @strings/position_popup_title
 msgid "Position"
@@ -1562,18 +1562,10 @@ msgid ""
 "\tSettings from config file will still take effect where they set a higher "
 "level.\n"
 "\t-h: print this usage info and exit.\n"
+"\t-p <lat>,<lon>: center the map on the given position and mark it with a "
+"circle.\n"
 "\t-v: print the version and exit.\n"
 msgstr ""
-"கடற்படை பயன்பாடு:\n"
-"\tகடற்படை [விருப்பங்கள்] [கட்டமைப்பு]\n"
-"\t-c <file>: இயல்புநிலை கோப்பைப் பயன்படுத்துவதற்குப் பதிலாக <file> கட்டமைப்பு கோப்பாக "
-"பயன்படுத்தவும்.\n"
-"\t-d <n>: உலகளாவிய பிழைத்திருத்த வெளியீட்டு அளவை <n> (0 = பிழை, 1 = எச்சரிக்கை, 2 "
-"= செய்தி, 3 = பிழைத்திருத்தம்) என அமைக்கவும்.\n"
-"\tகட்டமைப்பு கோப்பிலிருந்து அமைப்புகள் இன்னும் உயர் மட்டத்தை நிர்ணயிக்கும் இடத்தில் "
-"நடைமுறைக்கு வரும்.\n"
-"\t-H: இந்த பயன்பாட்டு தகவலை அச்சிட்டு வெளியேறவும்.\n"
-"\t-V: பதிப்பை அச்சிட்டு வெளியேறவும்.\n"
 
 #. We have not found an existing config file from all possibilities
 msgid "No config file navit.xml, navit.xml.local found"
@@ -1934,6 +1926,9 @@ msgstr "நிலையாக அமைக்கவும் (மற்றும
 msgid "POIs"
 msgstr "பின்னர்"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "வரைபடத்தில் காண்க"
 
@@ -2238,6 +2233,9 @@ msgstr "பாதைக்கு பெரிதாக்கவும்"
 
 msgid "Description"
 msgstr "விவரம்"
+
+msgid "POIs along Route"
+msgstr ""
 
 msgid ""
 "Drop last\n"
@@ -3058,6 +3056,33 @@ msgstr "தெற்கு+மத்திய அமெரிக்கா"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "கயானா ஃபிராங்காய்"
+
+#~ msgid ""
+#~ "navit usage:\n"
+#~ "navit [options] [configfile]\n"
+#~ "\t-c <file>: use <file> as config file, instead of using the default "
+#~ "file.\n"
+#~ "\t-d <n>: set the global debug output level to <n> (0=error, 1=warning, "
+#~ "2=info, 3=debug).\n"
+#~ "\tSettings from config file will still take effect where they set a "
+#~ "higher level.\n"
+#~ "\t-h: print this usage info and exit.\n"
+#~ "\t-v: print the version and exit.\n"
+#~ msgstr ""
+#~ "கடற்படை பயன்பாடு:\n"
+#~ "\tகடற்படை [விருப்பங்கள்] [கட்டமைப்பு]\n"
+#~ "\t-c <file>: இயல்புநிலை கோப்பைப் பயன்படுத்துவதற்குப் பதிலாக <file> கட்டமைப்பு "
+#~ "கோப்பாக பயன்படுத்தவும்.\n"
+#~ "\t-d <n>: உலகளாவிய பிழைத்திருத்த வெளியீட்டு அளவை <n> (0 = பிழை, 1 = எச்சரிக்கை, "
+#~ "2 = செய்தி, 3 = பிழைத்திருத்தம்) என அமைக்கவும்.\n"
+#~ "\tகட்டமைப்பு கோப்பிலிருந்து அமைப்புகள் இன்னும் உயர் மட்டத்தை நிர்ணயிக்கும் இடத்தில் "
+#~ "நடைமுறைக்கு வரும்.\n"
+#~ "\t-H: இந்த பயன்பாட்டு தகவலை அச்சிட்டு வெளியேறவும்.\n"
+#~ "\t-V: பதிப்பை அச்சிட்டு வெளியேறவும்.\n"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%iநான் சாலைகளுக்குப் பிறகு"
 
 #~ msgid "Searching..."
 #~ msgstr "தேடுகிறது..."
