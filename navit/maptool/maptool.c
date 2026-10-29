@@ -291,6 +291,8 @@ static void usage(void) {
             experimental_feature_description ? experimental_feature_description : "-not available in this version-");
     fprintf(f, "-i (--input-file) <file>          : specify the input file name (OSM), overrules default stdin\n");
     fprintf(f, "-k (--keep-tmpfiles)              : do not delete tmp files after processing. useful to reuse them\n");
+    fprintf(f, "-L (--land-polygons) <file>       : land polygon shapefile, clipped to map area, to keep ocean fill "
+               "off land\n");
     fprintf(f, "-M (--o5m)                        : input data is in o5m format\n");
     fprintf(f, "-n (--ignore-unknown)             : do not output ways and nodes with unknown type\n");
     fprintf(f, "-N (--nodes-only)                 : process only nodes\n");
@@ -340,6 +342,7 @@ struct maptool_params {
     int input;
     GList *map_handles;
     FILE *input_file;
+    char *land_polygons;
     FILE *rule_file;
     char *url;
     struct maptool_osm osm;
@@ -385,6 +388,7 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
         {"timestamp",          1, 0, 't'},
         {"threads",            1, 0, 'T'},
         {"input-file",         1, 0, 'i'},
+        {"land-polygons",      1, 0, 'L'},
         {"rule-file",          1, 0, 'r'},
         {"ignore-unknown",     0, 0, 'n'},
         {"url",                1, 0, 'u'},
@@ -399,7 +403,7 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
 #ifdef HAVE_POSTGRESQL
                     "d:"
 #endif
-                    "e:hi:knm:p:r:s:t:T:wu:z:Ux:",
+                    "e:hi:kL:nm:p:r:s:t:T:wu:z:Ux:",
                     long_options, option_index);
     if (c == -1)
         return 1;
@@ -495,6 +499,9 @@ static int parse_option(struct maptool_params *p, char **argv, int argc, int *op
     case 'k':
         fprintf(stderr, "I will KEEP tmp files\n");
         p->keep_tmpfiles = 1;
+        break;
+    case 'L':
+        p->land_polygons = optarg;
         break;
     case 'p':
         add_plugin(optarg);
@@ -730,9 +737,14 @@ static void osm_process_way2poi(struct maptool_params *p, char *suffix) {
 
 static void osm_process_coastlines(struct maptool_params *p, char *suffix) {
     FILE *coastline = tempfile(suffix, "coastline", 0);
+    if (!coastline && p->land_polygons)
+        coastline = tempfile(suffix, "coastline", 1);
     if (coastline) {
         FILE *coastline_result = tempfile(suffix, "coastline_result", 1);
+        if (p->land_polygons)
+            land_polygons_load(p->land_polygons);
         process_coastlines(coastline, coastline_result);
+        land_polygons_destroy();
         fclose(coastline_result);
         fclose(coastline);
     }
