@@ -31,6 +31,8 @@ double kalman_get_speed(struct kalman_filter *kf);
 void kalman_get_position(struct kalman_filter *kf, double *x, double *y);
 void kalman_get_filtered_position(struct kalman_filter *kf, double *x, double *y);
 void kalman_set_position(struct kalman_filter *kf, double x, double y);
+void kalman_set_velocity(struct kalman_filter *kf, double vx, double vy);
+void kalman_set_simulated_time(double now_s);
 int kalman_is_initialized(const struct kalman_filter *kf);
 
 #endif
