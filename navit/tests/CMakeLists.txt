@@ -27,3 +27,5 @@ add_test(NAME core COMMAND navit_core_test all)
 set_tests_properties(core PROPERTIES
     ENVIRONMENT "NAVIT_TEST_MAP=${FIXTURE_BIN}"
     TIMEOUT 600)
+
+add_subdirectory(gtkglarea)
