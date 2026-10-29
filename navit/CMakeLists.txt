@@ -11,6 +11,9 @@ endif()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nThis File should never appear on binary distributions\r\n" )
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/THIS_IS_THE_NAVIT_WORKING_DIR "\r\nOnly Devs should ever see this file" )
 
+# bring up the core test harness, run via scripts/run_core_tests.sh
+option(BUILD_NAVIT_TESTS "Build the navit_core_test harness and add it to CTest" OFF)
+
 # navit core
 set(NAVIT_SRC announcement.c atom.c attr.c cache.c callback.c command.c config_.c coord.c country.c data_window.c debug.c
 	event.c file.c geom.c graphics.c gui.c item.c layout.c log.c main.c map.c maps.c
@@ -240,6 +243,9 @@ add_subdirectory (maptool)
 add_subdirectory (icons)
 add_subdirectory (textures)
 add_subdirectory (maps)
+if(BUILD_NAVIT_TESTS)
+	add_subdirectory (tests)
+endif()
 if(ANDROID)
 	add_subdirectory (android)
     if(DEFINED GRADLE_BUILD_DIR)
