@@ -17,6 +17,7 @@
  * Boston, MA  02110-1301, USA.
  */
 
+#include "vehicle_demo.h"
 #include "callback.h"
 #include "config.h"
 #include "coord.h"
@@ -240,6 +241,10 @@ static void vehicle_demo_timer(struct vehicle_priv *priv) {
     }
     if (mr)
         map_rect_destroy(mr);
+}
+
+void vehicle_demo_test_tick(struct vehicle *v) {
+    vehicle_demo_timer(vehicle_get_priv(v));
 }
 
 static struct vehicle_priv *vehicle_demo_new(struct vehicle_methods *meth, struct callback_list *cbl,
