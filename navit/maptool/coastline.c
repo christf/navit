@@ -24,6 +24,7 @@ struct coastline_tile {
     int edges;
     /* An open coastline cannot establish which side of ancestor tiles is ocean. */
     int incomplete;
+    int mask;
 };
 
 static int distance_from_ll(struct coord *c, struct rect *bbox) {
@@ -277,6 +278,7 @@ static void ocean_tile(GHashTable *hash, char *tile, char c, osmid wayid, struct
     struct rect bbox;
     struct item_bin *ib;
     struct coastline_tile *ct;
+    int land = 0;
 
     strcpy(tile2, tile);
     tile2[len - 1] = c;
@@ -286,14 +288,77 @@ static void ocean_tile(GHashTable *hash, char *tile, char c, osmid wayid, struct
         return;
     // fprintf(stderr,"%s ok\n",tile2);
     tile_bbox(tile2, &bbox, 0);
-    ib = init_item(type_poly_water_tiled);
-    item_bin_bbox(ib, &bbox);
-    item_bin_add_attr_longlong(ib, attr_osm_wayid, wayid);
-    item_bin_write_to_sink(ib, out, NULL);
+    if (len == 14) {
+        struct coord center;
+        center.x = (bbox.l.x + bbox.h.x) / 2;
+        center.y = (bbox.l.y + bbox.h.y) / 2;
+        land = land_polygons_contains(&center);
+    }
+    if (!land) {
+        ib = init_item(type_poly_water_tiled);
+        item_bin_bbox(ib, &bbox);
+        item_bin_add_attr_longlong(ib, attr_osm_wayid, wayid);
+        item_bin_write_to_sink(ib, out, NULL);
+    }
     ct = g_new0(struct coastline_tile, 1);
     ct->edges = 15;
     ct->wayid = wayid;
     g_hash_table_insert(hash, g_strdup(tile2), ct);
+}
+
+static int rect_intersects(struct rect *a, struct rect *b) {
+    return a->l.x <= b->h.x && a->h.x >= b->l.x && a->l.y <= b->h.y && a->h.y >= b->l.y;
+}
+
+static int rect_intersection(struct rect *a, struct rect *b, struct rect *out) {
+    out->l.x = a->l.x > b->l.x ? a->l.x : b->l.x;
+    out->l.y = a->l.y > b->l.y ? a->l.y : b->l.y;
+    out->h.x = a->h.x < b->h.x ? a->h.x : b->h.x;
+    out->h.y = a->h.y < b->h.y ? a->h.y : b->h.y;
+    return out->l.x <= out->h.x && out->l.y <= out->h.y;
+}
+
+static int rect_is_world(struct rect *r) {
+    return r->l.x <= world_bbox.l.x && r->l.y <= world_bbox.l.y && r->h.x >= world_bbox.h.x && r->h.y >= world_bbox.h.y;
+}
+
+static void mask_water_tile(char *tile, struct coastline_tile_data *data) {
+    struct rect bbox;
+    struct coord center;
+    struct item_bin *ib;
+    struct coastline_tile *ct;
+
+    if (g_hash_table_lookup(data->tile_edges, tile))
+        return;
+    tile_bbox(tile, &bbox, 0);
+    center.x = (bbox.l.x + bbox.h.x) / 2;
+    center.y = (bbox.l.y + bbox.h.y) / 2;
+    if (land_polygons_contains(&center))
+        return;
+    ib = init_item(type_poly_water_tiled);
+    item_bin_bbox(ib, &bbox);
+    item_bin_write_to_sink(ib, data->sink->priv_data[1], NULL);
+    ct = g_new0(struct coastline_tile, 1);
+    ct->edges = 15;
+    ct->mask = 1;
+    g_hash_table_insert(data->tile_edges, g_strdup(tile), ct);
+}
+
+static void mask_water_tiles(char *tile, int level, struct rect *bbox, struct coastline_tile_data *data) {
+    static const char dirs[] = "abcd";
+    int i;
+    if (level == 14) {
+        mask_water_tile(tile, data);
+        return;
+    }
+    for (i = 0; i < 4; i++) {
+        char child[16];
+        struct rect child_bbox;
+        snprintf(child, sizeof(child), "%s%c", tile, dirs[i]);
+        tile_bbox(child, &child_bbox, 0);
+        if (rect_intersects(&child_bbox, bbox))
+            mask_water_tiles(child, level + 1, bbox, data);
+    }
 }
 
 /* ba */
@@ -305,6 +370,8 @@ static void tile_collector_add_siblings(char *tile, struct coastline_tile *ct, s
     struct item_bin_sink *out = data->sink->priv_data[1];
     int edges = ct->edges;
     int debug = 0;
+    if (ct->mask)
+        return;
     if (debug)
         fprintf(stderr, "%s (%c) has %d edges active\n", tile, t, edges);
     if (t == 'a' && (edges & 1))
@@ -381,6 +448,8 @@ static void tile_collector_add_siblings2(char *tile, struct coastline_tile *ct, 
     char t = tile[len - 1];
     strcpy(tile2, tile);
     tile2[len - 1] = '\0';
+    if (ct->mask)
+        return;
     if (debug)
         fprintf(stderr, "len of %s %d vs %d\n", tile, len, data->level);
 
@@ -446,6 +515,8 @@ static void foreach_tile(struct coastline_tile_data *data,
 
 static int tile_collector_finish(struct item_bin_sink_func *tile_collector, GHashTable *endpoints) {
     struct coastline_tile_data data;
+    struct rect land_bbox;
+    int fill = 0;
     int i;
     GHashTable *hash;
     data.sink = tile_collector;
@@ -459,6 +530,21 @@ static int tile_collector_finish(struct item_bin_sink_func *tile_collector, GHas
     fprintf(stderr, "tile_collector_finish foreach done\n");
     g_hash_table_destroy(hash);
     fprintf(stderr, "tile_collector_finish destroy done\n");
+    if (land_polygons_get_bbox(&land_bbox)) {
+        if (map_bbox_valid)
+            fill = rect_intersection(&land_bbox, &map_bbox, &land_bbox);
+        else if (rect_is_world(&land_bbox))
+            fprintf(stderr, "Land polygon bounding box covers the world; skipping water fill. "
+                            "Clip land polygons or use an input with a bounding box.\n");
+        else
+            fill = 1;
+    }
+    if (fill) {
+        if (!map_bbox_valid)
+            fprintf(stderr, "Input has no bounding box; using land polygon bounding box for water fill\n");
+        fprintf(stderr, "Filling water from land polygons\n");
+        mask_water_tiles("", 0, &land_bbox, &data);
+    }
     for (i = 14; i > 0; i--) {
         fprintf(stderr, "Level=%d\n", i);
         data.level = i;
