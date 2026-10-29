@@ -1710,7 +1710,7 @@ static void command_saved_unregister_callbacks(struct command_saved *cs) {
     struct object_func *func;
     struct attr attr;
 
-    if (!cs->num_cbs)
+    if (!cs || !cs->num_cbs || !cs->cbs)
         return;
 
     attr.type = attr_callback;
@@ -1718,16 +1718,18 @@ static void command_saved_unregister_callbacks(struct command_saved *cs) {
     for (i = 0; i < cs->num_cbs; i++) {
         func = object_func_lookup(cs->cbs[i].attr.type);
 
-        if (!func->remove_attr) {
+        if (!func || !func->remove_attr) {
             dbg(lvl_error, "Could not remove command-evaluation callback because remove_attr is missing for type %i!",
                 cs->cbs[i].attr.type);
         } else {
             attr.u.callback = cs->cbs[i].cb;
 
-            func->remove_attr(cs->cbs[i].attr.u.data, &attr);
+            if (cs->cbs[i].attr.u.data)
+                func->remove_attr(cs->cbs[i].attr.u.data, &attr);
         }
 
-        callback_destroy(cs->cbs[i].cb);
+        if (cs->cbs[i].cb)
+            callback_destroy(cs->cbs[i].cb);
     }
 
     g_free(cs->cbs);
@@ -1897,14 +1899,16 @@ void command_saved_destroy(struct command_saved *cs) {
         event_remove_idle(cs->register_ev);
         cs->register_ev = NULL;
     }
-    callback_destroy(cs->register_cb);
+    if (cs->register_cb)
+        callback_destroy(cs->register_cb);
     cs->register_cb = NULL;
 
     if (cs->idle_ev) {
         event_remove_idle(cs->idle_ev);
         cs->idle_ev = NULL;
     }
-    callback_destroy(cs->idle_cb);
+    if (cs->idle_cb)
+        callback_destroy(cs->idle_cb);
     cs->idle_cb = NULL;
 
     command_saved_unregister_callbacks(cs);
