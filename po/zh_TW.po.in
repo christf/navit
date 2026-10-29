@@ -326,10 +326,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "進入 %1$s 往 %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "經過 %i 路"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -3024,6 +3020,10 @@ msgstr "中南美洲"
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr "法屬圭亞那"
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "經過 %i 路"
 
 #~ msgid "Searching..."
 #~ msgstr "搜尋中…"
