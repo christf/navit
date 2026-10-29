@@ -265,6 +265,8 @@ void sig_alrm_end(void);
 
 /* misc.c */
 extern struct rect world_bbox;
+extern struct rect map_bbox;
+extern int map_bbox_valid;
 
 void bbox_extend(struct coord *c, struct rect *r);
 void bbox(struct coord *c, int count, struct rect *r);
@@ -382,6 +384,12 @@ struct item_bin_sink_func *file_writer_new(FILE *out);
 int file_writer_finish(struct item_bin_sink_func *file_writer);
 int tile_collector_process(struct item_bin_sink_func *tile_collector, struct item_bin *ib, struct tile_data *tile_data);
 struct item_bin_sink_func *tile_collector_new(struct item_bin_sink *out);
+
+/* land_polygons.c */
+int land_polygons_contains(struct coord *c);
+int land_polygons_get_bbox(struct rect *r);
+void land_polygons_load(const char *filename);
+void land_polygons_destroy(void);
 
 /* tempfile.c */
 
