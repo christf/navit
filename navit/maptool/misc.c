@@ -52,6 +52,9 @@ struct rect world_bbox = {
     {WORLD_BOUNDINGBOX_MAX_X, WORLD_BOUNDINGBOX_MAX_Y},
 };
 
+struct rect map_bbox;
+int map_bbox_valid;
+
 void bbox_extend(struct coord *c, struct rect *r) {
     if (c->x < r->l.x)
         r->l.x = c->x;
