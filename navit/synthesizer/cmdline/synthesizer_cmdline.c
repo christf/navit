@@ -22,14 +22,15 @@
 #include "plugin.h"
 #include "synthesizer.h"
 #include "util.h"
+#include <errno.h>
+#include <fcntl.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
 
 #define MAX_CONCURRENT 1
 
@@ -92,8 +93,7 @@ static void synthesizer_cmdline_fill_slots(struct synthesizer_priv *this) {
     int running = 0;
     GSequenceIter *iter;
 
-    for (iter = g_sequence_get_begin_iter(this->queue);
-         iter != g_sequence_get_end_iter(this->queue);
+    for (iter = g_sequence_get_begin_iter(this->queue); iter != g_sequence_get_end_iter(this->queue);
          iter = g_sequence_iter_next(iter)) {
         struct pending_synth *ps = g_sequence_get(iter);
         if (ps->spi)
@@ -101,8 +101,7 @@ static void synthesizer_cmdline_fill_slots(struct synthesizer_priv *this) {
     }
 
     for (iter = g_sequence_get_begin_iter(this->queue);
-         iter != g_sequence_get_end_iter(this->queue) && running < MAX_CONCURRENT;
-         iter = g_sequence_iter_next(iter)) {
+         iter != g_sequence_get_end_iter(this->queue) && running < MAX_CONCURRENT; iter = g_sequence_iter_next(iter)) {
         struct pending_synth *ps = g_sequence_get(iter);
         if (!ps->spi) {
             synthesizer_cmdline_spawn(this, ps);
@@ -134,9 +133,7 @@ static void synthesizer_cmdline_reap_done(struct synthesizer_priv *this) {
     synthesizer_cmdline_fill_slots(this);
 }
 
-static int synthesizer_cmdline_synthesize(struct synthesizer_priv *this,
-                                          const char *text,
-                                          const char *output_path,
+static int synthesizer_cmdline_synthesize(struct synthesizer_priv *this, const char *text, const char *output_path,
                                           synthesizer_batch_id batch) {
     if (!text || !*text || !output_path)
         return -1;
@@ -144,14 +141,18 @@ static int synthesizer_cmdline_synthesize(struct synthesizer_priv *this,
     dbg(lvl_debug, "synthesize text='%s' output='%s' batch=%llu", text, output_path, batch);
 
     if (g_file_test(output_path, G_FILE_TEST_EXISTS)) {
-        dbg(lvl_debug, "output '%s' already exists, skipping", output_path);
-        return 0;
+        struct stat st;
+        if (stat(output_path, &st) == 0 && st.st_size > 0) {
+            dbg(lvl_debug, "output '%s' already exists (%ld bytes), skipping", output_path, (long)st.st_size);
+            return 0;
+        }
+        dbg(lvl_debug, "output '%s' exists but is empty/stale, removing and re-synthesizing", output_path);
+        g_unlink(output_path);
     }
 
     {
         GSequenceIter *iter;
-        for (iter = g_sequence_get_begin_iter(this->queue);
-             iter != g_sequence_get_end_iter(this->queue);
+        for (iter = g_sequence_get_begin_iter(this->queue); iter != g_sequence_get_end_iter(this->queue);
              iter = g_sequence_iter_next(iter)) {
             struct pending_synth *ps = g_sequence_get(iter);
             if (!g_strcmp0(ps->output, output_path)) {
@@ -232,8 +233,7 @@ static struct synthesizer_methods synthesizer_cmdline_meth = {
     synthesizer_cmdline_batch_begin,
 };
 
-static struct synthesizer_priv *synthesizer_cmdline_new(struct synthesizer_methods *meth,
-                                                        struct attr **attrs,
+static struct synthesizer_priv *synthesizer_cmdline_new(struct synthesizer_methods *meth, struct attr **attrs,
                                                         struct attr *parent) {
     struct synthesizer_priv *this;
     struct attr *attr;
