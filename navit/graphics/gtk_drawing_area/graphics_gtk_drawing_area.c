@@ -1412,16 +1412,34 @@ static void *get_data(struct graphics_priv *this, char const *type) {
         this->window.disable_suspend = graphics_gtk_drawing_area_disable_suspend;
         this->window.priv = this;
 #if !defined(_WIN32) && !defined(__CEGCC__)
-        f = popen("pidof /usr/bin/ipaq-sleep", "r");
-        if (f) {
-            int fscanf_result;
-            fscanf_result = fscanf(f, "%d", &this->pid);
-            if ((fscanf_result == EOF) || (fscanf_result == 0)) {
-                dbg(lvl_warning, "Failed to open iPaq sleep file. Error-Code: %d", errno);
+        /* Find PID of /usr/bin/ipaq-sleep via /proc filesystem - no shell execution
+         * This eliminates CWE-78 (OS Command Injection) vulnerability from popen() */
+        DIR *dir = opendir("/proc");
+        if (dir) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] >= '0' && entry->d_name[0] <= '9') {
+                    char proc_cmdline[256];
+                    snprintf(proc_cmdline, sizeof(proc_cmdline), "/proc/%s/cmdline", entry->d_name);
+                    FILE *cmdfile = fopen(proc_cmdline, "r");
+                    if (cmdfile && fgets(proc_cmdline, sizeof(proc_cmdline), cmdfile)) {
+                        if (strstr(proc_cmdline, "/usr/bin/ipaq-sleep") != NULL) {
+                            this->pid = atoi(entry->d_name);
+                            fclose(cmdfile);
+                            closedir(dir);
+                            dbg(lvl_debug, "ipaq_sleep pid=%d (found via /proc)", this->pid);
+                            goto found_pid;
+                        }
+                    }
+                    if (cmdfile) fclose(cmdfile);
+                }
             }
-            dbg(lvl_debug, "ipaq_sleep pid=%d", this->pid);
-            pclose(f);
+            closedir(dir);
         }
+        dbg(lvl_warning, "Could not locate /usr/bin/ipaq-sleep PID via /proc");
+        this->pid = 0;
+        return &this->window;
+found_pid:
 #endif
         return &this->window;
     }
