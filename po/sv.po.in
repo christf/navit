@@ -17,7 +17,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:26+0000\n"
 "Last-Translator: Patrick Höhn <hoehnp@gmx.de>\n"
 "Language-Team: Swedish <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -1924,6 +1924,9 @@ msgstr ""
 
 msgid "POIs"
 msgstr "Intressepunkter"
+
+msgid "Copy position"
+msgstr ""
 
 msgid "View on map"
 msgstr "Visa på karta"
