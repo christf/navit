@@ -192,9 +192,6 @@ msgstr "%smenuju ke %s%s%s"
 msgid "%sinto the %s"
 msgstr "%smenuju ke %s"
 
-msgid "When possible, please turn around"
-msgstr "Bila memungkinkan, balik arah"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -381,6 +378,9 @@ msgstr "kini anda telah sampai pada tujuan"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "anda telah sampai pada tujuan %s"
+
+msgid "When possible, please turn around"
+msgstr "Bila memungkinkan, balik arah"
 
 msgid "Interchange"
 msgstr ""

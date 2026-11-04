@@ -195,9 +195,6 @@ msgstr "%s no %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s na %s"
 
-msgid "When possible, please turn around"
-msgstr "Cando sexa posible, dea a volta"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -384,6 +381,9 @@ msgstr "despois xa chega ao seu destino"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Chegou ao seu destino %s"
+
+msgid "When possible, please turn around"
+msgstr "Cando sexa posible, dea a volta"
 
 msgid "Interchange"
 msgstr ""
