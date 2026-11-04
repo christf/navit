@@ -1730,6 +1730,7 @@ static void on_gesture_update(GtkGesture *gesture, GdkEventSequence *sequence, g
     gdk_event_get_position(event, &x, &y);
     p.x = (int)x;
     p.y = (int)y;
+    this->last_motion = p;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1740,6 +1741,7 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
 
     p.x = (int)x;
     p.y = (int)y;
+    this->last_motion = p;
     callback_list_call_attr_1(this->cbl, attr_motion, (void *)&p);
 }
 
@@ -1955,6 +1957,8 @@ static struct graphics_priv *graphics_gtkglarea_new(struct navit *nav, struct gr
     gtk_widget_add_controller(this->glarea, key);
 
     this->timeout = 100;
+    this->last_motion.x = this->width / 2;
+    this->last_motion.y = this->height / 2;
     for (int i = 0; i < 8; i++) {
         this->button_press[i].tv_sec = 0;
         this->button_press[i].tv_usec = 0;
