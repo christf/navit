@@ -470,6 +470,8 @@ static int navit_draw_async_margin(struct navit *this_, int async, int margin, s
         graphics_draw_drag(this_->gra, NULL);
         this_->pan_drift.x = 0;
         this_->pan_drift.y = 0;
+        this_->pan_rebuild_drift.x = 0;
+        this_->pan_rebuild_drift.y = 0;
         this_->pan_rebuild = 0;
     }
     transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
@@ -733,7 +735,7 @@ static int navit_animation_tick(void *data) {
             navit_set_center_coord_screen(this_, scroll_coord, &cursor_fixed, 0);
             transform_copy(this_->trans, this_->trans_cursor);
             if (navit_displaylist_covers(this_))
-                navit_draw_displaylist(this_);
+                navit_draw_displaylist_async(this_);
             else
                 navit_draw(this_);
             vehicle_reset_map_scroll(nv->vehicle);
@@ -802,6 +804,17 @@ void navit_draw_displaylist(struct navit *this_) {
     if (this_->ready == 3)
         graphics_displaylist_draw(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
                                   this_->graphics_flags | 1);
+}
+
+/* Replay the existing display list in slices. Unlike navit_draw_displaylist() this does not draw
+ * within the current frame: it keeps the surface showing the previous frame and yields between
+ * slices, so a full replay of a dense scene does not freeze the main thread. Only safe where the
+ * whole list is replayed without a clip (a clip set by the caller would be gone by the first
+ * slice). */
+void navit_draw_displaylist_async(struct navit *this_) {
+    if (this_->ready == 3)
+        graphics_displaylist_draw_async(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
+                                        this_->graphics_flags | 1);
 }
 
 /* Returns whether the current viewport is fully covered by the map selections the current
@@ -1294,7 +1307,10 @@ static void navit_motion_timeout(struct navit *this_) {
                 }
             }
             graphics_overlay_disable(this_->gra, 1);
-            graphics_draw_mode(this_->gra, draw_mode_end);
+            /* A display-list replay owns the open frame; an end here would close it and expose
+             * the partial command list to a texture rebuild. draw_drag queues the present. */
+            if (!graphics_displaylist_busy(this_->displaylist))
+                graphics_draw_mode(this_->gra, draw_mode_end);
             this_->moved = 1;
             this_->motion_timeout = NULL;
             return;

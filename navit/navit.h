@@ -70,6 +70,7 @@ void navit_draw_prefetch(struct navit *this_);
 int navit_gesture_active(struct navit *this_);
 int navit_get_ready(struct navit *this_);
 void navit_draw_displaylist(struct navit *this_);
+void navit_draw_displaylist_async(struct navit *this_);
 void navit_handle_resize(struct navit *this_, int w, int h);
 int navit_get_width(struct navit *this_);
 int navit_get_height(struct navit *this_);
