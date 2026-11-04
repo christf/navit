@@ -192,9 +192,6 @@ msgstr "%sin su %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sin sa %s"
 
-msgid "When possible, please turn around"
-msgstr "Commente possibile torra in daesecusu"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -381,6 +378,9 @@ msgstr "tando ses arribbau"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Ses arribbau a %s"
+
+msgid "When possible, please turn around"
+msgstr "Commente possibile torra in daesecusu"
 
 msgid "Interchange"
 msgstr ""

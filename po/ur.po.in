@@ -195,9 +195,6 @@ msgstr "%sمیں سے %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sپر %s"
 
-msgid "When possible, please turn around"
-msgstr "جب ممکن ہو گھومیں"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -384,6 +381,9 @@ msgstr "پھر آپ اپنی منزل پہ پہنچ جایئں گے"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "آپ اپنی منزل %s پے پہنچ کئے ہیں"
+
+msgid "When possible, please turn around"
+msgstr "جب ممکن ہو گھومیں"
 
 msgid "Interchange"
 msgstr ""

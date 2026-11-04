@@ -193,9 +193,6 @@ msgstr "%sകഴിഞ്ഞു %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s-ല്‍  %s -ലേക്ക് തിരിയുക"
 
-msgid "When possible, please turn around"
-msgstr "സാധിക്കുന്നിടത്ത് വച്ച്,തിരിച്ചു പോവുക"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -382,6 +379,9 @@ msgstr "അപ്പോള്‍ നിങ്ങള്‍ ലക്ഷ്യത�
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "നിങ്ങള്‍ %s ലക്ഷ്യത്തിലെത്തിയിരിക്കുന്നു"
+
+msgid "When possible, please turn around"
+msgstr "സാധിക്കുന്നിടത്ത് വച്ച്,തിരിച്ചു പോവുക"
 
 msgid "Interchange"
 msgstr ""

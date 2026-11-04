@@ -202,9 +202,6 @@ msgstr "%sin på %s%s%s"
 msgid "%sinto the %s"
 msgstr "%sut på %s"
 
-msgid "When possible, please turn around"
-msgstr "Vänd när det går"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -391,6 +388,9 @@ msgstr "sedan har du nått din destination."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Du har nått din destination %s"
+
+msgid "When possible, please turn around"
+msgstr "Vänd när det går"
 
 msgid "Interchange"
 msgstr "Korsning"

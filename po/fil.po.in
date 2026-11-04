@@ -192,9 +192,6 @@ msgstr "%s sa %s%s%s|neuter form"
 msgid "%sinto the %s"
 msgstr "%s sa %s"
 
-msgid "When possible, please turn around"
-msgstr "Kung maari, mangyaring umikot pabalik"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -381,6 +378,9 @@ msgstr ""
 #, c-format
 msgid "You have reached your destination %s"
 msgstr ""
+
+msgid "When possible, please turn around"
+msgstr "Kung maari, mangyaring umikot pabalik"
 
 msgid "Interchange"
 msgstr ""
