@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2026-09-01 05:51+0000\n"
 "Last-Translator: Temuri Doghonadze <temuri.doghonadze@gmail.com>\n"
 "Language-Team: Georgian <https://hosted.weblate.org/projects/navit/navit-"
@@ -1914,6 +1914,9 @@ msgstr ""
 msgid "POIs"
 msgstr ""
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr ""
 
@@ -2356,22 +2359,6 @@ msgstr ""
 msgid "Map download aborted"
 msgstr ""
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "თავისუფალი ადგილი საკმარისი არაა"
@@ -2433,6 +2420,12 @@ msgstr ""
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "ძებნა"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"

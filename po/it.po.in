@@ -25,7 +25,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2025-01-20 17:20+0000\n"
 "Last-Translator: bovirus <roberto.boriotti@canon.it>\n"
 "Language-Team: Italian <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -348,10 +348,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Prendi la %1$s strada a %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "tra %i strade"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1948,6 +1944,9 @@ msgstr "Imposta come posizione (e disattiva veicolo)"
 msgid "POIs"
 msgstr "Punti d'interesse"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Visualizza sulla mappa"
 
@@ -2154,6 +2153,13 @@ msgstr "Torna alla mappa"
 msgid "Main Menu"
 msgstr "Menù principale"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Annulla"
+
 msgid "House number"
 msgstr "Numero civico"
 
@@ -2285,10 +2291,6 @@ msgstr "Mezzi pesanti/camion"
 msgid "Yes"
 msgstr "Si"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Annulla"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2393,22 +2395,6 @@ msgstr "Errore nel download della mappa."
 msgid "Map download aborted"
 msgstr "Download mappa annullato"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Spazio libero non sufficiente"
@@ -2473,6 +2459,12 @@ msgstr "Confronta indirizzo parziale"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Cerca"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3068,6 +3060,13 @@ msgstr "America Centrale"
 msgid "Guyane Francaise"
 msgstr "Guyana francese"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "tra %i strade"
+
+#~ msgid "Searching..."
+#~ msgstr "Ricerca..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr ""
 #~ "Non è stato trovato alcun file configurazione navit.xml, navit.xml.local"
@@ -3186,9 +3185,6 @@ msgstr "Guyana francese"
 #~ "Dati mappe: (c) contributori OpenStreetMap\n"
 #~ "\n"
 #~ "Divertiti con Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "Ricerca..."
 
 #~ msgid "Backing up..."
 #~ msgstr "Backup..."

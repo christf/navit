@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:26+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Serbian <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -340,10 +340,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Прати %1$s пут до %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "после %i путева"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1929,6 +1925,9 @@ msgstr "Постави као положај (и искључи возило)"
 msgid "POIs"
 msgstr "Тачке интересовања"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Погледај на карти"
 
@@ -2135,6 +2134,13 @@ msgstr "Назад на карту"
 msgid "Main Menu"
 msgstr "Главни мени"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Откажи"
+
 msgid "House number"
 msgstr "Кућни број"
 
@@ -2266,10 +2272,6 @@ msgstr "Камион"
 msgid "Yes"
 msgstr "Да"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Откажи"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2374,22 +2376,6 @@ msgstr "Десила се грешка при преузимању карте."
 msgid "Map download aborted"
 msgstr "Преузимање карте је отказано"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Нема довољно расположивог простора"
@@ -2451,6 +2437,12 @@ msgstr "Упореди непотпуну адресу"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Претражи"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3041,6 +3033,13 @@ msgstr ""
 msgid "Guyane Francaise"
 msgstr ""
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "после %i путева"
+
+#~ msgid "Searching..."
+#~ msgstr "Претрага..."
+
 #~ msgid "Select a search radius from screen center"
 #~ msgstr "Растојање од средишта екрана"
 
@@ -3084,9 +3083,6 @@ msgstr ""
 #~ "Подаци о картама: доприносиоци (c) OpenStreetMap-а\n"
 #~ "\n"
 #~ "Уживајте у Навиту!"
-
-#~ msgid "Searching..."
-#~ msgstr "Претрага..."
 
 #~ msgid "Backing up..."
 #~ msgstr "Чувам у оставу..."

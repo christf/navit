@@ -15,7 +15,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2025-01-16 09:07+0000\n"
 "Last-Translator: jkoan <jkoan@gmx.de>\n"
 "Language-Team: Finnish <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -1927,6 +1927,9 @@ msgstr ""
 msgid "POIs"
 msgstr "POIt"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Näytä kartalla"
 
@@ -2133,6 +2136,13 @@ msgstr "Takaisin karttaan"
 msgid "Main Menu"
 msgstr "Päävalikko"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr ""
+
 msgid "House number"
 msgstr "Talon numero"
 
@@ -2262,10 +2272,6 @@ msgstr ""
 msgid "Yes"
 msgstr ""
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr ""
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2370,22 +2376,6 @@ msgstr ""
 msgid "Map download aborted"
 msgstr ""
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr ""
@@ -2446,6 +2436,12 @@ msgstr ""
 
 #. Android resource: @strings/address_search_button
 msgid "Search"
+msgstr ""
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
 msgstr ""
 
 #. Android resource: @strings/address_search_not_found

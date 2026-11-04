@@ -25,7 +25,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2026-04-28 08:10+0000\n"
 "Last-Translator: adevoss <arnobugs@hotmail.com>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -348,10 +348,6 @@ msgstr "neem daarna de %1$s straat %2$s"
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Neem de %1$s straat naar %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "na %i wegen"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1951,6 +1947,9 @@ msgstr "zet positie en deactiveer voertuig"
 msgid "POIs"
 msgstr "Nuttige punten"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Bekijk op de kaart"
 
@@ -2157,6 +2156,13 @@ msgstr "Terug naar de kaart"
 msgid "Main Menu"
 msgstr "Hoofdmenu"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Annuleer"
+
 msgid "House number"
 msgstr "Huisnummer"
 
@@ -2288,10 +2294,6 @@ msgstr "Vrachtwagen"
 msgid "Yes"
 msgstr "Ja"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Annuleer"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2396,22 +2398,6 @@ msgstr "Fout met kaart downloaden"
 msgid "Map download aborted"
 msgstr "Kaart downloaden afgebroken"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Niet genoeg vrije ruimte"
@@ -2475,6 +2461,12 @@ msgstr "gedeelte van adres"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Zoek"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3068,6 +3060,13 @@ msgstr "Zuid- en Midden-Amerika"
 msgid "Guyane Francaise"
 msgstr "Frans Guyana"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "na %i wegen"
+
+#~ msgid "Searching..."
+#~ msgstr "Zoeken..."
+
 #~ msgid ""
 #~ "Thank you for installing Navit!\n"
 #~ "\n"
@@ -3088,9 +3087,6 @@ msgstr "Frans Guyana"
 #~ "Kaartendata: (c) OpenStreetMap contributors\n"
 #~ "\n"
 #~ "Nog veel plezier met Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "Zoeken..."
 
 #~ msgid "Backing up..."
 #~ msgstr "Back-up maken..."

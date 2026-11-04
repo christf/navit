@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2026-05-05 19:11+0000\n"
 "Last-Translator: Priit Jõerüüt <jrthwlate@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Estonian <https://hosted.weblate.org/projects/navit/navit-"
@@ -335,10 +335,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Vali %1$s tee, mis viib %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "pärast %i teed"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1924,6 +1920,9 @@ msgstr "Määra asukohaks (ja deaktiveeri sõiduk)"
 msgid "POIs"
 msgstr "Huvipunktid"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Näita kaardil"
 
@@ -2130,6 +2129,13 @@ msgstr "Tagasi kaardile"
 msgid "Main Menu"
 msgstr "Põhimenüü"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Keeldu"
+
 msgid "House number"
 msgstr "Maja number"
 
@@ -2261,10 +2267,6 @@ msgstr "Veok"
 msgid "Yes"
 msgstr "Jah"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Keeldu"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2369,22 +2371,6 @@ msgstr "Viga kaardi allalaadimisel."
 msgid "Map download aborted"
 msgstr "Kaardi allalaadimine katkestatud."
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Pole piisavalt vaba ruumi!"
@@ -2446,6 +2432,12 @@ msgstr "Sobita osaline aadress"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Otsing"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3036,6 +3028,13 @@ msgstr "Lõuna+Kesk-Ameerika"
 msgid "Guyane Francaise"
 msgstr "Prantsuse Guajaana"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "pärast %i teed"
+
+#~ msgid "Searching..."
+#~ msgstr "Otsimine ..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr "Ei leidnud konfiguratsioonifaile navit.xml, navit.xml.local\n"
 
@@ -3109,9 +3108,6 @@ msgstr "Prantsuse Guajaana"
 #~ "Kaardiandmed: (c) OpenStreetMap kaasautorid\n"
 #~ "\n"
 #~ "Naudi programmi kasutamist!"
-
-#~ msgid "Searching..."
-#~ msgstr "Otsimine ..."
 
 #~ msgid "Backing up..."
 #~ msgstr "Varundamine..."

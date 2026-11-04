@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Lithuanian <https://hosted.weblate.org/projects/navit/navit-"
@@ -340,10 +340,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Važiuokite %1$s keliu į %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "už %i kelių"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1929,6 +1925,9 @@ msgstr "Nustatyti poziciją (išjungdamas transporto priemonę)"
 msgid "POIs"
 msgstr "Lankytinos vietos"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Rodyti žemėlapyje"
 
@@ -2135,6 +2134,13 @@ msgstr "Grįžti į žemėlapį"
 msgid "Main Menu"
 msgstr "Pagrindinis meniu"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Atšaukti"
+
 msgid "House number"
 msgstr "Namo numeris"
 
@@ -2266,10 +2272,6 @@ msgstr "Sunkvežimis"
 msgid "Yes"
 msgstr "Taip"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Atšaukti"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2374,22 +2376,6 @@ msgstr "Klaida parsiunčiant žemėlapį."
 msgid "Map download aborted"
 msgstr "Žemėlapio parsiuntimas nutrauktas"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Nepakanka laisvos vietos"
@@ -2453,6 +2439,12 @@ msgstr "Dalinis adreso sutapimas"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Paieška"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3043,6 +3035,13 @@ msgstr ""
 msgid "Guyane Francaise"
 msgstr "Prancūzų gvinėja"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "už %i kelių"
+
+#~ msgid "Searching..."
+#~ msgstr "Ieškoma..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr "Konfiguracijos failai navit.xml, navit.xml.local nerasti\n"
 
@@ -3130,9 +3129,6 @@ msgstr "Prancūzų gvinėja"
 #~ "Žemėlapių duomenys: (c) OpenStreetMap pagalbininkai\n"
 #~ "\n"
 #~ "Sėkmės naudojant Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "Ieškoma..."
 
 #~ msgid "Backing up..."
 #~ msgstr "Daroma atsarginė kopija..."

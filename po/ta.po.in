@@ -336,10 +336,6 @@ msgstr "பிறகு %2$s க்கு %1$s சாலையில் செ�
 msgid "Take the %1$s road to the %2$s"
 msgstr "%2$s க்கு %1$s சாலையை எடுத்துக் கொள்ளுங்கள்"
 
-#, c-format
-msgid "after %i roads"
-msgstr "%iநான் சாலைகளுக்குப் பிறகு"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -1935,6 +1931,9 @@ msgstr "நிலையாக அமைக்கவும் (மற்றும
 msgid "POIs"
 msgstr "பின்னர்"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "வரைபடத்தில் காண்க"
 
@@ -2141,6 +2140,13 @@ msgstr "வரைபடத்திற்குத் திரும்பு"
 msgid "Main Menu"
 msgstr "பட்டியல் விளையாடுங்கள்"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "ரத்துசெய்"
+
 msgid "House number"
 msgstr "வீட்டின் எண்"
 
@@ -2276,10 +2282,6 @@ msgstr "டிரக்"
 msgid "Yes"
 msgstr "ஆம்"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "ரத்துசெய்"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr "நவித்"
@@ -2393,22 +2395,6 @@ msgstr "வரைபடத்தை பதிவிறக்குவதில�
 msgid "Map download aborted"
 msgstr "வரைபடம் பதிவிறக்கம் நிறுத்தப்பட்டது"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr "<சரம் பெயர்="
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "போதுமான இலவச இடம் இல்லை"
@@ -2474,6 +2460,12 @@ msgstr "பகுதி முகவரியுடன் பொருந்த�
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "தேடல்"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr "<சரம் பெயர்="
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3070,6 +3062,13 @@ msgstr "தெற்கு+மத்திய அமெரிக்கா"
 msgid "Guyane Francaise"
 msgstr "கயானா ஃபிராங்காய்"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%iநான் சாலைகளுக்குப் பிறகு"
+
+#~ msgid "Searching..."
+#~ msgstr "தேடுகிறது..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr "கட்டமைப்பு கோப்பு navit.xml, navit.xml.local இல்லை"
 
@@ -3186,9 +3185,6 @@ msgstr "கயானா ஃபிராங்காய்"
 #~ " MAPDATA: (c) OpenStreetMap பங்களிப்பாளர்கள்\n"
 #~ "\n"
 #~ " கடற்படை அனுபவிக்கவும்!"
-
-#~ msgid "Searching..."
-#~ msgstr "தேடுகிறது..."
 
 #~ msgid "Backing up..."
 #~ msgstr "காப்புப்பிரதி ..."

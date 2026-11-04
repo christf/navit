@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:25+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Malayalam <https://hosted.weblate.org/projects/navit/navit-"
@@ -331,10 +331,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "%2$s   %1$s-മത്തെ പാത  എടുക്കുക"
-
-#, c-format
-msgid "after %i roads"
-msgstr "%i വഴികൾക്കു ശേഷം"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1920,6 +1916,9 @@ msgstr "സ്ഥാനമായ് ക്രമീകരിക്കുക (വ
 msgid "POIs"
 msgstr "സ്ഥലങ്ങള്‍ (POIs)"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "ഭൂപടത്തില്‍ കാണുക"
 
@@ -2126,6 +2125,13 @@ msgstr "ഭൂപടത്തിലോട്ട് തിരിച്ചു പ�
 msgid "Main Menu"
 msgstr "പ്രധാന പട്ടിക"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "റദ്ദാക്കുക"
+
 msgid "House number"
 msgstr "വീട്ടു നംബര്‍"
 
@@ -2257,10 +2263,6 @@ msgstr "ലോറി"
 msgid "Yes"
 msgstr "ശരി"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "റദ്ദാക്കുക"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2365,22 +2367,6 @@ msgstr "ഭൂപടം ഡൗണ്‍ലോഡ് ചെയ്യുന്ന�
 msgid "Map download aborted"
 msgstr "ഭൂപടം ഡൗണ്‍ലോഡ് ചെയ്യുന്നത് അവസാനിപ്പിചിരിക്കുന്നു"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "ആവശ്യത്തിന് സ്ഥലമില്ലാ"
@@ -2442,6 +2428,12 @@ msgstr "ഭാഗിക ചേര്‍ച്ചയുള്ള മേല്‍�
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "തിരയുക"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3030,6 +3022,13 @@ msgstr "തെക്ക്-മധ്യ അമേരിക്ക"
 msgid "Guyane Francaise"
 msgstr "ഫ്രെന്ജ് ഗയാന"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "%i വഴികൾക്കു ശേഷം"
+
+#~ msgid "Searching..."
+#~ msgstr "തെരഞ്ഞുകൊണ്ടിരിക്കുന്നു..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr "കോണ്‍ഫിഗറേഷന്‍ ഫയലുകള്‍ (navit.xml, navit.xml.local) കാണുന്നില്ല\n"
 
@@ -3127,9 +3126,6 @@ msgstr "ഫ്രെന്ജ് ഗയാന"
 #~ "മാപ് (c) ഓപണ്‍സ്റ്റ്രീറ്റ്മാപ് സഹകാരികള്‍.\n"
 #~ "\n"
 #~ "Enjoy Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "തെരഞ്ഞുകൊണ്ടിരിക്കുന്നു..."
 
 #~ msgid "Backing up..."
 #~ msgstr "ബാക്കപ്പ് കോപി എടുത്തുകൊണ്ടിരിക്കുന്നു"

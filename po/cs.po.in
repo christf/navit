@@ -23,7 +23,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:24+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Czech <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -350,10 +350,6 @@ msgstr ""
 #, c-format
 msgid "Take the %1$s road to the %2$s"
 msgstr "Jeďte na %1$s silnici %2$s"
-
-#, c-format
-msgid "after %i roads"
-msgstr "za %i silnice"
 
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
@@ -1949,6 +1945,9 @@ msgstr "Nastavit jako polohu (a deaktivovat vozidlo)"
 msgid "POIs"
 msgstr "Body zájmu"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Zobrazit na mapě"
 
@@ -2155,6 +2154,13 @@ msgstr "Zpět na mapu"
 msgid "Main Menu"
 msgstr "Hlavní nabídka"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Storno"
+
 msgid "House number"
 msgstr "Číslo domu"
 
@@ -2286,10 +2292,6 @@ msgstr "Nákladní vůz"
 msgid "Yes"
 msgstr "Ano"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Storno"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2394,22 +2396,6 @@ msgstr "Chyba při stahování map."
 msgid "Map download aborted"
 msgstr "Stahování map přerušeno"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Není dostatek volného místa"
@@ -2473,6 +2459,12 @@ msgstr "Shoda částí adresy"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Vyhledat"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3063,6 +3055,13 @@ msgstr "Jižní a Střední Amerika"
 msgid "Guyane Francaise"
 msgstr "Francouzská Guyana"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "za %i silnice"
+
+#~ msgid "Searching..."
+#~ msgstr "Vyhledávání…"
+
 #~ msgid ""
 #~ "Thank you for installing Navit!\n"
 #~ "\n"
@@ -3083,9 +3082,6 @@ msgstr "Francouzská Guyana"
 #~ "Mapdata: (c) OpenStreetMap a přispěvovatelé\n"
 #~ "\n"
 #~ "Užijte si Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "Vyhledávání…"
 
 #~ msgid "Backing up..."
 #~ msgstr "Zálohování…"

@@ -346,10 +346,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Apanhe a %1$s estrada para a %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr "depois de %i estradas"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -1944,6 +1940,9 @@ msgstr "Definir como posição (desativar veículo)"
 msgid "POIs"
 msgstr "POIs"
 
+msgid "Copy position"
+msgstr ""
+
 msgid "View on map"
 msgstr "Ver no mapa"
 
@@ -2150,6 +2149,13 @@ msgstr "Voltar ao mapa"
 msgid "Main Menu"
 msgstr "Menu principal"
 
+msgid "Searching ..."
+msgstr ""
+
+#. Android resource: @strings/cancel
+msgid "Cancel"
+msgstr "Cancelar"
+
 msgid "House number"
 msgstr "Número de porta"
 
@@ -2281,10 +2287,6 @@ msgstr "Camião"
 msgid "Yes"
 msgstr "Sim"
 
-#. Android resource: @strings/cancel
-msgid "Cancel"
-msgstr "Cancelar"
-
 #. Android resource: @strings/channel_name
 msgid "Navit"
 msgstr ""
@@ -2389,22 +2391,6 @@ msgstr "Erro ao transferir o mapa."
 msgid "Map download aborted"
 msgstr "Transferência cancelada"
 
-#. Android resource: @strings/map_download_cancel
-msgid "Cancel download"
-msgstr ""
-
-#. Android resource: @strings/    <string name="map_download_cancelling">Cancelling
-#. Android resource: @strings/    <string name="map_metadata_loading">Loading map list
-#. Android resource: @strings/    <string name="address_search_searching">Searching
-#. Android resource: @strings/    <string name="backing_up">Backing up
-#. Android resource: @strings/    <string name="restoring">Restoring
-msgid "    <string name="
-msgstr ""
-
-#. Android resource: @strings/map_metadata_failed
-msgid "Could not load map list. Check your connection and try again later."
-msgstr ""
-
 #. Android resource: @strings/map_download_not_enough_free_space
 msgid "Not enough free space"
 msgstr "Não existe espaço suficiente"
@@ -2468,6 +2454,12 @@ msgstr "Ocorrências parciais"
 #. Android resource: @strings/address_search_button
 msgid "Search"
 msgstr "Procura"
+
+#. Android resource: @strings/    <string name="address_search_searching">Searching
+#. Android resource: @strings/    <string name="backing_up">Backing up
+#. Android resource: @strings/    <string name="restoring">Restoring
+msgid "    <string name="
+msgstr ""
 
 #. Android resource: @strings/address_search_not_found
 msgid "Address not found"
@@ -3061,6 +3053,13 @@ msgstr "América Central e América do Sul"
 msgid "Guyane Francaise"
 msgstr "Guiana Francesa"
 
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "depois de %i estradas"
+
+#~ msgid "Searching..."
+#~ msgstr "A procurar..."
+
 #~ msgid "No config file navit.xml, navit.xml.local found\n"
 #~ msgstr ""
 #~ "Ficheiros de configuração navit.xml, navit.xml.local não encontrados\n"
@@ -3178,9 +3177,6 @@ msgstr "Guiana Francesa"
 #~ "Dados do mapa: (c) colaboradores OpenStreetMap\n"
 #~ "\n"
 #~ "Esperamos que goste do Navit!"
-
-#~ msgid "Searching..."
-#~ msgstr "A procurar..."
 
 #~ msgid "Backing up..."
 #~ msgstr "A criar cópia de segurança..."
