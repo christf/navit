@@ -391,6 +391,7 @@ static void submit_color(struct graphics_priv *gr, struct graphics_gc_priv *gc) 
     gr->cur_g = gc->fg;
     gr->cur_b = gc->fb;
     gr->cur_a = gc->fa;
+    gr->cur_linewidth = gc->linewidth;
 }
 
 static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GLuint tex, const Vertex *verts,
@@ -425,6 +426,7 @@ static int submit_vertices(struct graphics_priv *gr, enum draw_cmd_type type, GL
     cmd->g = gr->cur_g;
     cmd->b = gr->cur_b;
     cmd->a = gr->cur_a;
+    cmd->linewidth = gr->cur_linewidth;
     gr->cmd_count++;
     return first;
 }
@@ -1081,6 +1083,7 @@ static struct graphics_gc_priv *gc_new(struct graphics_priv *gr, struct graphics
     gc->fg = 1.0f;
     gc->fb = 1.0f;
     gc->fa = 1.0f;
+    gc->linewidth = 1;
     *meth = gc_methods;
     return gc;
 }
@@ -1428,6 +1431,17 @@ static void exec_draw_cmds(struct graphics_priv *gr, DrawCmd *commands, int cmd_
             break;
         default:
             continue;
+        }
+        if (cmd->type == CMD_LINES || cmd->type == CMD_LINE_STRIP || cmd->type == CMD_LINE_LOOP) {
+            /* Honour graphics_gc_set_linewidth(). Without this every line keeps the GL default
+             * of 1px, which is what made e.g. the speed warner's d/10 ring invisible. */
+            /* linewidth is a navit logical width; glLineWidth takes device pixels. */
+            int sc = gr->scale > 0 ? gr->scale : 1;
+            float w = (cmd->linewidth > 0.0f ? cmd->linewidth : 1.0f) * (float)sc;
+            /* Some drivers (notably llvmpipe/Mesa and ANGLE) silently clamp widths above 1 and
+             * just widen the line themselves, so only lower-bound it here and let the driver
+             * decide the rest. */
+            glLineWidth(w);
         }
         glDrawArrays(mode, cmd->first, cmd->count);
     }
