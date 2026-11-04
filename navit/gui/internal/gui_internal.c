@@ -645,6 +645,23 @@ static void gui_internal_cmd_set_position(struct gui_priv *this, struct widget *
     gui_internal_prune_menu(this, NULL);
 }
 
+static void gui_internal_cmd_copy_position(struct gui_priv *this, struct widget *wm, void *data) {
+    struct coord c;
+    struct coord_geo g;
+    char lat[16], lng[16];
+    char *str;
+
+    c.x = wm->c.x;
+    c.y = wm->c.y;
+    transform_to_geo(wm->c.pro, &c, &g);
+    g_ascii_formatd(lat, sizeof(lat), "%.6f", g.lat);
+    g_ascii_formatd(lng, sizeof(lng), "%.6f", g.lng);
+    str = g_strdup_printf("geo:%s,%s", lat, lng);
+    if (!graphics_set_clipboard(this->gra, str))
+        dbg(lvl_error, "graphics plugin does not support the clipboard");
+    g_free(str);
+}
+
 /**
  * @brief Generic notification function for Editable widgets to call Another widget notification function when Enter is
  * pressed in editable field. The Editable widget should have data member pointing to the Another widget.
@@ -986,6 +1003,10 @@ static void gui_internal_cmd_delete_waypoint(struct gui_priv *this, struct widge
  *
  * @note Position input can be done either using pc_in or g_in (if both are provided, pc_in takes precedence)
  */
+/* The bits in "flags" describe the operations available for the position at hand; the value
+ * comes from the "position(...)" OSD type. Only the bit used by the "Copy position" entry has
+ * a name, TODO: define constants for all of them. */
+#define GUI_INTERNAL_FLAG_COPY_POSITION (1 << 12)
 /* meaning of the bits in "flags":
  * 1: "Streets"
  * 2: "House numbers"
@@ -999,7 +1020,7 @@ static void gui_internal_cmd_delete_waypoint(struct gui_priv *this, struct widge
  * 512: "Cut/Copy... bookmark"
  * 1024: "Jump to attributes of top item within this->radius pixels of this point (implies flags|=256)"
  * 2048: "Show search results on the map"
- * TODO define constants for these values
+ * 4096: "Copy position" (writes a geo: URI for this point to the clipboard), see GUI_INTERNAL_FLAG_COPY_POSITION
  */
 void gui_internal_cmd_position_do(struct gui_priv *this, const struct pcoord *pc_in, struct coord_geo *g_in,
                                   struct widget *wm, const char *name, int flags) {
@@ -1146,6 +1167,15 @@ void gui_internal_cmd_position_do(struct gui_priv *this, const struct pcoord *pc
         wbc->c = pc;
     }
 #endif /* _MSC_VER */
+    if ((flags & GUI_INTERNAL_FLAG_COPY_POSITION) && graphics_clipboard_supported(this->gra)) {
+        gui_internal_widget_append(
+            wtable, row = gui_internal_widget_table_row_new(this, gravity_left | orientation_horizontal | flags_fill));
+        gui_internal_widget_append(
+            row, wbc = gui_internal_button_new_with_callback(this, _("Copy position"), image_new_xs(this, "gui_active"),
+                                                             gravity_left_center | orientation_horizontal | flags_fill,
+                                                             gui_internal_cmd_copy_position, NULL));
+        wbc->c = pc;
+    }
 #if 0
     gui_internal_widget_append(wtable,row=gui_internal_widget_table_row_new(this,
                                           gravity_left|orientation_horizontal|flags_fill));
@@ -1315,37 +1345,37 @@ void gui_internal_cmd_position(struct gui_priv *this, struct widget *wm, void *d
 
     switch ((long)data) {
     case 0:
-        flags = 8 | 16 | 32 | 64 | 128 | 256;
+        flags = 8 | 16 | 32 | 64 | 128 | 256 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     case 1:
-        flags = 8 | 16 | 32 | 64 | 256;
+        flags = 8 | 16 | 32 | 64 | 256 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     case 2:
-        flags = 4 | 8 | 16 | 32 | 64 | 128;
+        flags = 4 | 8 | 16 | 32 | 64 | 128 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     case 3:
-        flags = 1 | 4 | 8 | 16 | 32 | 64 | 128 | 2048;
+        flags = 1 | 4 | 8 | 16 | 32 | 64 | 128 | 2048 | GUI_INTERNAL_FLAG_COPY_POSITION;
         flags &= this->flags_town;
         break;
     case 4:
         gui_internal_search_town_in_country(this, wm);
         return;
     case 5:
-        flags = 2 | 8 | 16 | 32 | 64 | 128 | 2048;
+        flags = 2 | 8 | 16 | 32 | 64 | 128 | 2048 | GUI_INTERNAL_FLAG_COPY_POSITION;
         flags &= this->flags_street;
         break;
     case 6:
-        flags = 8 | 16 | 32 | 64 | 128 | 2048;
+        flags = 8 | 16 | 32 | 64 | 128 | 2048 | GUI_INTERNAL_FLAG_COPY_POSITION;
         flags &= this->flags_house_number;
         break;
     case 7:
-        flags = 8 | 16 | 64 | 128 | 512;
+        flags = 8 | 16 | 64 | 128 | 512 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     case 8:
-        flags = 8 | 16 | 32 | 64 | 128;
+        flags = 8 | 16 | 32 | 64 | 128 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     case 9:
-        flags = 4 | 8 | 16 | 32 | 64 | 128 | 2048;
+        flags = 4 | 8 | 16 | 32 | 64 | 128 | 2048 | GUI_INTERNAL_FLAG_COPY_POSITION;
         break;
     default:
         return;
