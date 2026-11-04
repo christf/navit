@@ -210,9 +210,6 @@ msgstr "%sde %s%s%s in"
 msgid "%sinto the %s"
 msgstr "%snaar de %s"
 
-msgid "When possible, please turn around"
-msgstr "Indien mogelijk omkeren"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -399,6 +396,9 @@ msgstr "daarna heeft u uw bestemming bereikt."
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "Bestemming %s bereikt"
+
+msgid "When possible, please turn around"
+msgstr "Indien mogelijk omkeren"
 
 msgid "Interchange"
 msgstr "Knooppunt"

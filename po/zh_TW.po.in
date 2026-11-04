@@ -187,9 +187,6 @@ msgstr "%s 往 %s%s%s"
 msgid "%sinto the %s"
 msgstr "%s 往 %s"
 
-msgid "When possible, please turn around"
-msgstr "請盡可能迴轉"
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -376,6 +373,9 @@ msgstr "然後你將抵達目的地"
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "%s 你將抵達目的地"
+
+msgid "When possible, please turn around"
+msgstr "請盡可能迴轉"
 
 msgid "Interchange"
 msgstr "交流道"

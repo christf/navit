@@ -191,9 +191,6 @@ msgstr "%s %s %s %s තුළට"
 msgid "%sinto the %s"
 msgstr "%s %s තුළට"
 
-msgid "When possible, please turn around"
-msgstr "හැකියාව ඇතිවිට දී, කරුණාකර හැරෙන්න."
-
 #. TRANSLATORS: the argument is the destination to follow
 #, c-format
 msgid "towards %s"
@@ -380,6 +377,9 @@ msgstr "එවිට ඔබ ඔබේ ගමනාන්තයට ළඟා ව�
 #, c-format
 msgid "You have reached your destination %s"
 msgstr "ඔබ ඔබේ ගමනාන්තය වන %s ට ළඟා වී ඇත."
+
+msgid "When possible, please turn around"
+msgstr "හැකියාව ඇතිවිට දී, කරුණාකර හැරෙන්න."
 
 msgid "Interchange"
 msgstr ""
