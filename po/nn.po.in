@@ -336,10 +336,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Ta den %1$s vegen mot %2$s"
 
-#, c-format
-msgid "after %i roads"
-msgstr ""
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
