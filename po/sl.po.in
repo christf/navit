@@ -346,10 +346,6 @@ msgstr ""
 msgid "Take the %1$s road to the %2$s"
 msgstr "Zavijte na %2$s v %1$so cesto"
 
-#, c-format
-msgid "after %i roads"
-msgstr "čez %i cest"
-
 #. TRANSLATORS: the first arg. is strength, the second is direction, the third is distance, the
 #. * fourth is destination
 #, c-format
@@ -3024,6 +3020,10 @@ msgstr ""
 #. Android resource: @strings/guyane_francaise
 msgid "Guyane Francaise"
 msgstr ""
+
+#, c-format
+#~ msgid "after %i roads"
+#~ msgstr "čez %i cest"
 
 #, c-format
 #~ msgid "Route %4.0fkm    %02d:%02d ETA"
