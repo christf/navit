@@ -20,6 +20,7 @@
 #include "gui_internal_keyboard.h"
 #include "gui_internal_menu.h"
 #include "gui_internal_poi.h"
+#include "gui_internal_poi_route.h"
 #include "gui_internal_priv.h"
 #include "gui_internal_search.h"
 #include "gui_internal_widget.h"
@@ -1149,6 +1150,8 @@ static int gui_internal_cmd2(struct gui_priv *this, char *function, struct attr 
         gui_internal_cmd2_position(this, function, in, out);
     else if (!strcmp(function, "pois"))
         gui_internal_cmd2_pois(this, function, in, out);
+    else if (!strcmp(function, "pois_along_route"))
+        gui_internal_cmd_pois_along_route(this, NULL, NULL);
     else if (!strcmp(function, "route_description"))
         gui_internal_cmd2_route_description(this, function, in, out);
     else if (!strcmp(function, "route_height_profile"))
@@ -1190,6 +1193,7 @@ static struct command_table commands[] = {
     {"menu",                 command_cast(gui_internal_cmd_menu2)            },
     {"position",             command_cast(gui_internal_cmd2_position)        },
     {"pois",                 command_cast(gui_internal_cmd2)                 },
+    {"pois_along_route",     command_cast(gui_internal_cmd2)                 },
     {"redraw_map",           command_cast(gui_internal_cmd_redraw_map)       },
     {"refresh",              command_cast(gui_internal_cmd2_refresh)         },
     {"route_description",    command_cast(gui_internal_cmd2)                 },
