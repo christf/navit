@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2024-04-13 17:26+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Urdu <https://hosted.weblate.org/projects/navit/navit-core/ur/"
@@ -1917,6 +1917,9 @@ msgstr ""
 
 msgid "POIs"
 msgstr "پسندیدہ جگہیں"
+
+msgid "Copy position"
+msgstr ""
 
 msgid "View on map"
 msgstr "نقشہ پہ دیکھیں"

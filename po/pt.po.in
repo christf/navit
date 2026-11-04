@@ -21,7 +21,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: navit 0.5.7\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 10:05+0200\n"
+"POT-Creation-Date: 2026-10-29 23:46+0100\n"
 "PO-Revision-Date: 2025-02-04 00:01+0000\n"
 "Last-Translator: Bruno Fragoso <darth_signa@hotmail.com>\n"
 "Language-Team: Portuguese <https://hosted.weblate.org/projects/navit/navit-"
@@ -1938,6 +1938,9 @@ msgstr "Definir como posição (desativar veículo)"
 
 msgid "POIs"
 msgstr "POIs"
+
+msgid "Copy position"
+msgstr ""
 
 msgid "View on map"
 msgstr "Ver no mapa"
