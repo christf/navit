@@ -1011,7 +1011,9 @@ static void navit_motion_timeout(struct navit *this_) {
                 graphics_draw_drag(this_->gra, NULL);
                 transform_copy(this_->trans, this_->trans_cursor);
                 this_->pressed = this_->current;
-                if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
+                if (this_->zoomed || !navit_displaylist_covers(this_)) {
+                    navit_draw_async(this_, 1);
+                } else if (graphics_scroll(this_->gra, drag_dx, drag_dy)) {
                     struct point clip_p1, clip_p2;
                     int clip1_w = 0, clip1_h = 0, clip2_w = 0, clip2_h = 0;
                     if (drag_dx != 0) {
