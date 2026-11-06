@@ -70,9 +70,15 @@ static void playback_files(struct speech_priv *this, GList *files) {
     if (!files)
         return;
 
+    g_mutex_lock(&this->playback_mutex);
     if (this->spi) {
-        spawn_process_check_status(this->spi, 1);
-        spawn_process_info_free(this->spi);
+        int st = spawn_process_check_status(this->spi, 0);
+        if (st >= 0) {
+            spawn_process_info_free(this->spi);
+        } else {
+            spawn_process_kill(this->spi);
+        }
+        this->spi = NULL;
     }
 
     cmdv = g_strsplit(this->play_cmdline, " ", -1);
@@ -146,21 +152,93 @@ static int synthesize_text(struct speech_priv *this, const char *text, unsigned 
     return 0;
 }
 
+struct synth_wait_ctx {
+    struct speech_priv *speech;
+    char *text;
+};
+
+static gpointer synth_wait_thread(gpointer data) {
+    struct synth_wait_ctx *ctx = data;
+    struct speech_priv *this = ctx->speech;
+    int attempts = 0;
+    int max_attempts = 1200; /* 120s at 100ms intervals */
+
+    while (attempts < max_attempts && !this->shutdown) {
+        g_usleep(100000); /* 100ms */
+        attempts++;
+
+        GList *matches = audio_cache_lookup(this->ac, ctx->text, this->sample_suffix);
+        if (matches) {
+            dbg(lvl_debug, "synth-wait: file appeared after %dms, playing '%s'", attempts * 100, ctx->text);
+            playback_files(this, matches);
+            g_list_free_full(matches, g_free);
+            break;
+        }
+    }
+
+    if (attempts >= max_attempts)
+        dbg(lvl_warning, "synth-wait: timed out after 120s waiting for '%s'", ctx->text);
+
+    g_free(ctx->text);
+    g_free(ctx);
+    return NULL;
+}
+
+/**
+ * @brief Submits {@code text} for asynchronous synthesis, if a synthesizer is configured.
+ *
+ * Starts a waiter thread which polls for the synthesized file and plays it as soon as it
+ * appears. Duplicate submissions while a waiter is already active are skipped.
+ */
+static void speech_cache_ensure_synthesized(struct speech_priv *this, const char *text) {
+    if (!this->synth)
+        return;
+    synthesize_text(this, text, speech_cache_batch_begin(this));
+
+    if (!g_hash_table_contains(this->active_waiters, text)) {
+        g_hash_table_add(this->active_waiters, g_strdup(text));
+        struct synth_wait_ctx *ctx = g_new0(struct synth_wait_ctx, 1);
+        ctx->speech = this;
+        ctx->text = g_strdup(text);
+        GThread *thread = g_thread_new("synth-wait", synth_wait_thread, ctx);
+        g_mutex_lock(&this->waiters_mutex);
+        this->waiters = g_list_prepend(this->waiters, thread);
+        g_mutex_unlock(&this->waiters_mutex);
+    } else {
+        dbg(lvl_debug, "waiter already active for '%s', skipping duplicate", text);
+    }
+}
+
 static int speech_cache_say(struct speech_priv *this, const char *text) {
+    GList *matches;
+
     if (!text || !*text)
         return 0;
 
     dbg(lvl_debug, "say: '%s'", text);
 
-    GList *matches = audio_cache_lookup(this->ac, text, this->sample_suffix);
+    matches = audio_cache_lookup(this->ac, text, this->sample_suffix);
     if (matches) {
-        dbg(lvl_debug, "cache HIT: %d file(s)", g_list_length(matches));
+        if (g_hash_table_contains(this->active_waiters, text)) {
+            g_list_free_full(matches, g_free);
+            return 0;
+        }
+        g_hash_table_add(this->active_waiters, g_strdup(text));
+        this->hit++;
+        dbg(lvl_error, "cache HIT (%d/%d, %.0f%%): %d file(s), announcement: '%s'", this->hit, this->hit + this->miss,
+            (this->hit + this->miss) > 0 ? 100.0 * this->hit / (this->hit + this->miss) : 0.0, g_list_length(matches),
+            text);
         playback_files(this, matches);
         g_list_free_full(matches, g_free);
         return 0;
     }
 
-    dbg(lvl_debug, "cache MISS (synthesis in progress): '%s'", text);
+    this->miss++;
+    dbg(lvl_error, "cache MISS (%d/%d, %.0f%%), submitting for synthesis: '%s'", this->miss, this->hit + this->miss,
+        (this->hit + this->miss) > 0 ? 100.0 * this->hit / (this->hit + this->miss) : 0.0, text);
+
+    speech_cache_ensure_synthesized(this, text);
+
     return -1;
 }
 
@@ -218,11 +296,48 @@ static unsigned long long speech_cache_batch_begin(struct speech_priv *this) {
     return 0;
 }
 
+/**
+ * @brief Speaks the first text from the list which is present in the cache.
+ *
+ * {@code texts[0]} is the primary announcement; subsequent entries are shorter alternatives for
+ * the same instruction. If any text is cached, it is played immediately (this avoids the
+ * asynchronous synthesis race on freshly calculated routes). Only if none of the texts is
+ * available is the primary text submitted for synthesis and spoken once ready.
+ */
+static int speech_cache_say_alternates(struct speech_priv *this, const char *const *texts) {
+    int i;
+
+    if (!texts)
+        return 0;
+
+    for (i = 0; texts[i]; i++) {
+        GList *matches;
+        if (!texts[i] || !*texts[i])
+            continue;
+        dbg(lvl_debug, "say_alternates: trying '%s'", texts[i]);
+        matches = audio_cache_lookup(this->ac, texts[i], this->sample_suffix);
+        if (!matches)
+            continue;
+        this->hit++;
+        dbg(lvl_error, "cache HIT (%d/%d, %.0f%%), alternative %d of %d: '%s'", this->hit, this->hit + this->miss,
+            (this->hit + this->miss) > 0 ? 100.0 * this->hit / (this->hit + this->miss) : 0.0, i + 1,
+            i + (int)g_strv_length((gchar **)texts), texts[i]);
+        playback_files(this, matches);
+        g_list_free_full(matches, g_free);
+        return 0;
+    }
+
+    /* Nothing available: count a single miss and submit the primary text for synthesis. */
+    this->miss++;
+    dbg(lvl_error, "cache MISS (%d/%d, %.0f%%) for all %d alternatives, synthesizing '%s'", this->miss,
+        this->hit + this->miss, (this->hit + this->miss) > 0 ? 100.0 * this->hit / (this->hit + this->miss) : 0.0,
+        g_strv_length((gchar **)texts), texts[0]);
+    speech_cache_ensure_synthesized(this, texts[0]);
+    return -1;
+}
+
 static struct speech_methods speech_cache_meth = {
-    speech_cache_destroy,
-    speech_cache_say,
-    speech_cache_prepare,
-    speech_cache_batch_begin,
+    speech_cache_destroy, speech_cache_say, speech_cache_prepare, speech_cache_batch_begin, speech_cache_say_alternates,
 };
 
 static struct speech_priv *speech_cache_new(struct speech_methods *meth, struct attr **attrs, struct attr *parent) {
