@@ -203,6 +203,8 @@ static struct graphics_methods graphics_methods = {
     NULL, /* set_clip_rects */
     NULL, /* clear_clip */
     NULL, /* scroll */
+    NULL, /* freeze_display_rotation */
+    NULL, /* set_clipboard */
 };
 
 static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphics_methods *meth, struct point *p,
