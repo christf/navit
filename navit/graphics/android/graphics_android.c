@@ -606,11 +606,13 @@ static struct graphics_methods graphics_methods = {
     hide_native_keyboard,
     NULL, /*get_dpi*/
     draw_polygon_with_holes,
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 static void resize_callback(struct graphics_priv *gra, int w, int h) {

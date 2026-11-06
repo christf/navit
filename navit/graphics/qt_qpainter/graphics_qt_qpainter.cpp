@@ -668,15 +668,17 @@ static struct graphics_methods graphics_methods = {
     overlay_disable,
     NULL,
     set_attr,
-    NULL, /* show_native_keyboard */
-    NULL, /* hide_native_keyboard */
-    NULL, /* get_dpi */
-    NULL, /* draw_polygon_with_holes */
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* show_native_keyboard */
+    NULL,          /* hide_native_keyboard */
+    NULL,          /* get_dpi */
+    NULL,          /* draw_polygon_with_holes */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 // ##############################################################################################################
