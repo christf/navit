@@ -32,6 +32,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
+static int speech_cache_say(struct speech_priv *this, const char *text);
+static unsigned long long speech_cache_batch_begin(struct speech_priv *this);
+
 enum cache_mode {
     MODE_FULL_PHRASE,
     MODE_FILL_IN_THE_BLANK,
@@ -46,6 +49,13 @@ struct speech_priv {
     struct audio_cache *ac;
     struct synthesizer *synth;
     struct spawn_process_info *spi;
+    GMutex playback_mutex;
+    GHashTable *active_waiters;
+    GMutex waiters_mutex;
+    GList *waiters;
+    volatile int shutdown;
+    int hit;
+    int miss;
 };
 
 static void playback_files(struct speech_priv *this, GList *files) {
@@ -97,6 +107,7 @@ static void playback_files(struct speech_priv *this, GList *files) {
     this->spi = spawn_process(argv);
     g_strfreev(argv);
     g_strfreev(cmdv);
+    g_mutex_unlock(&this->playback_mutex);
 }
 
 static int synthesize_text(struct speech_priv *this, const char *text, unsigned long long batch_id) {
@@ -171,16 +182,33 @@ static int speech_cache_prepare(struct speech_priv *this, const char *text, unsi
 static void speech_cache_destroy(struct speech_priv *this) {
     if (!this)
         return;
+
+    /* Signal any running waiter threads to exit and wait for them before freeing anything they use. */
+    this->shutdown = 1;
+    g_mutex_lock(&this->waiters_mutex);
+    GList *waiters = this->waiters;
+    this->waiters = NULL;
+    g_mutex_unlock(&this->waiters_mutex);
+    for (GList *l = waiters; l; l = l->next)
+        g_thread_join(l->data);
+    g_list_free(waiters);
+
+    g_mutex_lock(&this->playback_mutex);
     if (this->spi) {
         spawn_process_check_status(this->spi, 0);
         spawn_process_info_free(this->spi);
     }
+    g_mutex_unlock(&this->playback_mutex);
+
     g_free(this->play_cmdline);
     g_free(this->cache_dir);
     g_free(this->sample_suffix);
     if (this->synth)
         synthesizer_destroy(this->synth);
     audio_cache_destroy(this->ac);
+    g_hash_table_destroy(this->active_waiters);
+    g_mutex_clear(&this->playback_mutex);
+    g_mutex_clear(&this->waiters_mutex);
     g_free(this);
 }
 
@@ -241,6 +269,10 @@ static struct speech_priv *speech_cache_new(struct speech_methods *meth, struct 
         else
             dbg(lvl_warning, "unknown mode '%s', using full-phrase", attr->u.str);
     }
+
+    g_mutex_init(&this->playback_mutex);
+    g_mutex_init(&this->waiters_mutex);
+    this->active_waiters = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
     this->ac = audio_cache_new(this->cache_dir);
     if (!this->ac) {
