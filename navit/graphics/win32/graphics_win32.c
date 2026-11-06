@@ -1645,11 +1645,13 @@ static struct graphics_methods graphics_methods = {
     NULL, /* hide_native_keyboard */
     NULL, /* get dpi */
     draw_polygon_with_holes,
-    NULL, /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
+    NULL,          /* set_display_rotation */
+    NULL,          /* set_clip */
+    NULL,          /* set_clip_rects */
+    NULL,          /* clear_clip */
+    NULL,          /* scroll */
+    NULL,          /* freeze_display_rotation */
+    set_clipboard, /* set_clipboard */
 };
 
 static struct graphics_priv *graphics_win32_new_helper(struct graphics_methods *meth) {
