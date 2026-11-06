@@ -1390,6 +1390,16 @@ static void set_display_rotation(struct graphics_priv *gr, double angle_degrees,
     gr->rotation_center_y = center_y;
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    GdkDisplay *display;
+    (void)gr;
+    display = gdk_display_get_default();
+    if (!display)
+        return 0;
+    gdk_clipboard_set_text(gdk_display_get_clipboard(display), text);
+    return 1;
+}
+
 /* ----------------------------------------------------------------
  * DPI
  * ---------------------------------------------------------------- */

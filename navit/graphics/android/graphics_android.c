@@ -39,7 +39,8 @@ struct graphics_priv {
     jmethodID NavitGraphics_draw_polyline, NavitGraphics_draw_polygon, NavitGraphics_draw_rectangle,
         NavitGraphics_draw_circle, NavitGraphics_draw_text, NavitGraphics_draw_image, NavitGraphics_draw_image_warp,
         NavitGraphics_draw_mode, NavitGraphics_draw_drag, NavitGraphics_overlay_disable, NavitGraphics_overlay_resize,
-        NavitGraphics_SetCamera, NavitGraphics_setBackgroundColor, NavitGraphics_draw_polygon_with_holes;
+        NavitGraphics_SetCamera, NavitGraphics_setBackgroundColor, NavitGraphics_draw_polygon_with_holes,
+        NavitGraphics_setClipboard;
 
     jclass PaintClass;
     jmethodID Paint_init, Paint_setStrokeWidth, Paint_setARGB;
@@ -557,6 +558,24 @@ static int set_attr(struct graphics_priv *gra, struct attr *attr) {
     }
 }
 
+static int set_clipboard(struct graphics_priv *gra, const char *text) {
+    jstring jtext;
+
+    if (!gra->NavitGraphics_setClipboard)
+        return 0;
+    jtext = (*jnienv)->NewStringUTF(jnienv, text);
+    if (!jtext)
+        return 0;
+    (*jnienv)->CallVoidMethod(jnienv, gra->NavitGraphics, gra->NavitGraphics_setClipboard, jtext);
+    if ((*jnienv)->ExceptionCheck(jnienv)) {
+        (*jnienv)->ExceptionClear(jnienv);
+        (*jnienv)->DeleteLocalRef(jnienv, jtext);
+        return 0;
+    }
+    (*jnienv)->DeleteLocalRef(jnienv, jtext);
+    return 1;
+}
+
 int show_native_keyboard(struct graphics_keyboard *kbd);
 
 void hide_native_keyboard(struct graphics_keyboard *kbd);
@@ -721,6 +740,10 @@ static int graphics_android_init(struct graphics_priv *ret, struct graphics_priv
 
     if (!find_class_global("org/navitproject/navit/NavitGraphics", &ret->NavitGraphicsClass))
         return 0;
+    if (!find_method(ret->NavitGraphicsClass, "setClipboard", "(Ljava/lang/String;)V",
+                     &ret->NavitGraphics_setClipboard)) {
+        (*jnienv)->ExceptionClear(jnienv);
+    }
     dbg(lvl_debug, "at 3");
     cid = (*jnienv)->GetMethodID(jnienv, ret->NavitGraphicsClass, "<init>",
                                  "(Landroid/app/Activity;Lorg/navitproject/navit/NavitGraphics;IIIIII)V");

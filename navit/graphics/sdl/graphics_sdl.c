@@ -740,6 +740,16 @@ static void draw_drag(struct graphics_priv *gr, struct point *p) {
     }
 }
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    return SDL_SetClipboardText(text) == 0;
+#else
+    (void)text;
+    return 0;
+#endif
+}
+
 static struct graphics_methods graphics_methods = {
     graphics_destroy,
     draw_mode,

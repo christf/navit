@@ -986,6 +986,11 @@ static void overlay_resize(struct graphics_priv *gr, struct point *p, int w, int
 static struct graphics_priv *overlay_new(struct graphics_priv *gr, struct graphics_methods *meth, struct point *p,
                                          int w, int h, int wraparound);
 
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+    return SDL_SetClipboardText(text) == 0;
+}
+
 static struct graphics_methods graphics_methods = {
     graphics_destroy,
     draw_mode,

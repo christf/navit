@@ -29,6 +29,8 @@
 #include "graphics_qt_qpainter.h"
 #include "RenderArea.h"
 
+#include <QClipboard>
+
 // ##############################################################################################################
 // # Description: RenderArea (QWidget) class for the main window (map, menu, ...)
 // # Comment:
@@ -627,6 +629,15 @@ static int set_attr(struct graphics_priv *gr, struct attr *attr) {
     default:
         return 0;
     }
+    return 1;
+}
+
+static int set_clipboard(struct graphics_priv *gr, const char *text) {
+    (void)gr;
+    QClipboard *clipboard = QApplication::clipboard();
+    if (clipboard == NULL)
+        return 0;
+    clipboard->setText(QString::fromUtf8(text));
     return 1;
 }
 

@@ -1396,6 +1396,16 @@ void graphics_freeze_display_rotation(struct graphics *this_) {
     this_->meth.freeze_display_rotation(this_->priv);
 }
 
+int graphics_set_clipboard(struct graphics *this_, const char *text) {
+    if (!this_->meth.set_clipboard)
+        return 0;
+    return this_->meth.set_clipboard(this_->priv, text);
+}
+
+int graphics_clipboard_supported(struct graphics *this_) {
+    return this_->meth.set_clipboard != NULL;
+}
+
 void graphics_background_gc(struct graphics *this_, struct graphics_gc *gc) {
     this_->meth.background_gc(this_->priv, gc ? gc->priv : NULL);
 }
