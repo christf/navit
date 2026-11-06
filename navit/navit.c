@@ -78,10 +78,6 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
-/* How many times wider/taller than the screen the map source rectangle is made when building
- * a prefetch display list after a pan gesture (and on initial draw).
- */
-#define PAN_PREFETCH_SCALE_FACTOR 3
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
 /* Fraction of the render margin beyond which the map is re-centered. */
@@ -971,9 +967,14 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
-            if (!this_->zoomed)
+            if (!this_->zoomed) {
                 navit_set_timeout(this_);
-            navit_draw(this_);
+                if (navit_displaylist_covers(this_))
+                    navit_draw_displaylist(this_);
+                else
+                    navit_draw(this_);
+            } else
+                navit_draw(this_);
         } else
             return 1;
     }
