@@ -295,6 +295,8 @@ void graphics_draw_itemgra(struct graphics *gra, struct itemgra *itm, struct tra
 int graphics_element_mindist(int mindist, int element_type);
 void graphics_displaylist_draw(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
                                struct layout *l, int flags);
+int graphics_displaylist_draw_async(struct graphics *gra, struct displaylist *displaylist, struct transformation *trans,
+                                    struct layout *l, int flags);
 int graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
                   struct transformation *trans, struct layout *l, int async, struct callback *cb, int flags);
 int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist);
@@ -327,6 +329,8 @@ void graphics_set_clip_rect(struct graphics *gra, struct point *p, int w, int h)
 void graphics_set_clip_rects(struct graphics *gra, struct point *p1, int w1, int h1, struct point *p2, int w2, int h2);
 void graphics_clear_clip(struct graphics *gra);
 int graphics_scroll(struct graphics *gra, int dx, int dy);
+/* Whether the driver can shift its already rendered surface instead of repainting it. */
+int graphics_can_scroll(struct graphics *gra);
 
 /* end of prototypes */
 #ifdef __cplusplus
