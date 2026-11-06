@@ -29,6 +29,10 @@ if (${HAVE_GLIB})
 	list(APPEND NAVIT_SRC event_glib.c)
 endif()
 
+if(HAVE_GLIB2_32)
+	list(APPEND NAVIT_SRC audio_cache.c)
+endif()
+
 if(HAVE_GLIB AND NOT HAVE_G_LIST_FREE_FULL)
 	list(APPEND NAVIT_SRC glib_compat.c)
 endif()
