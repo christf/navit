@@ -412,8 +412,8 @@ static void compute_mvp(struct graphics_priv *gr, float *out) {
         c[5] = s;
         c[12] = gr->preview_cx - s * gr->pinch_base_cx;
         c[13] = gr->preview_cy - s * gr->pinch_base_cy;
-        mvp_mul(tmp, gr->mvp, c);
-        memcpy(gr->mvp, tmp, sizeof(tmp));
+        mvp_mul(tmp, out, c);
+        memcpy(out, tmp, sizeof(tmp));
     }
 
     /* Rotate the projected scene around the vehicle cursor, matching the cairo backend:
