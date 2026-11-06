@@ -1070,32 +1070,69 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
         }
         if (this_->moved) {
             dbg(lvl_debug, "mouse drag (%d, %d)->(%d, %d)", this_->pressed.x, this_->pressed.y, p->x, p->y);
+            this_->current = *p;
             update_transformation(this_->trans, &this_->pressed, p);
-            graphics_draw_drag(this_->gra, NULL);
-            this_->pan_drift.x = 0;
-            this_->pan_drift.y = 0;
-            this_->pan_rebuild = 0;
             transform_copy(this_->trans, this_->trans_cursor);
             graphics_overlay_disable(this_->gra, 0);
             if (this_->vehicle)
                 navit_vehicle_draw(this_, this_->vehicle, NULL);
-            if (!this_->zoomed) {
-                navit_set_timeout(this_);
-                /* A rebuild requested during the gesture was deferred; release flushes it by
-                 * taking the full rebuild branch even when the (once prefetched) selection would
-                 * still cover the view. The plain redraw below cannot pick it up: it only
-                 * re-projects items already in the list. The flush runs chunked on idle rather
-                 * than synchronously, so the release does not stall. If a rebuild is already in
-                 * flight, it was paused for the gesture and resumes with the map the moment the
-                 * release turns the gesture off, picking up the change itself. */
-                int deferred_rebuild = this_->redraw_pending;
-                this_->redraw_pending = 0;
-                if (navit_displaylist_covers(this_) && !deferred_rebuild)
-                    navit_draw_displaylist(this_);
-                else if (!graphics_displaylist_busy(this_->displaylist))
-                    navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), NULL);
-            } else
+            if (this_->zoomed) {
+                /* navit_draw replaces the retained frame in one synchronous step, so the offset
+                 * can be dropped without exposing the stale frame. */
+                graphics_draw_drag(this_->gra, NULL);
+                this_->pan_drift.x = 0;
+                this_->pan_drift.y = 0;
+                this_->pan_rebuild = 0;
                 navit_draw(this_);
+            } else {
+                navit_set_timeout(this_);
+                /* The transformation now includes the release drag, but a surface still holding
+                 * a pre-release frame must be shifted by the same amount to keep tracking the
+                 * cursor. Fold it into the drift before choosing a strategy so no path loses it.
+                 * pressed follows the fold, so the residual offset starts from zero. */
+                this_->pan_drift.x += this_->current.x - this_->pressed.x;
+                this_->pan_drift.y += this_->current.y - this_->pressed.y;
+                this_->pressed = *p;
+                if (this_->pan_rebuild) {
+                    /* A rebuild from the last recenter is in flight and the surface still holds
+                     * the frame drawn before it. Keep the offset; navit_pan_rebuild_done applies
+                     * the residual drag once the fresh frame lands. A rebuild requested during
+                     * the gesture stays deferred and is flushed by the next release. */
+                } else if (navit_displaylist_covers(this_) && !this_->redraw_pending
+                           && graphics_can_scroll(this_->gra)) {
+                    /* Cheap synchronous repaint of the existing list: dropping the offset and
+                     * repainting happen without a frame in between. This is only cheap when the
+                     * driver repaints incrementally; without a scrollable surface the replay of
+                     * the list stalls the caller for seconds at dense zoom levels, and the
+                     * asynchronous rebuild below does the same work off the main thread. */
+                    graphics_draw_drag(this_->gra, NULL);
+                    this_->pan_drift.x = 0;
+                    this_->pan_drift.y = 0;
+                    this_->pan_rebuild_drift.x = 0;
+                    this_->pan_rebuild_drift.y = 0;
+                    navit_draw_displaylist(this_);
+                } else {
+                    /* The rebuild is asynchronous and the surface keeps the pre-release frame
+                     * until it lands. The frame is built for the transformation at request time,
+                     * so any fold after that still displaces it: remember the drift then, and
+                     * navit_pan_rebuild_done subtracts it to leave only the later folds. */
+                    this_->redraw_pending = 0;
+                    this_->pan_rebuild_drift = this_->pan_drift;
+                    if (!this_->pan_rebuild_cb)
+                        this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
+                    this_->pan_rebuild =
+                        navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
+                    if (!this_->pan_rebuild) {
+                        /* The rebuild was refused (blocked or a foreign draw owns the list). Keep
+                         * the offset so the retained frame still tracks the release, and retry
+                         * until the list frees up instead of snapping back to the pre-pan view. */
+                        this_->redraw_pending = 1;
+                        if (!this_->pan_retry_cb)
+                            this_->pan_retry_cb = callback_new_1(callback_cast(navit_pan_retry), this_);
+                        this_->pan_retry_timeout = event_add_timeout(10, 0, this_->pan_retry_cb);
+                    }
+                }
+            }
         } else
             return 1;
     }
