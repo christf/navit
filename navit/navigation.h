@@ -69,6 +69,8 @@ struct callback;
 struct map;
 struct navigation;
 struct route;
+typedef struct _GList GList;
+GList *navigation_prepare_all_speech(struct navigation *this_);
 char *nav_status_to_text(int status);
 int navigation_get_attr(struct navigation *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 int navigation_set_attr(struct navigation *this_, struct attr *attr);
