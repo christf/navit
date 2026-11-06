@@ -1489,16 +1489,23 @@ static void graphics_destroy(struct graphics_priv *gr) {
         glDeleteProgram(gr->program);
     if (gr->vbo)
         glDeleteBuffers(1, &gr->vbo);
+    if (gr->index_vbo)
+        glDeleteBuffers(1, &gr->index_vbo);
     if (gr->white_tex)
         glDeleteTextures(1, &gr->white_tex);
     /* Deleting the multisample objects needs the widget's context current. gtk_gl_area_make_current
      * is a no-op on an unrealized widget, so only bother when the area is realized. */
-    if (gr->msaa_fbo && gr->glarea && gtk_widget_get_realized(gr->glarea)) {
+    if ((gr->msaa_fbo || gr->map_fbo) && gr->glarea && gtk_widget_get_realized(gr->glarea)) {
         gtk_gl_area_make_current(GTK_GL_AREA(gr->glarea));
         msaa_destroy(gr);
+        map_destroy(gr);
     }
     g_free(gr->vertices);
     g_free(gr->commands);
+    g_free(gr->batch_vertices);
+    g_free(gr->batch_commands);
+    g_free(gr->index_buf);
+    g_free(gr->line_runs);
     g_free(gr);
 }
 
