@@ -78,9 +78,16 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
+/* Maximum render margin as a percentage of the larger screen dimension. The margin is used
+ * both for the offscreen render surface and as the prefetch fan-out for panning.
+ */
+#define PAN_MARGIN_MAX_PERCENT 50
+/* Prefetch source-rect room for a rebuild during a pan gesture: at least this divisor
+ * of the larger screen dimension, so a fast drag does not immediately uncover the list. */
+#define PAN_PREFETCH_SCREEN_DIVISOR 2
 /* Animation tick interval for smooth map follow and yaw interpolation. */
 #define ANIMATION_TICK_MS 33
-/* Fraction of the render margin beyond which the map is re-centered. */
+/* Fraction of the prefetch margin beyond which the map is re-centered. */
 #define RECENTER_THRESHOLD_FRACTION 3
 #define RECENTER_THRESHOLD_DIVISOR 4
 
@@ -412,17 +419,56 @@ char *navit_get_user_data_directory(int create) {
     return dir;
 }
 
-void navit_draw_async(struct navit *this_, int async) {
+/* Prefetch margin for a pan gesture: both the source-rect room a mid-drag rebuild fetches and
+ * the drawable ring (gra->r) the frame is kept in, sized to at least half the larger screen
+ * dimension so a fast drag does not immediately uncover the list. */
+static int navit_pan_prefetch_margin(struct navit *this_) {
+    int half_screen = (this_->w > this_->h ? this_->w : this_->h) / PAN_PREFETCH_SCREEN_DIVISOR;
+    return this_->render_margin > half_screen ? this_->render_margin : half_screen;
+}
 
+/* Drag distance beyond which the map is re-centered. Bounded by render_margin, the only headroom a
+ * driver's offscreen surface provides beyond the viewport: presenting the frame at a larger offset
+ * would slide it off the surface and leave the window showing the background colour. A fraction of
+ * it keeps margin for the motion events that arrive before the re-centering rebuild lands. */
+static int navit_pan_recenter_threshold(struct navit *this_) {
+    return this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
+}
+
+/* cb is non-NULL while a mid-drag rebuild is in flight. The drag offset has to stay applied in
+ * that case: the surface still holds the frame drawn before the recenter, so presenting it at
+ * offset zero would show it displaced until the rebuilt frame lands. cb releases the offset once
+ * the rebuilt frame is available. */
+static int navit_draw_async_margin(struct navit *this_, int async, int margin, struct callback *cb) {
     if (this_->blocked) {
         this_->blocked |= 2;
         dbg(lvl_debug, "draw_async: blocked=%d, deferred", this_->blocked);
-        return;
+        return 0;
     }
-    graphics_draw_drag(this_->gra, NULL);
-    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, this_->render_margin);
-    graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
-                  NULL, this_->graphics_flags | 1);
+    /* Deprioritise rebuilds requested from outside the pan gesture (traffic updates, cursor
+     * recenters) while the user is dragging. Starting one mid-gesture would clobber the offset
+     * state below, strip the prefetch margin and fight the gesture's own rebuild, and a
+     * synchronous one would block the shared main thread. The request is remembered and
+     * flushed once the gesture ends. */
+    if (!cb && this_->button_pressed && this_->moved) {
+        this_->redraw_pending = 1;
+        dbg(lvl_debug, "draw_async: deferred, gesture active");
+        return 0;
+    }
+    if (!cb) {
+        this_->redraw_pending = 0;
+        graphics_draw_drag(this_->gra, NULL);
+        this_->pan_drift.x = 0;
+        this_->pan_drift.y = 0;
+        this_->pan_rebuild = 0;
+    }
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, margin);
+    return graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current,
+                         async, cb, this_->graphics_flags | 1);
+}
+
+void navit_draw_async(struct navit *this_, int async) {
+    navit_draw_async_margin(this_, async, this_->render_margin, NULL);
 }
 
 void navit_draw(struct navit *this_) {
@@ -573,7 +619,7 @@ static int navit_animation_tick(void *data) {
         }
         vehicle_get_mapdrag_offset(nv->vehicle, &offset);
         {
-            int margin_threshold = this_->render_margin * RECENTER_THRESHOLD_FRACTION / RECENTER_THRESHOLD_DIVISOR;
+            int margin_threshold = navit_pan_recenter_threshold(this_);
             int abs_x = offset.x < 0 ? -offset.x : offset.x;
             int abs_y = offset.y < 0 ? -offset.y : offset.y;
             if (margin_threshold > 0 && (abs_x > margin_threshold || abs_y > margin_threshold)) {
@@ -799,11 +845,17 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     sel.u.p_rect.rl.y = h;
     transform_set_screen_selection(this_->trans, &sel);
     graphics_init(this_->gra);
-    if (this_->render_margin) {
-        sel.u.p_rect.lu.x = -this_->render_margin;
-        sel.u.p_rect.lu.y = -this_->render_margin;
-        sel.u.p_rect.rl.x = w + this_->render_margin;
-        sel.u.p_rect.rl.y = h + this_->render_margin;
+    /* Size the drawable to the pan buffer, not the plain render margin. A mid-drag rebuild
+     * already fetches navit_pan_prefetch_margin() worth of map, but only what fits gra->r
+     * survives draw-time clipping, so sizing it to the smaller render_margin discarded most of
+     * the prefetch and left the drag with nothing to slide into. Idle draws still fetch only
+     * render_margin, so the larger rect costs nothing until the user actually pans. */
+    int buffer_margin = this_->render_margin ? navit_pan_prefetch_margin(this_) : 0;
+    if (buffer_margin) {
+        sel.u.p_rect.lu.x = -buffer_margin;
+        sel.u.p_rect.lu.y = -buffer_margin;
+        sel.u.p_rect.rl.x = w + buffer_margin;
+        sel.u.p_rect.rl.y = h + buffer_margin;
     }
     graphics_set_rect(this_->gra, &sel.u.p_rect);
     if (callback)
