@@ -144,6 +144,11 @@ struct navit {
     struct datawindow *roadbook_window;
     struct map *former_destination;
     struct point pressed, last, current;
+    struct point pan_drift;
+    struct point pan_rebuild_drift;
+    struct callback *pan_rebuild_cb;
+    int pan_rebuild;
+    int redraw_pending;
     int button_pressed, moved, popped, zoomed;
     int center_timeout;
     int autozoom_secs;
@@ -165,6 +170,7 @@ struct navit {
                     unblocked */
     int w, h;
     int render_margin;
+    int pan_margin;
     int drag_bitmap;
     int use_mousewheel;
     struct messagelist *messages;
@@ -774,6 +780,11 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
 
     this_->w = w;
     this_->h = h;
+
+    if (this_->pan_margin >= 0) {
+        int pct = this_->pan_margin > PAN_MARGIN_MAX_PERCENT ? PAN_MARGIN_MAX_PERCENT : this_->pan_margin;
+        this_->render_margin = pct * (w > h ? w : h) / 100;
+    }
 
     /* Fix for #1135: Now w and h are set initially, we can set pitch value again
      *
@@ -1884,6 +1895,7 @@ struct navit *navit_new(struct attr *parent, struct attr **attrs) {
     this_->follow_cursor = 1;
     this_->radius = 30;
     this_->border = 16;
+    this_->pan_margin = -1;
     this_->auto_switch = TRUE;
     this_->tunnel_nightlayout = FALSE;
     this_->layout_before_tunnel = "";
@@ -3022,6 +3034,16 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
         attr_updated = (this_->drag_bitmap != !!attr->u.num);
         this_->drag_bitmap = !!attr->u.num;
         break;
+    case attr_pan_margin:
+        if (attr->u.num < 0)
+            this_->pan_margin = 0;
+        else if (attr->u.num > PAN_MARGIN_MAX_PERCENT)
+            this_->pan_margin = PAN_MARGIN_MAX_PERCENT;
+        else
+            this_->pan_margin = attr->u.num;
+        if (this_->w > 0 && this_->h > 0)
+            this_->render_margin = this_->pan_margin * (this_->w > this_->h ? this_->w : this_->h) / 100;
+        break;
     case attr_flags:
         attr_updated = (this_->flags != attr->u.num);
         this_->flags = attr->u.num;
@@ -3287,6 +3309,9 @@ int navit_get_attr(struct navit *this_, enum attr_type type, struct attr *attr, 
         break;
     case attr_imperial:
         attr->u.num = this_->imperial;
+        break;
+    case attr_pan_margin:
+        attr->u.num = this_->pan_margin;
         break;
     case attr_bookmark_map:
         attr->u.map = bookmarks_get_map(this_->bookmarks);
@@ -4568,6 +4593,10 @@ void navit_destroy(struct navit *this_) {
 
     callback_destroy(this_->popup_callback);
     callback_destroy(this_->motion_timeout_callback);
+    /* Cancel before freeing: a pending rebuild holds pan_rebuild_cb in displaylist->cb, and
+     * graphics_displaylist_destroy() does not drain the in-flight draw. */
+    graphics_draw_cancel(this_->gra, this_->displaylist);
+    callback_destroy(this_->pan_rebuild_cb);
     callback_destroy(this_->progress_cb);
     if (this_->animation_timer) {
         event_remove_timeout(this_->animation_timer);
