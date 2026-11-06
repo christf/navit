@@ -960,6 +960,43 @@ void transform_setup_source_rect_scale(struct transformation *t, int scale_facto
     }
 }
 
+/* Returns whether the given screen rectangle (in screen pixels) maps to a region fully
+ * covered by the map selections the current display list was built from. */
+int transform_covers_screen(struct transformation *t, int w, int h) {
+    struct map_selection *ms;
+    struct coord_rect cover, mapped;
+    struct point pnt;
+    struct coord coord;
+    int i, first;
+
+    if (!t || !t->map_sel || t->ddd || w <= 0 || h <= 0)
+        return 0;
+
+    ms = t->map_sel;
+    cover = ms->u.c_rect;
+    for (ms = ms->next; ms; ms = ms->next) {
+        coord_rect_extend(&cover, &ms->u.c_rect.lu);
+        coord_rect_extend(&cover, &ms->u.c_rect.rl);
+    }
+
+    first = 1;
+    for (i = 0; i < 4; i++) {
+        pnt.x = (i & 1) ? w : 0;
+        pnt.y = (i & 2) ? h : 0;
+        transform_reverse(t, &pnt, &coord);
+        if (first) {
+            mapped.lu = coord;
+            mapped.rl = coord;
+            first = 0;
+        } else {
+            coord_rect_extend(&mapped, &coord);
+        }
+    }
+
+    return (mapped.lu.x >= cover.lu.x && mapped.rl.x <= cover.rl.x && mapped.lu.y <= cover.lu.y
+            && mapped.rl.y >= cover.rl.y);
+}
+
 long transform_get_scale(struct transformation *t) {
     return (int)(t->scale * 16);
 }
