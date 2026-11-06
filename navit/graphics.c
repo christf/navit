@@ -3781,6 +3781,10 @@ int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist) 
     return 1;
 }
 
+int graphics_displaylist_busy(struct displaylist *displaylist) {
+    return displaylist && displaylist->busy;
+}
+
 /**
  * FIXME
  * @param <>
