@@ -2426,13 +2426,12 @@ static struct graphics_methods graphics_methods = {
     get_dpi,                 /* get_dpi */
     draw_polygon_with_holes, /* draw_polygon_with_holes */
     set_display_rotation,    /* set_display_rotation */
-    /* No set_clip/clear_clip/scroll: navit's scroll+clip recenter path replays the whole display
-     * list on the calling thread (seconds at dense zoom levels), while the async rebuild replays
-     * it on a worker. Returning NULL makes graphics_scroll() fail and navit use that path. */
     NULL, /* set_clip */
     NULL, /* set_clip_rects */
     NULL, /* clear_clip */
     NULL, /* scroll */
+    NULL, /* freeze_display_rotation */
+    set_clipboard,           /* set_clipboard */
 };
 
 static struct graphics_priv *graphics_gtkglarea_new_helper(struct graphics_methods *meth) {
