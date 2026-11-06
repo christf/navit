@@ -37,6 +37,13 @@
  *   running) entries from previous batches are discarded. This lets route
  *   recalculations preempt synthesis of outdated instructions.
  *
+ * Pause/Resume:
+ *   synthesizer_pause() prevents fill_slots from spawning new synthesis
+ *   processes. Currently running processes continue until they finish.
+ *   synthesizer_resume() re-enables spawning and wakes the worker thread.
+ *   This allows on-demand (ad-hoc) synthesis to run without competing with
+ *   background pre-synthesis.
+ *
  * XML configuration for the cmdline synthesizer:
  * @code
  *   <synthesizer type="cmdline" data="navit-speech-cache-synthesize.sh"/>
@@ -63,7 +70,10 @@ struct synthesizer_methods {
     int (*synthesize)(struct synthesizer_priv *this_, const char *text, const char *output_path,
                       synthesizer_batch_id batch);
     int (*check_status)(struct synthesizer_priv *this_);
+    int (*wait_done)(struct synthesizer_priv *this_);
     synthesizer_batch_id (*batch_begin)(struct synthesizer_priv *this_);
+    void (*pause)(struct synthesizer_priv *this_);
+    void (*resume)(struct synthesizer_priv *this_);
 };
 
 struct synthesizer *synthesizer_new(struct attr *parent, struct attr **attrs);
@@ -71,7 +81,10 @@ int synthesizer_synthesize(struct synthesizer *this_, const char *text, const ch
                            synthesizer_batch_id batch);
 synthesizer_batch_id synthesizer_batch_begin(struct synthesizer *this_);
 int synthesizer_check_status(struct synthesizer *this_);
+int synthesizer_wait_done(struct synthesizer *this_);
 void synthesizer_destroy(struct synthesizer *this_);
+void synthesizer_pause(struct synthesizer *this_);
+void synthesizer_resume(struct synthesizer *this_);
 int synthesizer_get_attr(struct synthesizer *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 int synthesizer_set_attr(struct synthesizer *this_, struct attr *attr);
 
