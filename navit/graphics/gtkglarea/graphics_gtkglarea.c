@@ -2081,7 +2081,11 @@ static void on_glarea_resize(GtkGLArea *glarea, int width, int height, gpointer 
 
     msaa_alloc(gr, width, height);
 
-    navit_set_render_margin(gr->nav, (gr->width > gr->height ? gr->width : gr->height) / 4);
+    /* Margin kept around the viewport in the retained map texture; must match what navit uses
+     * for its pan recenter threshold so a drag is always still inside the texture. */
+    gr->render_margin = (gr->width > gr->height ? gr->width : gr->height) / GTKGL_MAP_MARGIN_DIVISOR;
+
+    navit_set_render_margin(gr->nav, gr->render_margin);
 
     callback_list_call_attr_2(gr->cbl, attr_resize, GINT_TO_POINTER(gr->width), GINT_TO_POINTER(gr->height));
 }
