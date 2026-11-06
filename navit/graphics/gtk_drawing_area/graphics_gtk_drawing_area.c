@@ -867,8 +867,9 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
                         gra->preview_cy - gra->preview_scale * gra->pinch_base_cy);
         cairo_scale(cr, gra->preview_scale, gra->preview_scale);
     }
-    cairo_set_source_surface(cr, cairo_get_target(gra->cairo), gra->p.x - gra->render_margin,
-                             gra->p.y - gra->render_margin);
+    /* Present the frame that was completed last, not the one that may be under construction. */
+    cairo_set_source_surface(cr, cairo_get_target(gra->presented ? gra->presented : gra->cairo),
+                             gra->p.x - gra->render_margin, gra->p.y - gra->render_margin);
     cairo_paint(cr);
     cairo_restore(cr);
 
