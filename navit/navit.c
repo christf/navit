@@ -180,6 +180,7 @@ struct navit {
     int map_animating;
     int menu_was_active;
     int anim_last_redraw_yaw;
+    int anim_last_displayed_yaw;
     struct timeval scroll_last_fix;
     struct timeval scroll_finished_ts;
     int prevTs;
@@ -224,6 +225,7 @@ static int navit_cmd_set_center_cursor(struct navit *this_, char *function, stru
 static int navit_cmd_announcer_toggle(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv);
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp);
+static int navit_displaylist_covers(struct navit *this_);
 static int navit_cmd_switch_layout_day_night(struct navit *this_, char *function, struct attr **in, struct attr ***out);
 struct object_func navit_func;
 
@@ -499,11 +501,14 @@ static int navit_animation_tick(void *data) {
     dbg(lvl_debug, "anim_tick: primary=%d was_anim=%d", primary_animating, was_animating);
 
     if (was_animating && this_->menu_was_active && !navit_gui_menu_active(this_)) {
+        struct point cursor_fixed_menu;
         dbg(lvl_debug, "anim_tick: menu closed during animation, forcing redraw");
         this_->map_animating = 0;
         this_->menu_was_active = 0;
+        navit_get_cursor_pnt(this_, &cursor_fixed_menu, 0, NULL);
         navit_set_center_cursor(this_, 0, 0);
         transform_copy(this_->trans, this_->trans_cursor);
+        graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed_menu.x, cursor_fixed_menu.y);
         navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
@@ -617,6 +622,7 @@ static int navit_animation_tick(void *data) {
             struct point zero = {0, 0};
             navit_log_road_gap(this_, &zero, NULL);
         }
+        graphics_set_display_rotation(this_->gra, 0.0, cursor_fixed2.x, cursor_fixed2.y);
         navit_draw(this_);
         vehicle_reset_map_scroll(this_->vehicle->vehicle);
         gettimeofday(&this_->scroll_finished_ts, NULL);
@@ -633,6 +639,19 @@ void navit_draw_displaylist(struct navit *this_) {
     if (this_->ready == 3)
         graphics_displaylist_draw(this_->gra, this_->displaylist, this_->trans, this_->layout_current,
                                   this_->graphics_flags | 1);
+}
+
+/* Returns whether the current viewport is fully covered by the map selections the current
+ * display list was built from. When covered, the existing list can be re-used for a redraw
+ * instead of rebuilding it (which is expensive). */
+static int navit_displaylist_covers(struct navit *this_) {
+    /* While a rebuild is in flight the selection has already been re-inflated around the new
+     * centre, but the items it describes have not been fetched yet: the list is empty until
+     * do_draw() completes. Reporting coverage here would make every caller repaint an empty
+     * list, which is what leaves a blank map behind a pan. */
+    if (graphics_displaylist_busy(this_->displaylist))
+        return 0;
+    return transform_covers_screen(this_->trans, this_->w, this_->h);
 }
 
 static void navit_map_progress(struct navit *this_) {
@@ -816,6 +835,7 @@ static void update_transformation(struct transformation *tr, struct point *old, 
 
 void navit_set_timeout(struct navit *this_) {
     struct attr follow;
+    dbg(lvl_debug, "navit_set_timeout: center_timeout=%d", this_->center_timeout);
     follow.type = attr_follow;
     follow.u.num = this_->center_timeout;
     navit_set_attr(this_, &follow);
@@ -3605,6 +3625,12 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
     nv->dir = *attr_dir.u.numd;
     nv->speed = *attr_speed.u.numd;
     transform_from_geo(pro, attr_pos.u.coord_geo, &nv->coord);
+    {
+        struct attr attr_time;
+        if (vehicle_get_attr(nv->vehicle, attr_position_time_iso8601, &attr_time, NULL))
+            dbg(lvl_debug, "pos_update: nmea_time=%s raw=(%d,%d) speed=%d dir=%d", attr_time.u.str, nv->coord.x,
+                nv->coord.y, nv->speed, nv->dir);
+    }
     if (nv != this_->vehicle) {
         if (this_->ready == 3)
             navit_vehicle_draw(this_, nv, NULL);

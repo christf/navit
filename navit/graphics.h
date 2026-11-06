@@ -291,6 +291,7 @@ void graphics_displaylist_draw(struct graphics *gra, struct displaylist *display
 void graphics_draw(struct graphics *gra, struct displaylist *displaylist, struct mapset *mapset,
                    struct transformation *trans, struct layout *l, int async, struct callback *cb, int flags);
 int graphics_draw_cancel(struct graphics *gra, struct displaylist *displaylist);
+int graphics_displaylist_busy(struct displaylist *displaylist);
 struct displaylist_handle *graphics_displaylist_open(struct displaylist *displaylist);
 struct displayitem *graphics_displaylist_next(struct displaylist_handle *dlh);
 void graphics_displaylist_close(struct displaylist_handle *dlh);
