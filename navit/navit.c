@@ -151,7 +151,8 @@ struct navit {
     GList *windows_items;
     struct navit_vehicle *vehicle;
     struct callback_list *attr_cbl;
-    struct callback *nav_speech_cb, *roadbook_callback, *popup_callback, *route_cb, *progress_cb, *animation_cb;
+    struct callback *nav_speech_cb, *nav_status_speech_cb, *roadbook_callback, *popup_callback, *route_cb, *progress_cb,
+        *animation_cb;
     struct datawindow *roadbook_window;
     struct map *former_destination;
     struct point pressed, last, current;
@@ -2534,6 +2535,7 @@ void navit_speak(struct navit *this_) {
     struct map_rect *mr = NULL;
     struct item *item;
     struct attr attr;
+    char **alts = NULL;
 
     if (!speech_get_attr(this_->speech, attr_active, &attr, NULL))
         attr.u.num = 1;
@@ -2559,6 +2561,24 @@ void navit_speak(struct navit *this_) {
         }
         map_rect_destroy(mr);
     }
+}
+
+/**
+ * @brief Prepares all speech announcements when the route has been built.
+ *
+ * Called on {@code attr_nav_status} events from the navigation engine: once the status reaches
+ * {@code status_routing}, the maneuver list is final and every spoken text is known. All of them
+ * are submitted for synthesis right away, so that by the time an announcement must actually be
+ * made the corresponding audio is already in the cache.
+ */
+static void navit_nav_status_callback(struct navit *this_) {
+    struct navigation *nav = this_->navigation;
+    struct attr attr;
+
+    if (!nav || !navit_object_get_attr((struct navit_object *)nav, attr_nav_status, &attr, NULL))
+        return;
+    if (attr.u.num == status_routing)
+        navit_prepare_speech_route(this_);
 }
 
 static void navit_window_roadbook_update(struct navit *this_) {
@@ -2813,6 +2833,9 @@ int navit_init(struct navit *this_) {
         if (this_->speech) {
             this_->nav_speech_cb = callback_new_1(callback_cast(navit_speak), this_);
             navigation_register_callback(this_->navigation, attr_navigation_speech, this_->nav_speech_cb);
+            /* Prepare all speech output as soon as the route has been built. */
+            this_->nav_status_speech_cb = callback_new_1(callback_cast(navit_nav_status_callback), this_);
+            navigation_register_callback(this_->navigation, attr_nav_status, this_->nav_status_speech_cb);
         }
         if (this_->route)
             navigation_set_route(this_->navigation, this_->route);
