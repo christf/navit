@@ -66,6 +66,11 @@ struct graphics_priv {
     /* The last completed frame. The map is drawn into "cairo" and only copied here once the
      * frame is complete, so a frame that is still being assembled is never presented. */
     cairo_t *presented;
+    /* Set while a display list is being replayed, so a redraw triggered in between does not
+     * pick up a half drawn map. */
+    int map_frame_open;
+    /* Set when something has been drawn into "cairo" since the last copy. */
+    int content_dirty;
     struct point p;
     /* Last known pointer position. A GdkScrollEvent carries no position, so the
      * scroll handler has to use the most recent motion event instead. */
@@ -160,6 +165,8 @@ static void graphics_destroy(struct graphics_priv *gr) {
     gr->freetype_methods.destroy();
     if (gr->cairo)
         cairo_destroy(gr->cairo);
+    if (gr->presented)
+        cairo_destroy(gr->presented);
     if (!gr->parent) {
         dbg(lvl_debug, "widget %p win %p", gr->widget, gr->win);
         if (gr->tick_callback_id)
@@ -699,8 +706,44 @@ static void shift_surface(cairo_t *cr, int dx, int dy, cairo_surface_t *scratch)
     cairo_restore(cr);
 }
 
+/* Hands the finished frame over to the surface that is presented. The map is drawn into the
+ * working surface, which is copied here once the frame is complete. A redraw that arrives while
+ * the next frame is still being assembled therefore shows the previous one instead of a half
+ * drawn map. */
+static void present_frame(struct graphics_priv *gr) {
+    cairo_surface_t *source;
+    if (!gr->presented || !gr->cairo)
+        return;
+    source = cairo_get_target(gr->cairo);
+    cairo_surface_flush(source);
+    cairo_save(gr->presented);
+    cairo_set_operator(gr->presented, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_surface(gr->presented, source, 0, 0);
+    cairo_paint(gr->presented);
+    cairo_restore(gr->presented);
+    gr->content_dirty = 0;
+}
+
+/* The display list replay has started: the frame that is being assembled must not be presented. */
+static void frame_predraw(void *data) {
+    struct graphics_priv *gr = data;
+    gr->map_frame_open = 1;
+}
+
+/* The display list replay has finished: the frame is complete and can be presented. */
+static void frame_postdraw(void *data) {
+    struct graphics_priv *gr = data;
+    gr->map_frame_open = 0;
+}
+
 static void draw_mode(struct graphics_priv *gr, enum draw_mode_num mode) {
+    if (mode == draw_mode_begin || mode == draw_mode_begin_clear) {
+        gr->content_dirty = 1;
+        return;
+    }
     if (mode == draw_mode_end) {
+        if (!gr->parent && !gr->map_frame_open && gr->content_dirty)
+            present_frame(gr);
         gr->needs_redraw = 1;
         if (gr->parent)
             gr->parent->needs_redraw = 1;
@@ -770,6 +813,14 @@ static void draw_func(GtkDrawingArea *area, cairo_t *cr, int width, int height, 
         cairo_surface_destroy(surface);
         cairo_translate(gra->cairo, gra->render_margin, gra->render_margin);
         cairo_set_antialias(gra->cairo, CAIRO_ANTIALIAS_GOOD);
+        /* The surface that holds the frame on screen. It keeps the size of the working surface
+         * and is filled with the finished frame. */
+        surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, sw, sh);
+        if (gra->presented)
+            cairo_destroy(gra->presented);
+        gra->presented = cairo_create(surface);
+        cairo_surface_destroy(surface);
+        gra->content_dirty = 1;
         callback_list_call_attr_2(gra->cbl, attr_resize, GINT_TO_POINTER(gra->width), GINT_TO_POINTER(gra->height));
     }
 
@@ -1497,6 +1548,11 @@ static struct graphics_priv *graphics_gtk_drawing_area_new(struct navit *nav, st
     else
         this->window_title = g_strdup("Navit");
     this->cbl = cbl;
+
+    /* The replay of the display list brackets the frame: between the two callbacks the map is
+     * being assembled and must not be presented. */
+    callback_list_add(cbl, callback_new_attr_1(callback_cast(frame_predraw), attr_predraw, this));
+    callback_list_add(cbl, callback_new_attr_1(callback_cast(frame_postdraw), attr_postdraw, this));
 
     /* Draw function (replaces expose_event + configure_event) */
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(draw), draw_func, this, NULL);
