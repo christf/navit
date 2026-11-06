@@ -414,7 +414,7 @@ void navit_draw_async(struct navit *this_, int async) {
         return;
     }
     graphics_draw_drag(this_->gra, NULL);
-    transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
+    transform_setup_source_rect_margin(this_->trans, this_->w, this_->h, this_->render_margin);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
 }
