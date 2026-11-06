@@ -2550,11 +2550,25 @@ void navit_speak(struct navit *this_) {
     if (mr) {
         while ((item = map_rect_get_item(mr)) && (item->type == type_nav_position || item->type == type_nav_none))
             ;
-        navit_prepare_speech_route(this_);
+        /* Note: all announcement texts are prepared when the route is built (see
+         * navit_nav_status_callback()); there is deliberately no preparation here. */
 
         if (item && item_attr_get(item, attr_navigation_speech, &attr)) {
             if (*attr.u.str != '\0') {
-                speech_say(this_->speech, attr.u.str);
+                if (nav)
+                    alts = navigation_get_speech_alternatives(nav);
+                if (alts && alts[0]) {
+                    /* Prepend the primary text to the alternatives. */
+                    const char **texts = g_new(const char *, g_strv_length(alts) + 2);
+                    int i;
+                    texts[0] = attr.u.str;
+                    for (i = 0; alts[i]; i++)
+                        texts[i + 1] = alts[i];
+                    texts[i + 1] = NULL;
+                    speech_say_alternates(this_->speech, texts);
+                    g_free(texts);
+                } else
+                    speech_say(this_->speech, attr.u.str);
                 navit_add_message(this_, attr.u.str);
             }
             navit_textfile_debug_log(this_, "type=announcement label=\"%s\"", attr.u.str);
