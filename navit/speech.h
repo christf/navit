@@ -29,12 +29,16 @@ struct attr_iter;
 struct speech_methods {
     void (*destroy)(struct speech_priv *this_);
     int (*say)(struct speech_priv *this_, const char *text);
+    int (*prepare)(struct speech_priv *this_, const char *text, unsigned long long batch_id);
+    unsigned long long (*batch_begin)(struct speech_priv *this_);
 };
 
 /* prototypes */
 struct speech *speech_new(struct attr *parent, struct attr **attrs);
 int speech_say(struct speech *this_, const char *text);
 int speech_sayf(struct speech *this_, const char *format, ...);
+int speech_prepare(struct speech *this_, const char *text, unsigned long long batch_id);
+unsigned long long speech_batch_begin(struct speech *this_);
 void speech_destroy(struct speech *this_);
 int speech_get_attr(struct speech *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 int speech_set_attr(struct speech *this_, struct attr *attr);
