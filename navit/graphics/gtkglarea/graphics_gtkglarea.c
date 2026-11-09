@@ -2429,11 +2429,11 @@ static struct graphics_methods graphics_methods = {
     get_dpi,                 /* get_dpi */
     draw_polygon_with_holes, /* draw_polygon_with_holes */
     set_display_rotation,    /* set_display_rotation */
-    NULL, /* set_clip */
-    NULL, /* set_clip_rects */
-    NULL, /* clear_clip */
-    NULL, /* scroll */
-    NULL, /* freeze_display_rotation */
+    NULL,                    /* set_clip */
+    NULL,                    /* set_clip_rects */
+    NULL,                    /* clear_clip */
+    NULL,                    /* scroll */
+    NULL,                    /* freeze_display_rotation */
     set_clipboard,           /* set_clipboard */
 };
 

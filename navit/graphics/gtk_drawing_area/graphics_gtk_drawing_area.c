@@ -1431,7 +1431,8 @@ static void *get_data(struct graphics_priv *this, char const *type) {
                             goto found_pid;
                         }
                     }
-                    if (cmdfile) fclose(cmdfile);
+                    if (cmdfile)
+                        fclose(cmdfile);
                 }
             }
             closedir(dir);
@@ -1439,7 +1440,7 @@ static void *get_data(struct graphics_priv *this, char const *type) {
         dbg(lvl_warning, "Could not locate /usr/bin/ipaq-sleep PID via /proc");
         this->pid = 0;
         return &this->window;
-found_pid:
+    found_pid:
 #endif
         return &this->window;
     }
