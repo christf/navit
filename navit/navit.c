@@ -1190,6 +1190,33 @@ static void navit_pan_rebuild_done(struct navit *this_, int cancel) {
     point.x = this_->current.x - this_->pressed.x + this_->pan_drift.x;
     point.y = this_->current.y - this_->pressed.y + this_->pan_drift.y;
     graphics_draw_drag(this_->gra, &point);
+
+    /* A drag that outran the rebuild leaves the fresh frame displaced by more than the retained
+     * texture holds. Fold that drag into the transformation and rebuild at the current pointer,
+     * so the next frame lands at offset zero instead of exposing the trailing screen edge. */
+    int margin_threshold = navit_pan_recenter_threshold(this_);
+    int abs_x = point.x < 0 ? -point.x : point.x;
+    int abs_y = point.y < 0 ? -point.y : point.y;
+    if (this_->drag_bitmap && !transform_get_pitch(this_->trans) && margin_threshold > 0
+        && (abs_x > margin_threshold || abs_y > margin_threshold)) {
+        int drag_dx = this_->current.x - this_->pressed.x;
+        int drag_dy = this_->current.y - this_->pressed.y;
+        update_transformation(this_->trans, &this_->pressed, &this_->current);
+        transform_copy(this_->trans, this_->trans_cursor);
+        this_->pressed = this_->current;
+        this_->pan_drift.x += drag_dx;
+        this_->pan_drift.y += drag_dy;
+        this_->pan_rebuild_drift = this_->pan_drift;
+        if (!this_->pan_rebuild_cb)
+            this_->pan_rebuild_cb = callback_new_2(callback_cast(navit_pan_rebuild_done), this_, NULL);
+        this_->pan_rebuild = navit_draw_async_margin(this_, 1, navit_pan_prefetch_margin(this_), this_->pan_rebuild_cb);
+        if (!this_->pan_rebuild) {
+            this_->redraw_pending = 1;
+            if (!this_->pan_retry_cb)
+                this_->pan_retry_cb = callback_new_1(callback_cast(navit_pan_retry), this_);
+            this_->pan_retry_timeout = event_add_timeout(10, 0, this_->pan_retry_cb);
+        }
+    }
 }
 
 /* A rebuild requested on release is silently refused while the display list is busy with a
