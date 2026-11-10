@@ -1,6 +1,7 @@
 <!ELEMENT config (plugins,debug*,navit)>
 <!ATTLIST config xmlns:xi CDATA #REQUIRED>
 <!ATTLIST config language CDATA #IMPLIED>
+<!ATTLIST config cache_size CDATA #IMPLIED>
 <!ELEMENT plugins (plugin*)>
 <!ELEMENT plugin EMPTY>
 <!ATTLIST plugin path CDATA #REQUIRED>

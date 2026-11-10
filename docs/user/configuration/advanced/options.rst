@@ -115,6 +115,31 @@ In this case, you should place a ``toggle_announcer`` item in your
 `OSD <OSD>`__ configuration, or add a menu item so you can enable speech
 output when you need it.
 
+.. _file_cache:
+
+File cache
+~~~~~~~~~~
+
+Navit keeps a global, byte-bounded cache of decompressed map tiles read
+from ``.bin`` maps. It avoids inflating the same tile again when panning
+or zooming back over an area. The cache is shared by all maps.
+
+Its size is set at build time with ``CACHE_SIZE`` (default 1 MiB) and can
+be overridden at runtime with the ``cache_size`` attribute of the root
+``config`` element, in bytes:
+
+.. code:: xml
+
+    <config xmlns:xi="http://www.w3.org/2001/XInclude" cache_size="67108864">
+
+The cache should be large enough to hold the working set of a typical
+window. A 1000x1000 window at zoom 256 touches roughly 60 MB of
+decompressed tiles, so 64-256 MB is a good choice on desktop and 16-32 MB
+on memory-constrained devices. A cache smaller than the working set
+thrashes: it evicts tiles before they are reused, and a rebuild costs
+about as much as with no cache at all. The 1 MiB build-time default is
+too small for interactive use.
+
 Debugging
 ~~~~~~~~~
 
