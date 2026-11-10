@@ -6,7 +6,19 @@
 -->
 <!DOCTYPE config
   SYSTEM "navit.dtd">
-<config xmlns:xi="http://www.w3.org/2001/XInclude">
+<!--
+	File cache for decompressed map tiles (bytes). It keeps recently used
+	tiles from .bin maps in memory so that panning and zooming do not inflate
+	them again. The cache is shared by all maps.
+
+	Size it to the working set of a typical window: a 1000x1000 window at
+	zoom 256 touches roughly 60 MB of decompressed tiles. A cache smaller
+	than that thrashes and gives little benefit. 32 MB is a conservative
+	default for memory-constrained devices; desktop users with large windows
+	should raise it to 64-256 MB. The build-time default (CACHE_SIZE) is
+	1 MiB, which is too small for interactive use.
+-->
+<config xmlns:xi="http://www.w3.org/2001/XInclude" cache_size="33554432">
 	<plugins>
 		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}lib*.so" ondemand="yes"/>
 		<plugin path="$NAVIT_LIBDIR/*/${NAVIT_LIBPREFIX}libbinding_dbus.so" active="no"/>
