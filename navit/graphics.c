@@ -1570,9 +1570,126 @@ static void xdisplay_free(struct displaylist *dl) {
  * @param p changeable pointer to buffer. Advanced by the size used
  * @returns pointer to newly created holes structure
  */
-static inline struct displayitem_poly_holes *display_add_holes(struct item *item, int hole_count, char **p) {
+/* Number of polygon holes stashed on the stack before the stash spills to the heap. */
+#define DISPLAYITEM_MAX_HOLES 64
+
+/* The attributes a displayitem is built from, collected in a single pass over the item's
+ * attribute list. The strings and hole coordinates point into the map data and stay valid
+ * until the next item is read from the map rect. */
+struct displayitem_attrs {
+    int flags;
+    const char *label;
+    const char *icon_src;
+    struct attr hole_storage[DISPLAYITEM_MAX_HOLES];
+    struct attr *holes;
+    int hole_count;
+    int hole_cap;
+};
+
+static void displayitem_attrs_collect(struct item *item, struct hash_entry *entry, const char **lang_pref,
+                                      struct displayitem_attrs *attrs) {
     struct attr attr;
+    const char *street_name = NULL, *town_name = NULL, *l10n = NULL;
+    int l10n_pref = -1;
+    int have_flags = 0, have_label = 0, have_icon = 0;
+    int custom_poi = item_is_custom_poi(*item);
+    int need_label = entry->needs_label || custom_poi;
+    int l10n_possible = need_label && lang_pref && lang_pref[0];
+
+    attrs->flags = 0;
+    attrs->label = NULL;
+    attrs->icon_src = NULL;
+    attrs->holes = attrs->hole_storage;
+    attrs->hole_count = 0;
+    attrs->hole_cap = DISPLAYITEM_MAX_HOLES;
+
+    item_attr_rewind(item);
+    while (item_attr_get(item, attr_any, &attr)) {
+        switch (attr.type) {
+        case attr_flags:
+            if (!have_flags) {
+                attrs->flags = attr.u.num;
+                have_flags = 1;
+            }
+            break;
+        case attr_label:
+            if (need_label && !have_label) {
+                attrs->label = attr.u.str;
+                have_label = 1;
+            }
+            break;
+        case attr_street_name:
+            if (need_label && !street_name)
+                street_name = attr.u.str;
+            break;
+        case attr_town_name:
+            if (need_label && !town_name)
+                town_name = attr.u.str;
+            break;
+        case attr_label_l10n:
+            if (l10n_possible) {
+                const char *val = attr.u.str;
+                const char *colon = val ? strchr(val, ':') : NULL;
+                if (colon) {
+                    int i;
+                    for (i = 0; lang_pref[i]; i++) {
+                        if (item_l10n_lang_matches(lang_pref[i], val, (int)(colon - val))) {
+                            if (l10n_pref < 0 || i < l10n_pref) {
+                                l10n = colon + 1;
+                                l10n_pref = i;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            break;
+        case attr_icon_src:
+            if (custom_poi && !have_icon) {
+                attrs->icon_src = attr.u.str;
+                have_icon = 1;
+            }
+            break;
+        case attr_poly_hole:
+            if (entry->needs_holes) {
+                if (attrs->hole_count == attrs->hole_cap) {
+                    attrs->hole_cap *= 2;
+                    if (attrs->holes == attrs->hole_storage) {
+                        attrs->holes = g_malloc(attrs->hole_cap * sizeof(struct attr));
+                        memcpy(attrs->holes, attrs->hole_storage, attrs->hole_count * sizeof(struct attr));
+                    } else
+                        attrs->holes = g_realloc(attrs->holes, attrs->hole_cap * sizeof(struct attr));
+                }
+                attrs->holes[attrs->hole_count++] = attr;
+            }
+            break;
+        default:
+            break;
+        }
+        /* Nothing later in the attribute list can change the result unless holes, a
+         * localization or the custom POI icon could still follow. */
+        if (have_flags && (!need_label || have_label) && !entry->needs_holes && !l10n_possible
+            && (!custom_poi || have_icon))
+            break;
+    }
+    /* The label resolution follows item_label_get(): localization over a native label,
+     * native labels in declaration order of item_label_get(). */
+    if (need_label) {
+        if (l10n)
+            attrs->label = l10n;
+        else if (!attrs->label)
+            attrs->label = street_name ? street_name : town_name;
+    }
+}
+
+static void displayitem_attrs_free(struct displayitem_attrs *attrs) {
+    if (attrs->holes != attrs->hole_storage)
+        g_free(attrs->holes);
+}
+
+static inline struct displayitem_poly_holes *display_add_holes(struct attr *hole_attrs, int hole_count, char **p) {
     struct displayitem_poly_holes *holes;
+    int i;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
     holes = (struct displayitem_poly_holes *)*p;
@@ -1582,12 +1699,11 @@ static inline struct displayitem_poly_holes *display_add_holes(struct item *item
     *p += hole_count * sizeof(int);
     holes->coords = (struct coord **)*p;
     *p += hole_count * sizeof(struct coord *);
-    item_attr_rewind(item);
-    while (item_attr_get(item, attr_poly_hole, &attr)) {
+    for (i = 0; i < hole_count; i++) {
+        struct poly_hole *hole = hole_attrs[i].u.poly_hole;
         holes->coords[holes->count] = (struct coord *)*p;
-        holes->ccount[holes->count] = attr.u.poly_hole->coord_count;
-        memcpy(holes->coords[holes->count], attr.u.poly_hole->coord,
-               holes->ccount[holes->count] * sizeof(struct coord));
+        holes->ccount[holes->count] = hole->coord_count;
+        memcpy(holes->coords[holes->count], hole->coord, holes->ccount[holes->count] * sizeof(struct coord));
         *p += holes->ccount[holes->count] * sizeof(struct coord);
         holes->count++;
     }
@@ -1602,13 +1718,11 @@ static inline struct displayitem_poly_holes *display_add_holes(struct item *item
  * @author Martin Schaller (04/2008)
  */
 static void display_add(struct hash_entry *entry, struct item *item, int count, struct coord *c, char **label,
-                        int label_count) {
+                        int label_count, struct displayitem_attrs *attrs) {
     struct displayitem *di;
     int len, i;
     char *p;
-    struct attr attr;
-    int hole_count = 0;
-    int flags = 0;
+    int hole_count = attrs->hole_count;
 
     /* calculate number of bytes required */
     /* own length */
@@ -1622,25 +1736,14 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
                 len++;
         }
     }
-    /* check for and remember flags (for underground drawing) */
-    item_attr_rewind(item);
-    if (item_attr_get(item, attr_flags, &attr)) {
-        flags = attr.u.num;
-    }
     /* add length for holes */
-    if (entry->needs_holes) {
+    if (hole_count) {
         int hole_total_coords = 0;
-        item_attr_rewind(item);
-        while (item_attr_get(item, attr_poly_hole, &attr)) {
-            hole_count++;
-            hole_total_coords += attr.u.poly_hole->coord_count;
-        }
-        if (hole_count) {
-            int holes_length = sizeof(struct displayitem_poly_holes) + hole_count * sizeof(int)
-                               + hole_count * sizeof(struct coord *) + hole_total_coords * sizeof(struct coord);
-            dbg(lvl_debug, "got %d holes with %d coords total", hole_count, hole_total_coords);
-            len += holes_length;
-        }
+        for (i = 0; i < hole_count; i++)
+            hole_total_coords += attrs->holes[i].u.poly_hole->coord_count;
+        len += sizeof(struct displayitem_poly_holes) + hole_count * sizeof(int) + hole_count * sizeof(struct coord *)
+               + hole_total_coords * sizeof(struct coord);
+        dbg(lvl_debug, "got %d holes with %d coords total", hole_count, hole_total_coords);
     }
 
     p = g_malloc(len);
@@ -1649,11 +1752,11 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
     p += sizeof(*di) + count * sizeof(*c);
     di->item = *item;
     di->z_order = 0;
-    di->flags = flags;
+    di->flags = attrs->flags;
     di->holes = NULL;
     di->label_anchor = -1;
     if (hole_count > 0) {
-        di->holes = display_add_holes(item, hole_count, &p);
+        di->holes = display_add_holes(attrs->holes, hole_count, &p);
     }
     if (label && label_count) {
         di->label = p;
@@ -3802,7 +3905,6 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
     int count, max = displaylist->dc.maxlen, workload = 0;
     int used = 0;
     struct coord *ca;
-    struct attr attr2;
     enum projection pro;
     int need_free = 0;
 
@@ -3855,6 +3957,7 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
             while ((item = map_rect_get_item(displaylist->mr))) {
                 int label_count = 0;
                 char *labels[2];
+                struct displayitem_attrs attrs;
                 struct hash_entry *entry;
                 int coords_left;
                 if (item == &busy_item) {
@@ -3910,31 +4013,26 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
                 if (used < count)
                     used = count;
 
+                displayitem_attrs_collect(item, entry, navit_get_lang_pref(displaylist->navit), &attrs);
                 if (item_is_custom_poi(*item)) {
-                    if (item_attr_get(item, attr_icon_src, &attr2))
-                        labels[1] = map_convert_string(displaylist->m, attr2.u.str);
-                    else
-                        labels[1] = NULL;
+                    /* The custom POI icon name is picked from the label buffer, so those always
+                     * carry a label even when no text element draws it. */
+                    labels[1] = attrs.icon_src ? map_convert_string(displaylist->m, attrs.icon_src) : NULL;
                     label_count = 2;
                 } else {
                     labels[1] = NULL;
                     label_count = 0;
                 }
-                /* The custom POI icon name is picked from the label buffer, so those always carry
-                 * a label even when no text element draws it. */
-                if (entry->needs_label || item_is_custom_poi(*item)) {
-                    const char *lbl = item_label_get(item, navit_get_lang_pref(displaylist->navit));
-                    labels[0] = (char *)lbl;
-                    if (lbl && !label_count)
-                        label_count = 2;
-                } else
-                    labels[0] = NULL;
+                labels[0] = (char *)attrs.label;
+                if (attrs.label && !label_count)
+                    label_count = 2;
                 if (displaylist->conv && label_count) {
                     labels[0] = map_convert_string(displaylist->m, labels[0]);
-                    display_add(entry, item, count, ca, labels, label_count);
+                    display_add(entry, item, count, ca, labels, label_count, &attrs);
                     map_convert_free(labels[0]);
                 } else
-                    display_add(entry, item, count, ca, labels, label_count);
+                    display_add(entry, item, count, ca, labels, label_count, &attrs);
+                displayitem_attrs_free(&attrs);
                 if (labels[1])
                     map_convert_free(labels[1]);
                 workload++;
