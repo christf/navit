@@ -130,6 +130,10 @@ struct hash_entry {
      * display list when it can end up on the screen; fetching it for polygon-only types is a
      * measurable part of the build time. */
     int needs_label;
+    /* Whether any layout rule for this type draws the item's polygon holes (polygons clip
+     * them out, street labels are stroked along their outline). Holes are only collected
+     * while building the display list when they can end up on the screen. */
+    int needs_holes;
     struct displayitem *di;
 };
 
@@ -245,19 +249,22 @@ static struct hash_entry *get_hash_entry(struct displaylist *dl, enum item_type 
     return NULL;
 }
 
-static struct hash_entry *set_hash_entry(struct displaylist *dl, enum item_type type, int needs_label) {
+static struct hash_entry *set_hash_entry(struct displaylist *dl, enum item_type type, int needs_label,
+                                         int needs_holes) {
     int hashidx = (type * 2654435761UL) & (HASH_SIZE - 1);
     int offset = 0;
     for (;;) {
         if (!dl->hash_entries[hashidx].type) {
             dl->hash_entries[hashidx].type = type;
             dl->hash_entries[hashidx].needs_label = needs_label;
+            dl->hash_entries[hashidx].needs_holes = needs_holes;
             if (dl->max_offset < offset)
                 dl->max_offset = offset;
             return &dl->hash_entries[hashidx];
         }
         if (dl->hash_entries[hashidx].type == type) {
             dl->hash_entries[hashidx].needs_label |= needs_label;
+            dl->hash_entries[hashidx].needs_holes |= needs_holes;
             return &dl->hash_entries[hashidx];
         }
         hashidx = (hashidx + 1) & (HASH_SIZE - 1);
@@ -1601,8 +1608,6 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
     char *p;
     struct attr attr;
     int hole_count = 0;
-    int hole_total_coords = 0;
-    int holes_length;
     int flags = 0;
 
     /* calculate number of bytes required */
@@ -1623,16 +1628,20 @@ static void display_add(struct hash_entry *entry, struct item *item, int count, 
         flags = attr.u.num;
     }
     /* add length for holes */
-    item_attr_rewind(item);
-    while (item_attr_get(item, attr_poly_hole, &attr)) {
-        hole_count++;
-        hole_total_coords += attr.u.poly_hole->coord_count;
+    if (entry->needs_holes) {
+        int hole_total_coords = 0;
+        item_attr_rewind(item);
+        while (item_attr_get(item, attr_poly_hole, &attr)) {
+            hole_count++;
+            hole_total_coords += attr.u.poly_hole->coord_count;
+        }
+        if (hole_count) {
+            int holes_length = sizeof(struct displayitem_poly_holes) + hole_count * sizeof(int)
+                               + hole_count * sizeof(struct coord *) + hole_total_coords * sizeof(struct coord);
+            dbg(lvl_debug, "got %d holes with %d coords total", hole_count, hole_total_coords);
+            len += holes_length;
+        }
     }
-    holes_length = sizeof(struct displayitem_poly_holes) + hole_count * sizeof(int)
-                   + hole_count * sizeof(struct coord *) + hole_total_coords * sizeof(struct coord);
-    if (hole_count > 0)
-        dbg(lvl_debug, "got %d holes with %d coords total", hole_count, hole_total_coords);
-    len += holes_length;
 
     p = g_malloc(len);
 
@@ -3697,6 +3706,17 @@ static int itemgra_needs_label(struct itemgra *itemgra) {
     return 0;
 }
 
+static int itemgra_needs_holes(struct itemgra *itemgra) {
+    GList *es = itemgra->elements;
+    while (es) {
+        struct element *e = es->data;
+        if (e->type == element_polygon || e->type == element_text)
+            return 1;
+        es = g_list_next(es);
+    }
+    return 0;
+}
+
 static void displaylist_update_layers(struct displaylist *displaylist, GList *layers, int order) {
     while (layers) {
         struct layer *layer = layers->data;
@@ -3709,9 +3729,10 @@ static void displaylist_update_layers(struct displaylist *displaylist, GList *la
             GList *types = itemgra->type;
             if (itemgra->order.min <= order && itemgra->order.max >= order) {
                 int needs_label = itemgra_needs_label(itemgra);
+                int needs_holes = itemgra_needs_holes(itemgra);
                 while (types) {
                     enum item_type type = (enum item_type)types->data;
-                    set_hash_entry(displaylist, type, needs_label);
+                    set_hash_entry(displaylist, type, needs_label, needs_holes);
                     types = g_list_next(types);
                 }
             }
