@@ -125,6 +125,11 @@ struct display_context {
 #define HASH_SIZE 1024
 struct hash_entry {
     enum item_type type;
+    /* Whether any layout rule for this type draws the item's label (text, icon, image or a
+     * circle with a text size). The label is only fetched from the map while building the
+     * display list when it can end up on the screen; fetching it for polygon-only types is a
+     * measurable part of the build time. */
+    int needs_label;
     struct displayitem *di;
 };
 
@@ -240,18 +245,21 @@ static struct hash_entry *get_hash_entry(struct displaylist *dl, enum item_type 
     return NULL;
 }
 
-static struct hash_entry *set_hash_entry(struct displaylist *dl, enum item_type type) {
+static struct hash_entry *set_hash_entry(struct displaylist *dl, enum item_type type, int needs_label) {
     int hashidx = (type * 2654435761UL) & (HASH_SIZE - 1);
     int offset = 0;
     for (;;) {
         if (!dl->hash_entries[hashidx].type) {
             dl->hash_entries[hashidx].type = type;
+            dl->hash_entries[hashidx].needs_label = needs_label;
             if (dl->max_offset < offset)
                 dl->max_offset = offset;
             return &dl->hash_entries[hashidx];
         }
-        if (dl->hash_entries[hashidx].type == type)
+        if (dl->hash_entries[hashidx].type == type) {
+            dl->hash_entries[hashidx].needs_label |= needs_label;
             return &dl->hash_entries[hashidx];
+        }
         hashidx = (hashidx + 1) & (HASH_SIZE - 1);
         offset++;
     }
@@ -3674,6 +3682,21 @@ static int displaylist_draw_slice(struct displaylist *displaylist, int budget, g
  */
 extern void *route_selection;
 
+/* Whether any element of the rule consumes the item's label: text draws it, icons of custom
+ * POIs take their image name from it, images take their path from it and circles draw it when
+ * they carry a text size. */
+static int itemgra_needs_label(struct itemgra *itemgra) {
+    GList *es = itemgra->elements;
+    while (es) {
+        struct element *e = es->data;
+        if (e->type == element_text || e->type == element_icon || e->type == element_image
+            || (e->type == element_circle && e->text_size))
+            return 1;
+        es = g_list_next(es);
+    }
+    return 0;
+}
+
 static void displaylist_update_layers(struct displaylist *displaylist, GList *layers, int order) {
     while (layers) {
         struct layer *layer = layers->data;
@@ -3685,9 +3708,10 @@ static void displaylist_update_layers(struct displaylist *displaylist, GList *la
             struct itemgra *itemgra = itemgras->data;
             GList *types = itemgra->type;
             if (itemgra->order.min <= order && itemgra->order.max >= order) {
+                int needs_label = itemgra_needs_label(itemgra);
                 while (types) {
                     enum item_type type = (enum item_type)types->data;
-                    set_hash_entry(displaylist, type);
+                    set_hash_entry(displaylist, type, needs_label);
                     types = g_list_next(types);
                 }
             }
@@ -3875,12 +3899,15 @@ static void do_draw(struct displaylist *displaylist, int cancel, int flags) {
                     labels[1] = NULL;
                     label_count = 0;
                 }
-                {
+                /* The custom POI icon name is picked from the label buffer, so those always carry
+                 * a label even when no text element draws it. */
+                if (entry->needs_label || item_is_custom_poi(*item)) {
                     const char *lbl = item_label_get(item, navit_get_lang_pref(displaylist->navit));
                     labels[0] = (char *)lbl;
                     if (lbl && !label_count)
                         label_count = 2;
-                }
+                } else
+                    labels[0] = NULL;
                 if (displaylist->conv && label_count) {
                     labels[0] = map_convert_string(displaylist->m, labels[0]);
                     display_add(entry, item, count, ca, labels, label_count);

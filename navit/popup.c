@@ -280,6 +280,7 @@ static void popup_show_item(struct navit *nav, void *popup, struct displayitem *
     void *menu, *menu_item, *menu_dist;
     char *label;
     struct item *item, *diitem;
+    struct attr attr;
     int count;
 
     label = graphics_displayitem_get_label(di);
@@ -287,6 +288,16 @@ static void popup_show_item(struct navit *nav, void *popup, struct displayitem *
     count = graphics_displayitem_get_coord_count(di);
 
     dbg_assert(diitem);
+
+    if (!label && diitem->map) {
+        /* The display list only carries labels that a layout rule can draw; read the name of
+         * everything else straight from the map so the popup can still show it. */
+        mr = map_rect_new(diitem->map, NULL);
+        item = map_rect_get_item_byid(mr, diitem->id_hi, diitem->id_lo);
+        if (item && item_attr_get(item, attr_label, &attr))
+            label = map_convert_string_tmp(item->map, attr.u.str);
+        map_rect_destroy(mr);
+    }
 
     if (label)
         menu = popup_printf(popup, menu_type_submenu, "%s '%s' (%d coords)", item_to_name(diitem->type), label, count);
