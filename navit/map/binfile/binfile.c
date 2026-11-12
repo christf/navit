@@ -452,9 +452,11 @@ static int binfile_attr_get(void *priv_data, enum attr_type attr_type, struct at
         if (type == attr_town_name && mr->item.type < type_line)
             mr->label_attr[4] = t->pos_attr;
         if (type == attr_type || attr_type == attr_any) {
+#ifdef DEBUG_ATTR_GET
             if (attr_type == attr_any) {
                 dbg(lvl_debug, "pos %p attr %s size %d", t->pos_attr - 1, attr_to_name(type), size);
             }
+#endif
             attr->type = type;
             if (ATTR_IS_GROUP(type)) {
                 int i = 0;
