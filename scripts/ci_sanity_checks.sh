@@ -7,6 +7,17 @@ set -u
 # the path given. This can be used to provide the user with the diff from the on CI run of this script which the User
 # can then import and commit.
 #
+# Environment variables (set by GitHub Actions or manually):
+#   TARGET_BRANCH  ref to diff against (e.g. refs/remotes/origin/trunk)
+#   BASE_COMMIT    commit SHA to diff against (fallback if TARGET_BRANCH unavailable)
+#
+# Local fallback order (if neither TARGET_BRANCH nor BASE_COMMIT is set):
+#   1. origin/HEAD
+#   2. Fetched upstream remote's trunk (navit-gps/navit)
+#   3. origin/trunk
+# If no base can be determined, the file-by-file checks are skipped but
+# locale/DTD checks still run.
+#
 # WARNING: make sure you commit ALL your changes before running it locally if you ever do it because it will run a git
 # checkout -- which will reset your changes on all files...
 # #####################################################################################################################
@@ -16,8 +27,48 @@ GIT_DIFF_OUTPUT="${1:-/dev/stdout}"
 KEEPTEMP=${2:-false}
 TARGET_BRANCH=refs/remotes/origin/trunk
 
+# Base to compare against. CI passes the PR target branch in TARGET_BRANCH and
+# its base commit in BASE_COMMIT; locally pick the best trunk available.
+if [ -z "${TARGET_BRANCH:-}" ]; then
+    # 1. Try origin/HEAD
+    if git show-ref --verify --quiet refs/remotes/origin/HEAD; then
+        TARGET_BRANCH=refs/remotes/origin/HEAD
+    fi
+fi
+
+if [ -z "${TARGET_BRANCH:-}" ]; then
+    # 2. Try fetched upstream remote's trunk (navit-gps/navit)
+    for remote in $(git remote); do
+        url=$(git remote get-url "$remote" 2>/dev/null) || continue
+        case "$url" in
+        *navit-gps/navit*)
+            TARGET_BRANCH="refs/remotes/$remote/trunk"
+            break
+            ;;
+        esac
+    done
+fi
+
+if [ -z "${TARGET_BRANCH:-}" ] && git show-ref --verify --quiet refs/remotes/origin/trunk; then
+    # 3. Fallback to origin/trunk
+    TARGET_BRANCH=refs/remotes/origin/trunk
+fi
+
+base=${TARGET_BRANCH:-${BASE_COMMIT:-}}
+
+# Fork point of this branch. Diffing and linting from here covers only the
+# commits the branch introduces, not upstream commits the base has not merged.
+mergebase=
+if [ -n "$base" ]; then
+    mergebase=$(git merge-base HEAD "$base" 2>/dev/null) || mergebase=
+    if [ -z "$mergebase" ] && [ -n "${BASE_COMMIT:-}" ] && [ "$base" != "$BASE_COMMIT" ]; then
+        base=$BASE_COMMIT
+        mergebase=$(git merge-base HEAD "$base") || mergebase=
+    fi
+fi
+
 cleanup() {
-	$KEEPTEMP || rm -rf build-locale
+    $KEEPTEMP || rm -rf build-locale
 }
 trap cleanup EXIT
 
@@ -35,66 +86,67 @@ check_diff(){
 }
 
 check_po() {
-	local retval=0
+    local retval=0
 
-	mkdir -p build-locale
-	cd build-locale
-	cmake .. >/dev/null
-	cd po
-	make -j5 locales >/dev/null || return 1
+    mkdir -p build-locale
+    cd build-locale
+    cmake .. >/dev/null
+    cd po
+    make -j5 locales >/dev/null || return 1
 
-	for po in *.po
-	do
-		if diff -u $po ../../po/$po.in 2>&1 | grep -Eq "[+-]msgid"
-		then
-			echo "[ERROR] new or changed msgid found in $po.in" >&2
-			cp $po ../../po/$po.in
-			retval=2
-		fi
-	done
-	cd ../..
-	return $retval
+    for po in *.po
+    do
+        if diff -u $po ../../po/$po.in 2>&1 | grep -Eq "[+-]msgid"
+        then
+            echo "[ERROR] new or changed msgid found in $po.in" >&2
+            cp $po ../../po/$po.in
+            retval=2
+        fi
+    done
+    cd ../..
+    return $retval
 }
 
 check_po || {
-	echo "[ERROR] found incorrect or outdated po-files. Please check the differences in the current source tree for po/*.po" >&2
-	return_code=2
+    echo "[ERROR] found incorrect or outdated po-files. Please check the differences in the current source tree for po/*.po" >&2
+    return_code=2
 }
 
 git config --global --add safe.directory $(pwd)
 
-# List the files that are different from the trunk
-for f in $(git --no-pager diff --name-only $TARGET_BRANCH | sort -u); do
-    if [[ "${f}" =~ navit/support/ ]] || [[ "${f}" =~ navit/fib-1\.1/ ]] || [[ "${f}" =~ navit/traffic/permanentrestrictions/ ]] ; then
-        echo "[DEBUG] Skipping file ${f} ..."
-        continue
-    fi
-    if [[ -e "${f}" ]]; then
-
-        # Checks for trailing spaces
-        if [[ "${f: -4}" != ".bat" ]]; then
-            echo "[INFO] Checking for trailing spaces on ${f}..."
-            if [[ "$(file -bi """${f}""")" =~ ^text ]]; then
-                sed 's/\s*$//' -i "${f}"
-            fi
+# List the files that are different from the base - only if we have a mergebase
+if [ -n "$mergebase" ]; then
+    for f in $(git --no-pager diff --name-only "$mergebase" | sort -u); do
+        if [[ "${f}" =~ navit/support/ ]] || [[ "${f}" =~ navit/fib-1\.1/ ]] || [[ "${f}" =~ navit/traffic/permanentrestrictions/ ]] ; then
+            echo "[DEBUG] Skipping file ${f} ..."
+            continue
         fi
+        if [[ -e "${f}" ]]; then
 
-        # Formats any *.h *.c and *.cpp files
-        if [[ "${f: -2}" == ".h" ]] || [[ "${f: -2}" == ".c" ]] || [[ "${f: -4}" == ".cpp" ]]; then
-            echo "[INFO] Checking for indentation and style compliance on ${f}..."
-            clang-format -i "${f}"
-
-            # Reject assignments embedded in function call arguments, e.g.
-            #   foo(bar(baz = qux()));
-            # Such an assignment makes the line longer and the assignment harder to read; it should be
-            # unrolled into a separate statement before the call. Assignments in control-flow conditions (if/while/for/
-            # switch) are accepted C idioms and are not flagged. clang-format cannot detect this, as it
-            # only reformats whitespace and never rejects a construct.
-            echo "[INFO] Checking for assignment in function call arguments on ${f}..."
-            if [[ "${f}" == *"/vehicle/wince/"* ]]; then
-                continue
+            # Checks for trailing spaces
+            if [[ "${f: -4}" != ".bat" ]]; then
+                echo "[INFO] Checking for trailing spaces on ${f}..."
+                if [[ "$(file -bi """${f}""")" =~ ^text ]]; then
+                    sed 's/\s*$//' -i "${f}"
+                fi
             fi
-            assignments="$(grep -nE '[,(][[:space:]]*[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z0-9_]+[[:space:]]*=[^=]' "${f}" | grep -vE '\b(if|while|for|switch)[[:space:]]*\(' | python3 -c "
+
+            # Formats any *.h *.c and *.cpp files
+            if [[ "${f: -2}" == ".h" ]] || [[ "${f: -2}" == ".c" ]] || [[ "${f: -4}" == ".cpp" ]]; then
+                echo "[INFO] Checking for indentation and style compliance on ${f}..."
+                clang-format -i "${f}"
+
+                # Reject assignments embedded in function call arguments, e.g.
+                #   foo(bar(baz = qux()));
+                # Such an assignment makes the line longer and the assignment harder to read; it should be
+                # unrolled into a separate statement before the call. Assignments in control-flow conditions (if/while/for/
+                # switch) are accepted C idioms and are not flagged. clang-format cannot detect this, as it
+                # only reformats whitespace and never rejects a construct.
+                echo "[INFO] Checking for assignment in function call arguments on ${f}..."
+                if [[ "${f}" == *"/vehicle/wince/"* ]]; then
+                    continue
+                fi
+                assignments="$(grep -nE '[,(][[:space:]]*[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z0-9_]+[[:space:]]*=[^=]' "${f}" | grep -vE '\b(if|while|for|switch)[[:space:]]*\(' | python3 -c "
 import sys,re
 def s(c):
     c=re.sub(r'//.*$','',c,flags=re.M);c=re.sub(r'/\*.*?\*/','',c,flags=re.S);c=re.sub(r'\"(?:\\\\.|[^\"\\\\])*\"','',c);c=re.sub(r\"'(?:\\\\.|[^'\\\\])*'\",'',c)
@@ -102,22 +154,25 @@ def s(c):
 for l in sys.stdin:
     if re.search(r'[,(][[:space:]]*[A-Za-z_][A-Za-z0-9_]*(->|\.)[A-Za-z0-9_]+[[:space:]]*=[^=]', s(l)) and not re.search(r'\b(if|while|for|switch)[[:space:]]*\(', s(l)): print(l.rstrip())
 " 2>/dev/null || true)"
-            if [[ -n "${assignments}" ]]; then
-                echo "[ERROR] found assignment in function call argument in ${f}:" >&2
-                echo "${assignments}" >&2
-                echo "[ERROR] unroll the assignment into a separate statement before the call" >&2
-                return_code=4
+                if [[ -n "${assignments}" ]]; then
+                    echo "[ERROR] found assignment in function call argument in ${f}:" >&2
+                    echo "${assignments}" >&2
+                    echo "[ERROR] unroll the assignment into a separate statement before the call" >&2
+                    return_code=4
+                fi
             fi
-        fi
 
-       fi
-done
+        fi
+    done
+else
+    echo "[WARN] No merge base found (set TARGET_BRANCH or BASE_COMMIT). Skipping file-by-file checks. Locale/DTD checks still run."
+fi
 
 
 echo "[INFO] Checking for compliance with the DTD using xmllint on *shipped.xml"
 if ! find . -type f -name "*shipped.xml" -print0 | xargs -0L1 xmllint --noout --dtdvalid navit/navit.dtd; then
-		echo "[ERROR] one of the \*shipped.xml-files doesn't validate against the navit/navit.dtd using xmllint" >&2
-		return_code=3
+    echo "[ERROR] one of the \*shipped.xml-files doesn't validate against the navit/navit.dtd using xmllint" >&2
+    return_code=3
 fi
 
 check_diff
