@@ -9,7 +9,6 @@ The rest of this webpage is meant for advanced/power users who'd like to fiddle 
 .. toctree::
    :glob:
 
-   advanced/introduction
    advanced/navit_commands
    integrations
    advanced/options
