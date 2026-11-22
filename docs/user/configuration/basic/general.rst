@@ -48,7 +48,7 @@ When Navit starts, it will display the map at a pre-defined **zoom**. The defaul
 
 	zoom="256"
 
-For those using the SDL GUI, a level of 128 is recommended.
+On small screens, a level of 128 may be more convenient.
 
 .. code-block:: xml
 

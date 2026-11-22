@@ -10,8 +10,7 @@ Writing a new graphic driver
 
 The graphic driver tells NavIt how to render the map using a specific
 library. The same graphic driver can be used in several GUIs. For
-example, you can render the map in `OpenGL <OpenGL>`__ with the `GTK
-GUI <GTK_GUI>`__ and the `SDL GUI <SDL_GUI>`__.
+example, OpenGL can be used with the GTK and Internal GUIs.
 
 When the `GUI <GUI>`__ handles the user interaction, the graphic driver
 is called internally by NavIt when necessary.

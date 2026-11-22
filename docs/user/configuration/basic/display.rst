@@ -48,8 +48,11 @@ GUI      android cocoa gd   gtk_drawing_area gtk_gl_ext opengl qt_qpainter sdl w
 ======== ======= ===== ==== ================ ========== ====== =========== === ===== === =======
 GTK
 Internal Yes     Yes   Yes  Yes              Yes        Yes    Yes         Yes Yes   Yes
-QML2
 ======== ======= ===== ==== ================ ========== ====== =========== === ===== === =======
+
+Qt5 QML (``qt5_qml``) is available with the ``qt5`` graphics driver; see
+:doc:`/user/configuration/gui/qt5_qml`. The legacy Qt 4 QML GUI is
+documented in :doc:`/user/configuration/gui/qml`.
 
 Generic GUI Options
 ~~~~~~~~~~~~~~~~~~~
