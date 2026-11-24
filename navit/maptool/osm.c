@@ -16,40 +16,39 @@
  * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA  02110-1301, USA.
  */
+#include "navit_lfs.h"
 #ifdef _MSC_VER
 #    define strcasecmp _stricmp
 #    define snprintf _snprintf
 #else
 #    include <unistd.h>
 #endif
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <math.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-
-#include "attr.h"
-#include "attr_type_def.h"
-#include "coord.h"
 #include "country.h"
 #include "debug.h"
 #include "file.h"
-#include "geom.h"
-#include "glib.h"
-#include "item.h"
-#include "item_type_def.h"
+#include "linguistics.h"
 #include "maptool.h"
-#include "projection.h"
+#include "profile.h"
 #include "transform.h"
+#include "types.h"
+#include <ctype.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
-struct relations;
-struct relations_func;
-struct zip_info;
+#ifndef M_PI
+#    define M_PI 3.14159265358979323846
+#    define M_PI_4 0.785398163397448309616
+#endif
+
+#define BELOW_DEFAULT_HEIGHT_VALUE "2.5"              // Use this height when maxheight=below_default
+#define HGV_WEIGHT_NO_CONDITION_FOUND "(weight>3.5)"  // Use this weight if maxspped:conditional:hgv without confition
+
+#define ANSI_RED "\e[30;31m"
+#define ANSI_YEL "\e[30;43m"
+#define ANSI_WHT "\e[30;37m"
+#define ANSI_GRN "\e[30;32m"
+#define ANSI_DEF "\e[0m"
 
 static int in_way, in_node, in_relation;
 osmid nodeid, wayid;
@@ -61,7 +60,20 @@ static int attr_present_count;
 
 static struct item_bin item;
 
+struct conditionallimit {
+    char *condition;
+    int speed;
+};
+
 int maxspeed_attr_value;
+int maxheight_attr_value;
+int maxlength_attr_value;
+int maxwidth_attr_value;
+int maxweight_attr_value;                          // actual weight
+int maxaxleload_attr_value;                        // axle weight
+struct conditionallimit condlimit_attr_value;      // conditional limit
+struct conditionallimit condlimit_fwd_attr_value;  // conditional limit
+struct conditionallimit condlimit_bwd_attr_value;  // conditional limit
 
 char debug_attr_buffer[BUFFER_SIZE];
 
@@ -100,6 +112,7 @@ static int attr_mapping_rel2poly_place_count;
 
 static int attr_longest_match(struct attr_mapping **mapping, int mapping_count, enum item_type *types, int types_count);
 static void attr_longest_match_clear(void);
+extern long long int getcurrentid(void);
 
 enum attr_strings_type {
     attr_string_phone,
@@ -121,6 +134,10 @@ enum attr_strings_type {
     attr_string_postal,
     attr_string_population,
     attr_string_county_name,
+    attr_string_maxspeed_conditional_condition,
+    attr_string_maxspeed_fwd_conditional_condition,
+    attr_string_maxspeed_bwd_conditional_condition,
+    attr_string_maxspeed_conditional_raw_condition,
     attr_string_last,
 };
 
@@ -156,13 +173,11 @@ struct country_table {
                        * Each character of the string specifies how to treat the corresponding admin level.
                        * The first character corresponds to level 3, each following character to the next
                        * lower level (usually up to level 8, but that is just a convention):
-                       * `s`: use the name as the state label,
-                       * `c`: use the name as the county label,
-                       * `m`: use the name as the municipality label,
-                       * `M`: same as `m`, but additionally use the boundary as the town boundary,
-                       * `T`: use the boundary the town boundary and ignore the name. All other characters
-                       *      are ignored; by convention use the digit corresponding to the admin level to
-                       *      indicate this level should be skipped.
+                       * `s`: use the name as the state label, `c`: use the name as the county label,
+                       * `m`: use the name as the municipality label, `M`: same as `m`, but additionally
+                       * use the boundary as the town boundary, `T`: use the boundary the town boundary and
+                       * ignore the name. All other characters are ignored; by convention use the digit
+                       * corresponding to the admin level to indicate this level should be skipped.
                        *
                        * See
                        * https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dadministrative#10_admin_level_values_for_specific_countries
@@ -433,406 +448,643 @@ struct country_table {
 //   otherwise - nodes
 
 static char *attrmap = {
-    "n	*=*			point_unkn\n"
-    "?	addr:housenumber=*	house_number\n"
-    "?	aeroway=aerodrome	poi_airport\n"
-    "?	aeroway=airport		poi_airport\n"
-    "?	aeroway=helipad		poi_heliport\n"
-    "?	aeroway=terminal	poi_airport\n"
-    "?	amenity=atm		poi_atm\n"
-    "?	amenity=bank		poi_bank\n"
-    "?	amenity=bar		poi_bar\n"
-    "n	amenity=bench		poi_bench\n"
-    "?	amenity=bicycle_rental	poi_bicycle_rental\n"
-    "?	amenity=bicycle_parking	poi_bicycle_parking\n"
-    "?	amenity=biergarten	poi_biergarten\n"
-    "?	amenity=bus_station	poi_bus_station\n"
-    "?	amenity=cafe		poi_cafe\n"
-    "?	amenity=car_sharing	poi_car_sharing\n"
-    "?	amenity=car_wash	poi_car_wash\n"
-    "?	amenity=cinema		poi_cinema\n"
-    "?	amenity=college		poi_school_college\n"
-    "?	amenity=courthouse	poi_justice\n"
-    "?	amenity=drinking_water	poi_potable_water\n"
-    "?	amenity=fast_food	poi_fastfood\n"
-    "?	amenity=fire_station	poi_firebrigade\n"
-    "?	amenity=fountain	poi_fountain\n"
-    "?	amenity=fuel		poi_fuel\n"
-    "?	amenity=grave_yard	poi_cemetery\n"
-    "?	amenity=hospital	poi_hospital\n"
-    "?	amenity=hunting_stand	poi_hunting_stand\n"
-    "?	amenity=kindergarten	poi_kindergarten\n"
-    "?	amenity=library		poi_library\n"
-    "?	amenity=nightclub	poi_nightclub\n"
-    "?	amenity=park_bench	poi_bench\n"
-    "?	amenity=parking		poi_car_parking\n"
-    "?	amenity=pharmacy	poi_pharmacy\n"
-    "?	amenity=place_of_worship,religion=christian	poi_church\n"
-    "?	amenity=place_of_worship			poi_worship\n"
-    "?	amenity=police		poi_police\n"
-    "?	amenity=post_box	poi_post_box\n"
-    "?	amenity=post_office	poi_post_office\n"
-    "?	amenity=prison		poi_prison\n"
-    "?	amenity=pub		poi_pub\n"
-    "?	amenity=public_building	poi_public_office\n"
-    "?	amenity=recycling	poi_recycling\n"
-    "?	amenity=restaurant,cuisine=fine_dining		poi_dining\n"
-    "?	amenity=restaurant				poi_restaurant\n"
-    "?	amenity=school		poi_school\n"
-    "?	amenity=shelter		poi_shelter\n"
-    "?	amenity=taxi		poi_taxi\n"
-    "?	amenity=tec_common	tec_common\n"
-    "?	amenity=telephone	poi_telephone\n"
-    "?	amenity=theatre		poi_theater\n"
-    "?	amenity=toilets		poi_restroom\n"
-    "?	amenity=townhall	poi_townhall\n"
-    "?	amenity=university	poi_school_university\n"
-    "?	amenity=vending_machine	poi_vending_machine\n"
-    "n	barrier=bollard		barrier_bollard\n"
-    "n	barrier=cycle_barrier	barrier_cycle\n"
-    "n	barrier=lift_gate	barrier_lift_gate\n"
-    "?	car=car_rental		poi_car_rent\n"
-    "?	highway=bus_station	poi_bus_station\n"
-    "?	highway=bus_stop	poi_bus_stop\n"
-    "n	highway=mini_roundabout	mini_roundabout\n"
-    "n	highway=motorway_junction	highway_exit\n"
-    "n	highway=stop		traffic_sign_stop\n"
-    "n	highway=toll_booth	poi_toll_booth\n"
-    "n	highway=traffic_signals	traffic_signals\n"
-    "n	highway=turning_circle	turning_circle\n"
-    "?	historic=boundary_stone	poi_boundary_stone\n"
-    "?	historic=castle		poi_castle\n"
-    "?	historic=memorial	poi_memorial\n"
-    "?	historic=monument	poi_monument\n"
-    "?	historic=ruins		poi_ruins\n"
-    "n	historic=archaeological_site	poi_archaeological_site\n"
-    //	"?	historic=*		poi_ruins\n"
-    "?	landuse=cemetery	poi_cemetery\n"
-    "?	leisure=fishing		poi_fish\n"
-    "?	leisure=golf_course	poi_golf\n"
-    "?	leisure=marina		poi_marine\n"
-    "?	leisure=playground	poi_playground\n"
-    "?	leisure=slipway		poi_boat_ramp\n"
-    "?	leisure=sports_centre	poi_sport\n"
-    "?	leisure=stadium		poi_stadium\n"
-    "?	man_made=tower		poi_tower\n"
-    "?	military=airfield	poi_military\n"
-    "?	military=barracks	poi_military\n"
-    "?	military=bunker		poi_military\n"
-    "?	military=danger_area	poi_danger_area\n"
-    "?	military=range		poi_military\n"
-    "?	natural=bay		poi_bay\n"
-    "?	natural=peak,ele=*		poi_peak\n"  // show only major peaks with elevation
-    "?	natural=tree		poi_tree\n"
-    "n	place=city		town_label_2e5\n"
-    "n	place=hamlet		town_label_2e2\n"
-    "n	place=locality		town_label_2e0\n"
-    "n	place=suburb		district_label\n"
-    "n	place=town		town_label_2e4\n"
-    "n	place=village		town_label_2e3\n"
-    "n	power=tower		power_tower\n"
-    "n	power=sub_station	power_substation\n"
-    "n	railway=halt		poi_rail_halt\n"
-    "n	railway=level_crossing	poi_level_crossing\n"
-    "?	railway=station		poi_rail_station\n"
-    "?	railway=tram_stop	poi_rail_tram_stop\n"
-    "?	shop=baker		poi_shop_baker\n"
-    "?	shop=bakery		poi_shop_baker\n"
-    "?	shop=beverages		poi_shop_beverages\n"
-    "?	shop=bicycle		poi_shop_bicycle\n"
-    "?	shop=butcher		poi_shop_butcher\n"
-    "?	shop=car		poi_car_dealer_parts\n"
-    "?	shop=car_repair		poi_repair_service\n"
-    "?	shop=clothes		poi_shop_apparel\n"
-    "?	shop=convenience	poi_shop_grocery\n"
-    "?	shop=chemist		poi_shop_drugstore\n"
-    "?	shop=florist		poi_shop_florist\n"
-    "?	shop=fruit		poi_shop_fruit\n"
-    "?	shop=furniture		poi_shop_furniture\n"
-    "?	shop=garden_centre	poi_shop_handg\n"
-    "?	shop=hardware		poi_shop_handg\n"
-    "?	shop=hairdresser	poi_hairdresser\n"
-    "?	shop=kiosk		poi_shop_kiosk\n"
-    "?	shop=optician		poi_shop_optician\n"
-    "?	shop=parfum		poi_shop_parfum\n"
-    "?	shop=photo		poi_shop_photo\n"
-    "?	shop=shoes		poi_shop_shoes\n"
-    "?	shop=supermarket	poi_shopping\n"
-    "?	shop=mall               poi_mall\n"
-    "?	sport=10pin		poi_bowling\n"
-    "?	sport=baseball		poi_baseball\n"
-    "?	sport=basketball	poi_basketball\n"
-    "?	sport=climbing		poi_climbing\n"
-    "?	sport=golf		poi_golf\n"
-    "?	sport=motor_sports	poi_motor_sport\n"
-    "?	sport=skiing		poi_skiing\n"
-    "?	sport=soccer		poi_soccer\n"
-    "?	sport=stadium		poi_stadium\n"
-    "?	sport=swimming		poi_swimming\n"
-    "?	sport=tennis		poi_tennis\n"
-    "?	tourism=attraction	poi_attraction\n"
-    "?	tourism=camp_site	poi_camp_rv\n"
-    "?	tourism=caravan_site	poi_camp_rv\n"
-    "?	tourism=guest_house	poi_guesthouse\n"
-    "?	tourism=hostel		poi_hostel\n"
-    "?	tourism=hotel		poi_hotel\n"
-    "?	tourism=information	poi_information\n"
-    "?	tourism=motel		poi_motel\n"
-    "?	tourism=museum		poi_museum_history\n"
-    "?	tourism=picnic_site	poi_picnic\n"
-    "?	tourism=theme_park	poi_resort\n"
-    "?	tourism=viewpoint	poi_viewpoint\n"
-    "?	tourism=zoo		poi_zoo\n"
-    "n	natural=cave_entrance      poi_cave\n"
-    "n	traffic_sign=city_limit	traffic_sign_city_limit\n"
-    "n	highway=speed_camera	tec_common\n"
-    "w	*=*			street_unkn\n"
-    "w	addr:interpolation=even	house_number_interpolation_even\n"
-    "w	addr:interpolation=odd	house_number_interpolation_odd\n"
-    "w	addr:interpolation=all	house_number_interpolation_all\n"
-    "w	addr:interpolation=alphabetic	house_number_interpolation_alphabetic\n"
-    "w	aerialway=cable_car	lift_cable_car\n"
-    "w	aerialway=chair_lift	lift_chair\n"
-    "w	aerialway=drag_lift	lift_drag\n"
-    "w	aeroway=aerodrome	poly_airport\n"
+    "n  *=*         point_unkn\n"
+    "?  addr:housenumber=*  house_number\n"
+    "?  aeroway=aerodrome   poi_airport\n"
+    "?  aeroway=airport     poi_airport\n"
+    "?  aeroway=helipad     poi_heliport\n"
+    "?  aeroway=terminal    poi_airport\n"
+    "?  amenity=atm     poi_atm\n"
+    "?  amenity=bank        poi_bank\n"
+    "?  amenity=bar     poi_bar\n"
+    "n  amenity=bench       poi_bench\n"
+    "?  amenity=bicycle_rental  poi_bicycle_rental\n"
+    "?  amenity=bicycle_parking poi_bicycle_parking\n"
+    "?  amenity=biergarten  poi_biergarten\n"
+    "?  amenity=bus_station poi_bus_station\n"
+    "?  amenity=cafe        poi_cafe\n"
+    "?  amenity=car_sharing poi_car_sharing\n"
+    "?  amenity=car_wash    poi_car_wash\n"
+    "?  amenity=cinema      poi_cinema\n"
+    "?  amenity=college     poi_school_college\n"
+    "?  amenity=courthouse  poi_justice\n"
+    "?  amenity=drinking_water  poi_potable_water\n"
+    "?  amenity=fast_food   poi_fastfood\n"
+    "?  amenity=fire_station    poi_firebrigade\n"
+    "?  amenity=fountain    poi_fountain\n"
+    "?  amenity=fuel        poi_fuel\n"
+    "?  amenity=grave_yard  poi_cemetery\n"
+    "?  amenity=hospital    poi_hospital\n"
+    "?  amenity=hunting_stand   poi_hunting_stand\n"
+    "?  amenity=kindergarten    poi_kindergarten\n"
+    "?  amenity=library     poi_library\n"
+    "?  amenity=nightclub   poi_nightclub\n"
+    "?  amenity=park_bench  poi_bench\n"
+    "?  amenity=parking     poi_car_parking\n"
+    "?  amenity=pharmacy    poi_pharmacy\n"
+    "?  amenity=place_of_worship,religion=christian poi_church\n"
+    "?  amenity=place_of_worship            poi_worship\n"
+    "?  amenity=police      poi_police\n"
+    "?  amenity=post_box    poi_post_box\n"
+    "?  amenity=post_office poi_post_office\n"
+    "?  amenity=prison      poi_prison\n"
+    "?  amenity=pub     poi_pub\n"
+    "?  amenity=public_building poi_public_office\n"
+    "?  amenity=recycling   poi_recycling\n"
+    "?  amenity=restaurant,cuisine=fine_dining      poi_dining\n"
+    "?  amenity=restaurant              poi_restaurant\n"
+    "?  amenity=school      poi_school\n"
+    "?  amenity=shelter     poi_shelter\n"
+    "?  amenity=taxi        poi_taxi\n"
+    "?  amenity=tec_common  tec_common\n"
+    "?  amenity=telephone   poi_telephone\n"
+    "?  amenity=theatre     poi_theater\n"
+    "?  amenity=toilets     poi_restroom\n"
+    "?  amenity=townhall    poi_townhall\n"
+    "?  amenity=university  poi_school_university\n"
+    "?  amenity=vending_machine poi_vending_machine\n"
+    "n  barrier=bollard     barrier_bollard\n"
+    "n  barrier=cycle_barrier   barrier_cycle\n"
+    "n  barrier=lift_gate   barrier_lift_gate\n"
+    "?  car=car_rental      poi_car_rent\n"
+    "?  highway=bus_station poi_bus_station\n"
+    "?  highway=bus_stop    poi_bus_stop\n"
+    "n  highway=mini_roundabout mini_roundabout\n"
+    "n  highway=motorway_junction   highway_exit\n"
+    "n  highway=stop        traffic_sign_stop\n"
+    "n  highway=toll_booth  poi_toll_booth\n"
+    "n  highway=traffic_signals traffic_signals\n"
+    "n  highway=turning_circle  turning_circle\n"
+    "?  historic=boundary_stone poi_boundary_stone\n"
+    "?  historic=castle     poi_castle\n"
+    "?  historic=memorial   poi_memorial\n"
+    "?  historic=monument   poi_monument\n"
+    "?  historic=ruins      poi_ruins\n"
+    "n  historic=archaeological_site    poi_archaeological_site\n"
+    //  "?  historic=*      poi_ruins\n"
+    "?  landuse=cemetery    poi_cemetery\n"
+    "?  leisure=fishing     poi_fish\n"
+    "?  leisure=golf_course poi_golf\n"
+    "?  leisure=marina      poi_marine\n"
+    "?  leisure=playground  poi_playground\n"
+    "?  leisure=slipway     poi_boat_ramp\n"
+    "?  leisure=sports_centre   poi_sport\n"
+    "?  leisure=stadium     poi_stadium\n"
+    "?  man_made=tower      poi_tower\n"
+    "?  military=airfield   poi_military\n"
+    "?  military=barracks   poi_military\n"
+    "?  military=bunker     poi_military\n"
+    "?  military=danger_area    poi_danger_area\n"
+    "?  military=range      poi_military\n"
+    "?  natural=bay     poi_bay\n"
+    "?  natural=peak,ele=*      poi_peak\n"  // show only major peaks with elevation
+    "?  natural=tree        poi_tree\n"
+    "n  place=city      town_label_2e5\n"
+    "n  place=hamlet        town_label_2e2\n"
+    "n  place=locality      town_label_2e0\n"
+    "n  place=suburb        district_label\n"
+    "n  place=town      town_label_2e4\n"
+    "n  place=village       town_label_2e3\n"
+    "n  power=tower     power_tower\n"
+    "n  power=sub_station   power_substation\n"
+    "n  railway=halt        poi_rail_halt\n"
+    "n  railway=level_crossing  poi_level_crossing\n"
+    "?  railway=station     poi_rail_station\n"
+    "?  railway=tram_stop   poi_rail_tram_stop\n"
+    "?  shop=baker      poi_shop_baker\n"
+    "?  shop=bakery     poi_shop_baker\n"
+    "?  shop=beverages      poi_shop_beverages\n"
+    "?  shop=bicycle        poi_shop_bicycle\n"
+    "?  shop=butcher        poi_shop_butcher\n"
+    "?  shop=car        poi_car_dealer_parts\n"
+    "?  shop=car_repair     poi_repair_service\n"
+    "?  shop=clothes        poi_shop_apparel\n"
+    "?  shop=convenience    poi_shop_grocery\n"
+    "?  shop=chemist        poi_shop_drugstore\n"
+    "?  shop=florist        poi_shop_florist\n"
+    "?  shop=fruit      poi_shop_fruit\n"
+    "?  shop=furniture      poi_shop_furniture\n"
+    "?  shop=garden_centre  poi_shop_handg\n"
+    "?  shop=hardware       poi_shop_handg\n"
+    "?  shop=hairdresser    poi_hairdresser\n"
+    "?  shop=kiosk      poi_shop_kiosk\n"
+    "?  shop=optician       poi_shop_optician\n"
+    "?  shop=parfum     poi_shop_parfum\n"
+    "?  shop=photo      poi_shop_photo\n"
+    "?  shop=shoes      poi_shop_shoes\n"
+    "?  shop=supermarket    poi_shopping\n"
+    "?  shop=mall               poi_mall\n"
+    "?  sport=10pin     poi_bowling\n"
+    "?  sport=baseball      poi_baseball\n"
+    "?  sport=basketball    poi_basketball\n"
+    "?  sport=climbing      poi_climbing\n"
+    "?  sport=golf      poi_golf\n"
+    "?  sport=motor_sports  poi_motor_sport\n"
+    "?  sport=skiing        poi_skiing\n"
+    "?  sport=soccer        poi_soccer\n"
+    "?  sport=stadium       poi_stadium\n"
+    "?  sport=swimming      poi_swimming\n"
+    "?  sport=tennis        poi_tennis\n"
+    "?  tourism=attraction  poi_attraction\n"
+    "?  tourism=camp_site   poi_camp_rv\n"
+    "?  tourism=caravan_site    poi_camp_rv\n"
+    "?  tourism=guest_house poi_guesthouse\n"
+    "?  tourism=hostel      poi_hostel\n"
+    "?  tourism=hotel       poi_hotel\n"
+    "?  tourism=information poi_information\n"
+    "?  tourism=motel       poi_motel\n"
+    "?  tourism=museum      poi_museum_history\n"
+    "?  tourism=picnic_site poi_picnic\n"
+    "?  tourism=theme_park  poi_resort\n"
+    "?  tourism=viewpoint   poi_viewpoint\n"
+    "?  tourism=zoo     poi_zoo\n"
+    "n  natural=cave_entrance      poi_cave\n"
+    "n  traffic_sign=city_limit traffic_sign_city_limit\n"
+    "n  highway=speed_camera    tec_common\n"
+    "w  *=*         street_unkn\n"
+    "w  addr:interpolation=even house_number_interpolation_even\n"
+    "w  addr:interpolation=odd  house_number_interpolation_odd\n"
+    "w  addr:interpolation=all  house_number_interpolation_all\n"
+    "w  addr:interpolation=alphabetic   house_number_interpolation_alphabetic\n"
+    "w  aerialway=cable_car lift_cable_car\n"
+    "w  aerialway=chair_lift    lift_chair\n"
+    "w  aerialway=drag_lift lift_drag\n"
+    "w  aeroway=aerodrome   poly_airport\n"
     /* airport wins over military landuse and specifier if given */
-    "w	aeroway=aerodrome,landuse=military	poly_airfield\n"
-    "w	aeroway=aerodrome,landuse=military,military=*	poly_airfield\n"
-    "w	aeroway=apron		poly_apron\n"
-    "w	aeroway=runway		aeroway_runway\n"
-    "w	aeroway=taxiway		aeroway_taxiway\n"
-    "w	aeroway=terminal	poly_terminal\n"
-    "w	amenity=college		poly_college\n"
-    "w	amenity=grave_yard	poly_cemetery\n"
-    "w	amenity=parking		poly_car_parking\n"
-    "w	amenity=place_of_worship	poly_building\n"
-    "w	amenity=university	poly_university\n"
-    "w	boundary=administrative,admin_level=2	border_country\n"
-    "w	boundary=civil		border_civil\n"
-    "w	boundary=national_park	border_national_park\n"
-    "w	boundary=political	border_political\n"
-    "w	building=*		poly_building\n"
-    "w	contour_ext=elevation_major	height_line_1\n"
-    "w	contour_ext=elevation_medium	height_line_2\n"
-    "w	contour_ext=elevation_minor	height_line_3\n"
-    "w	highway=bridleway	bridleway\n"
-    "w	highway=bus_guideway	bus_guideway\n"
-    "w	highway=construction	street_construction\n"
-    "w	highway=cyclepath	cycleway\n"
-    "w	highway=cycleway	cycleway\n"
-    "w	highway=footway		footway\n"
-    "w	highway=footway,piste:type=nordic	footway_and_piste_nordic\n"
-    "w	highway=living_street	living_street\n"
-    "w	highway=minor		street_1_land\n"
-    "w	highway=parking_lane	street_parking_lane\n"
-    "w	highway=path				path\n"
-    "w	highway=path,bicycle=designated		cycleway\n"
-    "w	highway=path,bicycle=official		cycleway\n"
-    "w	highway=path,bicycle=designated,foot=designated		cycleway\n"
-    "w	highway=path,bicycle=official,foot=official		cycleway\n"
-    "w	highway=path,foot=designated		footway\n"
-    "w	highway=path,foot=official		footway\n"
-    "w	highway=path,horse=designated		bridleway\n"
-    "w	highway=path,horse=official		bridleway\n"
-    "w	highway=path,sac_scale=alpine_hiking			hiking_alpine\n"
-    "w	highway=path,sac_scale=demanding_alpine_hiking		hiking_alpine_demanding\n"
-    "w	highway=path,sac_scale=demanding_mountain_hiking	hiking_mountain_demanding\n"
-    "w	highway=path,sac_scale=difficult_alpine_hiking		hiking_alpine_difficult\n"
-    "w	highway=path,sac_scale=hiking				hiking\n"
-    "w	highway=path,sac_scale=mountain_hiking			hiking_mountain\n"
-    "w	highway=pedestrian			street_pedestrian\n"
-    "w	highway=pedestrian,area=1		poly_pedestrian\n"
-    "w	highway=plaza				poly_plaza\n"
-    "w	highway=motorway			highway_land\n"
-    "w	highway=motorway,rural=0		highway_city\n"
-    "w	highway=motorway_link			ramp\n"
-    "w	highway=trunk				street_n_lanes\n"
-    "w	highway=trunk_link			ramp\n"
-    "w	highway=primary				street_4_land\n"
-    "w	highway=primary,name=*,rural=1		street_4_land\n"
-    "w	highway=primary,name=*			street_4_city\n"
-    "w	highway=primary,rural=0			street_4_city\n"
-    "w	highway=primary_link			ramp\n"
-    "w	highway=secondary			street_3_land\n"
-    "w	highway=secondary,name=*,rural=1	street_3_land\n"
-    "w	highway=secondary,name=*		street_3_city\n"
-    "w	highway=secondary,rural=0		street_3_city\n"
-    "w	highway=secondary,area=1		poly_street_3\n"
-    "w	highway=secondary_link			ramp\n"
-    "w	highway=tertiary			street_2_land\n"
-    "w	highway=tertiary,name=*,rural=1		street_2_land\n"
-    "w	highway=tertiary,name=*			street_2_city\n"
-    "w	highway=tertiary,rural=0		street_2_city\n"
-    "w	highway=tertiary,area=1			poly_street_2\n"
-    "w	highway=tertiary_link			ramp\n"
-    "w	highway=residential			street_1_city\n"
-    "w	highway=residential,area=1		poly_street_1\n"
-    "w	highway=unclassified			street_1_city\n"
-    "w	highway=unclassified,area=1		poly_street_1\n"
-    "w	highway=road				street_1_city\n"
-    "w	highway=service				street_service\n"
-    "w	highway=service,area=1			poly_service\n"
-    "w	highway=service,service=parking_aisle	street_parking_lane\n"
-    "w	highway=track				track_gravelled\n"
-    "w	highway=track,surface=grass		track_grass\n"
-    "w	highway=track,surface=gravel		track_gravelled\n"
-    "w	highway=track,surface=ground		track_ground\n"
-    "w	highway=track,surface=paved		track_paved\n"
-    "w	highway=track,surface=unpaved		track_unpaved\n"
-    "w	highway=track,tracktype=grade1		track_paved\n"
-    "w	highway=track,tracktype=grade2		track_gravelled\n"
-    "w	highway=track,tracktype=grade3		track_unpaved\n"
-    "w	highway=track,tracktype=grade4		track_ground\n"
-    "w	highway=track,tracktype=grade5		track_grass\n"
-    "w	highway=track,surface=paved,tracktype=grade1		track_paved\n"
-    "w	highway=track,surface=gravel,tracktype=grade2		track_gravelled\n"
-    "w	highway=track,surface=unpaved,tracktype=grade3		track_unpaved\n"
-    "w	highway=track,surface=ground,tracktype=grade4		track_ground\n"
-    "w	highway=track,surface=grass,tracktype=grade5		track_grass\n"
-    "w	highway=unsurfaced			track_gravelled\n"
-    "w	highway=steps				steps\n"
-    "w	historic=archaeological_site	poly_archaeological_site\n"
+    "w  aeroway=aerodrome,landuse=military  poly_airfield\n"
+    "w  aeroway=aerodrome,landuse=military,military=*   poly_airfield\n"
+    "w  aeroway=apron       poly_apron\n"
+    "w  aeroway=runway      aeroway_runway\n"
+    "w  aeroway=taxiway     aeroway_taxiway\n"
+    "w  aeroway=terminal    poly_terminal\n"
+    "w  amenity=college     poly_college\n"
+    "w  amenity=grave_yard  poly_cemetery\n"
+    "w  amenity=parking     poly_car_parking\n"
+    "w  amenity=place_of_worship    poly_building\n"
+    "w  amenity=university  poly_university\n"
+    "w  boundary=administrative,admin_level=2   border_country\n"
+    "w  boundary=civil      border_civil\n"
+    "w  boundary=national_park  border_national_park\n"
+    "w  boundary=political  border_political\n"
+    "w  boundary=low_emission_zone  poly_low_emission_zone\n"
+    "w  building=*      poly_building\n"
+    "w  contour_ext=elevation_major height_line_1\n"
+    "w  contour_ext=elevation_medium    height_line_2\n"
+    "w  contour_ext=elevation_minor height_line_3\n"
+    "w  highway=bridleway   bridleway\n"
+    "w  highway=bus_guideway    bus_guideway\n"
+    "w  highway=construction    street_construction\n"
+    "w  highway=cyclepath   cycleway\n"
+    "w  highway=cycleway    cycleway\n"
+    "w  highway=footway     footway\n"
+    "w  highway=footway,piste:type=nordic   footway_and_piste_nordic\n"
+    "w  highway=living_street   living_street\n"
+    "w  highway=minor       street_1_land\n"
+    "w  highway=parking_lane    street_parking_lane\n"
+    "w  highway=path                path\n"
+    "w  highway=path,bicycle=designated     cycleway\n"
+    "w  highway=path,bicycle=official       cycleway\n"
+    "w  highway=path,bicycle=designated,foot=designated     cycleway\n"
+    "w  highway=path,bicycle=official,foot=official     cycleway\n"
+    "w  highway=path,foot=designated        footway\n"
+    "w  highway=path,foot=official      footway\n"
+    "w  highway=path,horse=designated       bridleway\n"
+    "w  highway=path,horse=official     bridleway\n"
+    "w  highway=path,sac_scale=alpine_hiking            hiking_alpine\n"
+    "w  highway=path,sac_scale=demanding_alpine_hiking      hiking_alpine_demanding\n"
+    "w  highway=path,sac_scale=demanding_mountain_hiking    hiking_mountain_demanding\n"
+    "w  highway=path,sac_scale=difficult_alpine_hiking      hiking_alpine_difficult\n"
+    "w  highway=path,sac_scale=hiking               hiking\n"
+    "w  highway=path,sac_scale=mountain_hiking          hiking_mountain\n"
+    "w  highway=pedestrian          street_pedestrian\n"
+    "w  highway=pedestrian,area=1       poly_pedestrian\n"
+    "w  highway=plaza               poly_plaza\n"
+    "w  highway=motorway            highway_land\n"
+    "w  highway=motorway,rural=0        highway_city\n"
+    "w  highway=motorway_link           ramp\n"
+    "w  highway=trunk               street_n_lanes\n"
+    "w  highway=trunk_link          ramp\n"
+    "w  highway=primary             street_4_land\n"
+    "w  highway=primary,name=*,rural=1      street_4_land\n"
+    "w  highway=primary,name=*          street_4_city\n"
+    "w  highway=primary,rural=0         street_4_city\n"
+    "w  highway=primary_link            ramp\n"
+    "w  highway=secondary           street_3_land\n"
+    "w  highway=secondary,name=*,rural=1    street_3_land\n"
+    "w  highway=secondary,name=*        street_3_city\n"
+    "w  highway=secondary,rural=0       street_3_city\n"
+    "w  highway=secondary,area=1        poly_street_3\n"
+    "w  highway=secondary_link          ramp\n"
+    "w  highway=tertiary            street_2_land\n"
+    "w  highway=tertiary,name=*,rural=1     street_2_land\n"
+    "w  highway=tertiary,name=*         street_2_city\n"
+    "w  highway=tertiary,rural=0        street_2_city\n"
+    "w  highway=tertiary,area=1         poly_street_2\n"
+    "w  highway=tertiary_link           ramp\n"
+    "w  highway=residential         street_1_city\n"
+    "w  highway=residential,area=1      poly_street_1\n"
+    "w  highway=unclassified            street_1_city\n"
+    "w  highway=unclassified,area=1     poly_street_1\n"
+    "w  highway=road                street_1_city\n"
+    "w  highway=service             street_service\n"
+    "w  highway=service,area=1          poly_service\n"
+    "w  highway=service,service=parking_aisle   street_parking_lane\n"
+    "w  highway=track               track_gravelled\n"
+    "w  highway=track,surface=grass     track_grass\n"
+    "w  highway=track,surface=gravel        track_gravelled\n"
+    "w  highway=track,surface=ground        track_ground\n"
+    "w  highway=track,surface=paved     track_paved\n"
+    "w  highway=track,surface=unpaved       track_unpaved\n"
+    "w  highway=track,tracktype=grade1      track_paved\n"
+    "w  highway=track,tracktype=grade2      track_gravelled\n"
+    "w  highway=track,tracktype=grade3      track_unpaved\n"
+    "w  highway=track,tracktype=grade4      track_ground\n"
+    "w  highway=track,tracktype=grade5      track_grass\n"
+    "w  highway=track,surface=paved,tracktype=grade1        track_paved\n"
+    "w  highway=track,surface=gravel,tracktype=grade2       track_gravelled\n"
+    "w  highway=track,surface=unpaved,tracktype=grade3      track_unpaved\n"
+    "w  highway=track,surface=ground,tracktype=grade4       track_ground\n"
+    "w  highway=track,surface=grass,tracktype=grade5        track_grass\n"
+    "w  highway=unsurfaced          track_gravelled\n"
+    "w  highway=steps               steps\n"
+    "w  historic=archaeological_site    poly_archaeological_site\n"
     /* Albeit historic=archaeological_site should not be used on ways (only on areas) according to OSM wiki,
      * it is at least done so for the Limes in germany. Luckily we can sort the Limes out as it has it's own
      * tag scheme.*/
-    "w	historic=archaeological_site,site_type=fortification,fortification_type=limes	archaeological_site\n"
-    "w	historic=battlefield	poly_battlefield\n"
-    "w	historic=ruins		poly_ruins\n"
-    "w	historic=town_gate	poly_building\n"
-    "w	landuse=allotments	poly_allotments\n"
-    "w	landuse=basin		poly_basin\n"
-    "w	landuse=brownfield	poly_brownfield\n"
-    "w	landuse=cemetery	poly_cemetery\n"
-    "w	landuse=commercial	poly_commercial\n"
-    "w	landuse=construction	poly_construction\n"
-    "w	landuse=farm		poly_farm\n"
-    "w	landuse=farmland	poly_farm\n"
-    "w	landuse=farmyard	poly_town\n"
-    "w	landuse=forest		poly_wood\n"
-    "w	landuse=grass		poly_meadow\n"
-    "w	landuse=greenfield	poly_greenfield\n"
-    "w	landuse=industrial	poly_industry\n"
-    "w	landuse=landfill	poly_landfill\n"
+    "w  historic=archaeological_site,site_type=fortification,fortification_type=limes   archaeological_site\n"
+    "w  historic=battlefield    poly_battlefield\n"
+    "w  historic=ruins      poly_ruins\n"
+    "w  historic=town_gate  poly_building\n"
+    "w  landuse=allotments  poly_allotments\n"
+    "w  landuse=basin       poly_basin\n"
+    "w  landuse=brownfield  poly_brownfield\n"
+    "w  landuse=cemetery    poly_cemetery\n"
+    "w  landuse=commercial  poly_commercial\n"
+    "w  landuse=construction    poly_construction\n"
+    "w  landuse=farm        poly_farm\n"
+    "w  landuse=farmland    poly_farm\n"
+    "w  landuse=farmyard    poly_town\n"
+    "w  landuse=forest      poly_wood\n"
+    "w  landuse=grass       poly_meadow\n"
+    "w  landuse=greenfield  poly_greenfield\n"
+    "w  landuse=industrial  poly_industry\n"
+    "w  landuse=landfill    poly_landfill\n"
     /* landuse=military plus military tag */
-    "w	landuse=military	poly_military\n"
-    "w	landuse=military,military=*	poly_military\n"
-    "w	landuse=military,military=airfield	poly_airfield\n"
-    "w	landuse=military,military=barracks	poly_barracks\n"
-    "w	landuse=military,military=danger_area	poly_danger_area\n"
-    "w	landuse=military,military=naval_base	poly_naval_base\n"
-    "w	landuse=military,military=range		poly_range\n"
-    "w	landuse=military,military=training_area		poly_military_zone\n"
-    "w	landuse=meadow		poly_meadow\n"
-    "w	landuse=plaza		poly_plaza\n"
-    "w	landuse=quarry		poly_quarry\n"
-    "w	landuse=railway		poly_railway\n"
-    "w	landuse=recreation_ground		poly_recreation_ground\n"
-    "w	landuse=reservoir	poly_reservoir\n"
-    "w	landuse=residential	poly_town\n"
-    "w	landuse=residential,area=1	poly_town\n"
-    "w	landuse=retail		poly_retail\n"
-    "w	landuse=village_green	poly_village_green\n"
-    "w	landuse=vineyard	poly_farm\n"
-    "w	landuse=depot		poly_depot\n"
-    "w	landuse=garages		poly_garages\n"
-    "w	landuse=greenhouse_horticulture	poly_greenhouse\n"
-    "w	landuse=orchard		poly_orchard\n"
-    "w	landuse=plant_nursery	poly_plantnursery\n"
-    "w	landuse=port		poly_port\n"
-    "w	landuse=salt_pond	poly_saltpond\n"
-    "w	leisure=common		poly_common\n"
-    "w	leisure=fishing		poly_fishing\n"
-    "w	leisure=garden		poly_garden\n"
-    "w	leisure=golf_course	poly_golf_course\n"
-    "w	leisure=marina		poly_marina\n"
-    "w	leisure=nature_reserve	poly_nature_reserve\n"
-    "w	leisure=park		poly_park\n"
-    "w	leisure=pitch		poly_sports_pitch\n"
-    "w	leisure=playground	poly_playground\n"
-    "w	leisure=sports_centre,building=1	poly_building\n"
-    "w	leisure=sports_centre	poly_sport\n"
-    "w	leisure=stadium		poly_sports_stadium\n"
-    "w	leisure=track,area=1		poly_sports_track\n"
-    "w	leisure=track,area=0		sports_track\n"
-    "w	leisure=track,type=multipolygon		poly_sports_track\n"
-    "w	leisure=track		sports_track\n"
-    "w	leisure=water_park	poly_water_park\n"
-    "w	leisure=swimming_pool	poly_swimming_pool\n"
+    "w  landuse=military    poly_military\n"
+    "w  landuse=military,military=* poly_military\n"
+    "w  landuse=military,military=airfield  poly_airfield\n"
+    "w  landuse=military,military=barracks  poly_barracks\n"
+    "w  landuse=military,military=danger_area   poly_danger_area\n"
+    "w  landuse=military,military=naval_base    poly_naval_base\n"
+    "w  landuse=military,military=range     poly_range\n"
+    "w  landuse=military,military=training_area     poly_military_zone\n"
+    "w  landuse=meadow      poly_meadow\n"
+    "w  landuse=plaza       poly_plaza\n"
+    "w  landuse=quarry      poly_quarry\n"
+    "w  landuse=railway     poly_railway\n"
+    "w  landuse=recreation_ground       poly_recreation_ground\n"
+    "w  landuse=reservoir   poly_reservoir\n"
+    "w  landuse=residential poly_town\n"
+    "w  landuse=residential,area=1  poly_town\n"
+    "w  landuse=retail      poly_retail\n"
+    "w  landuse=village_green   poly_village_green\n"
+    "w  landuse=vineyard    poly_farm\n"
+    "w  landuse=depot       poly_depot\n"
+    "w  landuse=garages     poly_garages\n"
+    "w  landuse=greenhouse_horticulture poly_greenhouse\n"
+    "w  landuse=orchard     poly_orchard\n"
+    "w  landuse=plant_nursery   poly_plantnursery\n"
+    "w  landuse=port        poly_port\n"
+    "w  landuse=salt_pond   poly_saltpond\n"
+    "w  leisure=common      poly_common\n"
+    "w  leisure=fishing     poly_fishing\n"
+    "w  leisure=garden      poly_garden\n"
+    "w  leisure=golf_course poly_golf_course\n"
+    "w  leisure=marina      poly_marina\n"
+    "w  leisure=nature_reserve  poly_nature_reserve\n"
+    "w  leisure=park        poly_park\n"
+    "w  leisure=pitch       poly_sports_pitch\n"
+    "w  leisure=playground  poly_playground\n"
+    "w  leisure=sports_centre,building=1    poly_building\n"
+    "w  leisure=sports_centre   poly_sport\n"
+    "w  leisure=stadium     poly_sports_stadium\n"
+    "w  leisure=track,area=1        poly_sports_track\n"
+    "w  leisure=track,area=0        sports_track\n"
+    "w  leisure=track,type=multipolygon     poly_sports_track\n"
+    "w  leisure=track       sports_track\n"
+    "w  leisure=water_park  poly_water_park\n"
+    "w  leisure=swimming_pool   poly_swimming_pool\n"
     /* military tag without further info */
-    "w	military=airfield	poly_airfield\n"
-    "w	military=barracks	poly_barracks\n"
-    "w	military=danger_area	poly_danger_area\n"
-    "w	military=naval_base	poly_naval_base\n"
-    "w	military=range		poly_range\n"
-    "w	military=training_area		poly_military_zone\n"
-    "w	natural=beach		poly_beach\n"
-    "w	natural=coastline	water_line\n"
-    "w	natural=fell		poly_fell\n"
-    "w	natural=glacier		poly_glacier\n"
-    "w	natural=grassland	poly_meadow\n"
-    "w	natural=heath		poly_heath\n"
-    "w	natural=land		poly_land\n"
-    "w	natural=marsh		poly_marsh\n"
-    "w	natural=meadow		poly_meadow\n"
-    "w	natural=mud		poly_mud\n"
-    "w	natural=sand		poly_beach\n"
-    "w	natural=scree		poly_scree\n"
-    "w	natural=scrub		poly_scrub\n"
-    "w	natural=water		poly_water\n"
-    "w	natural=wetland		poly_mud\n"
-    "w	natural=wood		poly_wood\n"
-    "w	natural=cliff		cliff\n"
-    "w	man_made=embankment  embankment\n"
-    "w	piste:type=downhill,piste:difficulty=advanced		piste_downhill_advanced\n"
-    "w	piste:type=downhill,piste:difficulty=easy		piste_downhill_easy\n"
-    "w	piste:type=downhill,piste:difficulty=expert		piste_downhill_expert\n"
-    "w	piste:type=downhill,piste:difficulty=freeride		piste_downhill_freeride\n"
-    "w	piste:type=downhill,piste:difficulty=intermediate	piste_downhill_intermediate\n"
-    "w	piste:type=downhill,piste:difficulty=novice		piste_downhill_novice\n"
-    "w	piste:type=nordic	piste_nordic\n"
-    "w	place=suburb		poly_place1\n"
-    "w	place=hamlet		poly_place2\n"
-    "w	place=isolated_dwelling	poly_place2\n"
-    "w	place=locality		poly_place2\n"
-    "w	place=village		poly_place3\n"
-    "w	place=municipality	poly_place4\n"
-    "w	place=town		poly_place5\n"
-    "w	place=city		poly_place6\n"
-    "w	de:place=city		poly_place6\n"
-    "w	power=line		powerline\n"
-    "w	railway=abandoned	rail_abandoned\n"
-    "w	railway=disused		rail_disused\n"
-    "w	railway=light_rail	rail_light\n"
-    "w	railway=monorail	rail_mono\n"
-    "w	railway=narrow_gauge	rail_narrow_gauge\n"
-    "w	railway=preserved	rail_preserved\n"
-    "w	railway=rail		rail\n"
-    "w	railway=subway		rail_subway\n"
-    "w	railway=tram		rail_tram\n"
-    "w	route=ferry		ferry\n"
-    "w	route=ski		piste_nordic\n"
-    "w	sport=*			poly_sport\n"
-    "w	tourism=artwork		poly_artwork\n"
-    "w	tourism=attraction	poly_attraction\n"
-    "w	tourism=camp_site	poly_camp_site\n"
-    "w	tourism=caravan_site	poly_caravan_site\n"
-    "w	tourism=picnic_site	poly_picnic_site\n"
-    "w	tourism=theme_park	poly_theme_park\n"
-    "w	tourism=zoo		poly_zoo\n"
-    "w	waterway=canal		water_canal\n"
-    "w	waterway=drain		water_drain\n"
-    "w	waterway=river		water_river\n"
-    "w	waterway=riverbank	poly_water\n"
-    "w	waterway=stream		water_stream\n"
-    "w	waterway=dam		poly_dam\n"
-    "w	waterway=weir		poly_dam\n"
-    "w	barrier=ditch	ditch\n"
-    "w	barrier=hedge	hedge\n"
-    "w	barrier=fence	fence\n"
-    "w	barrier=wall	wall\n"
-    "w	barrier=retaining_wall	retaining_wall\n"
-    "w	barrier=city_wall	city_wall\n"
-    "?	amenity=charging_station		poi_charging_station\n"};
+    "w  military=airfield   poly_airfield\n"
+    "w  military=barracks   poly_barracks\n"
+    "w  military=danger_area    poly_danger_area\n"
+    "w  military=naval_base poly_naval_base\n"
+    "w  military=range      poly_range\n"
+    "w  military=training_area      poly_military_zone\n"
+    "w  natural=beach       poly_beach\n"
+    "w  natural=coastline   water_line\n"
+    "w  natural=fell        poly_fell\n"
+    "w  natural=glacier     poly_glacier\n"
+    "w  natural=grassland   poly_meadow\n"
+    "w  natural=heath       poly_heath\n"
+    "w  natural=land        poly_land\n"
+    "w  natural=marsh       poly_marsh\n"
+    "w  natural=meadow      poly_meadow\n"
+    "w  natural=mud     poly_mud\n"
+    "w  natural=sand        poly_beach\n"
+    "w  natural=scree       poly_scree\n"
+    "w  natural=scrub       poly_scrub\n"
+    "w  natural=water       poly_water\n"
+    "w  natural=wetland     poly_mud\n"
+    "w  natural=wood        poly_wood\n"
+    "w  natural=cliff       cliff\n"
+    "w  piste:type=downhill,piste:difficulty=advanced       piste_downhill_advanced\n"
+    "w  piste:type=downhill,piste:difficulty=easy       piste_downhill_easy\n"
+    "w  piste:type=downhill,piste:difficulty=expert     piste_downhill_expert\n"
+    "w  piste:type=downhill,piste:difficulty=freeride       piste_downhill_freeride\n"
+    "w  piste:type=downhill,piste:difficulty=intermediate   piste_downhill_intermediate\n"
+    "w  piste:type=downhill,piste:difficulty=novice     piste_downhill_novice\n"
+    "w  piste:type=nordic   piste_nordic\n"
+    "w  place=suburb        poly_place1\n"
+    "w  place=hamlet        poly_place2\n"
+    "w  place=isolated_dwelling poly_place2\n"
+    "w  place=locality      poly_place2\n"
+    "w  place=village       poly_place3\n"
+    "w  place=municipality  poly_place4\n"
+    "w  place=town      poly_place5\n"
+    "w  place=city      poly_place6\n"
+    "w  de:place=city       poly_place6\n"
+    "w  power=line      powerline\n"
+    "w  railway=abandoned   rail_abandoned\n"
+    "w  railway=disused     rail_disused\n"
+    "w  railway=light_rail  rail_light\n"
+    "w  railway=monorail    rail_mono\n"
+    "w  railway=narrow_gauge    rail_narrow_gauge\n"
+    "w  railway=preserved   rail_preserved\n"
+    "w  railway=rail        rail\n"
+    "w  railway=subway      rail_subway\n"
+    "w  railway=tram        rail_tram\n"
+    "w  route=ferry     ferry\n"
+    "w  route=ski       piste_nordic\n"
+    "w  sport=*         poly_sport\n"
+    "w  tourism=artwork     poly_artwork\n"
+    "w  tourism=attraction  poly_attraction\n"
+    "w  tourism=camp_site   poly_camp_site\n"
+    "w  tourism=caravan_site    poly_caravan_site\n"
+    "w  tourism=picnic_site poly_picnic_site\n"
+    "w  tourism=theme_park  poly_theme_park\n"
+    "w  tourism=zoo     poly_zoo\n"
+    "w  waterway=canal      water_canal\n"
+    "w  waterway=drain      water_drain\n"
+    "w  waterway=river      water_river\n"
+    "w  waterway=riverbank  poly_water\n"
+    "w  waterway=stream     water_stream\n"
+    "w  waterway=dam        poly_dam\n"
+    "w  waterway=weir       poly_dam\n"
+    "w  barrier=ditch   ditch\n"
+    "w  barrier=hedge   hedge\n"
+    "w  barrier=fence   fence\n"
+    "w  barrier=wall    wall\n"
+    "w  barrier=retaining_wall  retaining_wall\n"
+    "w  barrier=city_wall   city_wall\n"};
+
+// Conversion to meters internally, choose multiplier as required. 1 is return value is in meters
+static int convert_length_unit_to_integer(char *value, int multiplier) {
+    int result = 0;
+    char *ptri = strstr(value, "'");   // inch value id
+    char *ptrf = strstr(value, "\"");  // feet value id
+    char *ptrm = strstr(value, "m");   // meter value id
+
+    // Hardening:
+    if (!value)
+        return 0;
+
+    // Need to have both else erroneous values like <7"0> will crash
+    if (ptrf && !ptri) {
+        //        fprintf(stderr,ANSI_YEL"\nWarning -- Node: %lli unit length conversion can't convert. value was:
+        //        %s"ANSI_DEF"\n", getcurrentid(), value);
+        return 0;
+    }
+
+    // Height not known exactly, use a value based on 2.5 meters height to exclude this way from routing for trucks
+    if (!strcmp(value, "below_default")) {
+        //        fprintf(stderr, ANSI_YEL"\nWarning -- Node: %lli unit length conversion 'below_default' - Setting
+        //        value to "BELOW_DEFAULT_HEIGHT_VALUE" meters"ANSI_DEF"\n", getcurrentid());
+        value = BELOW_DEFAULT_HEIGHT_VALUE;
+    }
+
+    //    fprintf(stderr,ANSI_GRN"\nNode: %lli unit length conversion value: %s, multiplier: %i\n", getcurrentid(),
+    //    value, multiplier);
+
+    if (ptrm) {  // We have metric unit and need to remove the "m"
+                 //        ptrm--;
+                 //        *ptrm=0;
+        result = (int)(atof(value) * multiplier);
+        //        fprintf(stderr,"Node: %lli unit length conversion converted value metric: %i"ANSI_DEF"\n",
+        //        getcurrentid(), result);
+        return result;
+    }
+
+    // We have an imperial value or meter without unit identifier
+    if (ptrf) {
+        //        *ptrf=0; // remove inch value identifier and calculate inches
+        result = (int)(atof(++ptri) * 2.54);
+        //        fprintf(stderr,"Node: %lli unit length conversion value inches: %i"ANSI_DEF"\n", getcurrentid(),
+        //        result);
+    }
+
+    if (ptri) {  // We have an imperial value and need to add feet
+                 //        ptri--;
+                 //        *ptri=0;
+        result += (int)(atof(value) * 0.3048 * multiplier);
+        //        fprintf(stderr,ANSI_GRN"Node: %lli unit length conversion converted value from inches + feet:
+        //        %i"ANSI_DEF"\n", getcurrentid(), result);
+        return result;
+    }
+
+    // We have meters without unit id
+    result = (int)(atof(value) * multiplier);
+
+    // Ignore some defaults, but warn if other content
+    if (result == 0 && strcmp(value, "default") && strcmp(value, "none") && strcmp(value, "no_sign")
+        && strcmp(value, "unsigned"))
+        fprintf(stderr,
+                ANSI_YEL "\nWarning -- Node: %lli unit length conversion converted value from meters no unit id: %i, "
+                         "value was %s" ANSI_DEF "\n",
+                getcurrentid(), result, value);
+    //    else
+    //        fprintf(stderr,"Node: %lli unit length conversion converted value from meters: %i"ANSI_DEF"\n",
+    //        getcurrentid(), result);
+
+    return result;
+}
+
+// Conversion to metric tons internally, choose multiplier as required. 1 means return value is in metric tons
+static int convert_weight_unit_to_integer(char *value, int multiplier) {
+    int result = 0;
+    char *ptrst = strstr(value, "st");    // short ton value id
+    char *ptrlt = strstr(value, "lt");    // long ton value id
+    char *ptrlbs = strstr(value, "lbs");  // pound mass value id
+    char *ptrcwt = strstr(value, "cwt");  // long hundredweight value id
+
+    // Hardening:
+    if (!value)
+        return 0;
+
+    //    fprintf(stderr,ANSI_GRN"\nNode: %lli unit weight conversion value: %s, multiplier: %i\n", getcurrentid(),
+    //    value, multiplier);
+
+    if (ptrst) {
+        result = (int)(atof(value) * 0.9071847 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from short tons:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
+        return result;
+    }
+
+    if (ptrlt) {
+        result = (int)(atof(value) * 1.016047 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from long tons:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
+        return result;
+    }
+
+    if (ptrlbs) {
+        result = (int)(atof(value) * 0.00045359237 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from pound mass:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
+        return result;
+    }
+
+    if (ptrcwt) {
+        result = (int)(atof(value) * 50.80 * multiplier);
+        //            fprintf(stderr,"Node: %lli unit weight conversion converted value from long hundredweight:
+        //            %i"ANSI_DEF"\n",getcurrentid(), result);
+        return result;
+    }
+
+    result = (int)(atof(value) * multiplier);
+
+    // Ignore default and none, but warn if other content
+    if (result == 0 && strcmp(value, "default") && strcmp(value, "none") && strcmp(value, "no_sign")
+        && strcmp(value, "unsigned"))
+        fprintf(stderr,
+                ANSI_YEL "\nWarning -- Node: %lli unit weight conversion converted value from metric tons no unit id: "
+                         "%i, value was: %s" ANSI_DEF "\n",
+                getcurrentid(), result, value);
+    //    else
+    //        fprintf(stderr,"Node: %lli unit weight conversion converted value from metric tons: %i"ANSI_DEF"\n",
+    //        getcurrentid(), result);
+
+    return result;
+}
+
+static char *cleanCondition(char *condition) {
+
+    while (*condition == 32) {
+        condition++;
+    }
+    while (*(condition + strlen(condition) - 1) == 32) {
+        *(condition + strlen(condition) - 1) = 0;
+    }
+
+    return condition;
+}
+
+// this function converts the conditional maxpeed value to km/h and creates a struct of condition and converted
+// speedvalue
+static void convert_maxspeed_to_integer_and_flags(char *conditiontype, char *value, struct conditionallimit *limit,
+                                                  struct conditionallimit *limitfwd,
+                                                  struct conditionallimit *limitbwd) {
+
+    char temp[strlen(value)];
+    char cond[strlen(value)];
+    char *speed, *temp1 = "", *temp2 = "";
+    int hgv = 0;
+
+    if (strstr(conditiontype, ":hgv")) {
+        fprintf(stderr, ANSI_GRN "\nNode: %lli maxspeed conditional HGV: %s -- %s" ANSI_DEF "\n", getcurrentid(),
+                conditiontype, value);
+        hgv = 1;
+    } else {
+        fprintf(stderr, ANSI_GRN "\nNode: %lli maxspeed conditional NON HGV: %s -- %s" ANSI_DEF "\n", getcurrentid(),
+                conditiontype, value);
+    }
+
+    speed = strtok(strcpy(temp, value), "@");  // store the speed value
+    temp1 = strtok(NULL, "@");
+
+    if (temp1) {
+        temp1 = cleanCondition(temp1);
+        temp2 = malloc(strlen(temp1) + 1);
+        strcpy(temp2, temp1);
+    } else {
+        if (hgv) {
+            temp2 = malloc(strlen(HGV_WEIGHT_NO_CONDITION_FOUND) + 1);
+            strcpy(temp2, HGV_WEIGHT_NO_CONDITION_FOUND);  // TODO: 3.5 or 7.5?
+            fprintf(stderr,
+                    ANSI_YEL "\nWarning -- :hgv - no condition found. Setting '" HGV_WEIGHT_NO_CONDITION_FOUND
+                             "' %lli" ANSI_DEF "\n",
+                    getcurrentid());
+        } else {
+            sprintf(cond, "No condition found for this tag %lli", getcurrentid());
+            fprintf(stderr, ANSI_YEL "\nWarning -- No condition found for this tag %lli" ANSI_DEF "\n", getcurrentid());
+            return;
+        }
+    }
+
+    if (strstr(conditiontype, "forward")) {
+        limitfwd->condition = temp2;
+
+        if (strstr(speed, "mph")) {
+            limitfwd->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limitfwd->speed);
+            return;
+        }
+
+        if (strstr(speed, "knots")) {
+            limitfwd->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limitfwd->speed);
+            return;
+        }
+
+        limitfwd->speed = atoi(speed);
+        //    fprintf(stderr,"speed conversion converted value from km/h: %i"ANSI_DEF"\n", limitfwd->speed);
+    } else if (strstr(conditiontype, "backward")) {
+        limitbwd->condition = temp2;
+
+        if (strstr(speed, "mph")) {
+            limitbwd->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limitbwd->speed);
+            return;
+        }
+
+        if (strstr(speed, "knots")) {
+            limitbwd->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limitbwd->speed);
+            return;
+        }
+
+        limitbwd->speed = atoi(speed);
+        //    fprintf(stderr,"speed conversion converted value from km/h: %i"ANSI_DEF"\n", limitbwd->speed);
+    } else {
+        limit->condition = temp2;
+
+        if (strstr(speed, "mph")) {
+            limit->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from mph: %i"ANSI_DEF"\n", limit->speed);
+            return;
+        }
+
+        if (strstr(speed, "knots")) {
+            limit->speed = (int)(atof(speed) * 1.609344);
+            //        fprintf(stderr,"speed conversion converted value from knots: %i"ANSI_DEF"\n", limit->speed);
+            return;
+        }
+
+        limit->speed = atoi(speed);
+        //    fprintf(stderr,"speed conversion converted value from km/h: %i"ANSI_DEF"\n", limit->speed);
+    }
+}
 
 static void build_attrmap_line(char *line) {
     char *t = NULL, *kvl = NULL, *i = NULL, *p, *kv;
@@ -1039,6 +1291,7 @@ static int node_is_tagged;
 static void relation_add_tag(char *k, char *v);
 
 static int access_value(char *v) {
+    // fprintf(stderr,"access_value %s\n",v);
     if (!g_strcmp0(v, "1"))
         return 1;
     if (!g_strcmp0(v, "yes"))
@@ -1063,12 +1316,21 @@ static int access_value(char *v) {
         return 2;
     if (!g_strcmp0(v, "destination"))
         return 2;
+    if (!g_strcmp0(v, "customer"))
+        return 2;
+    if (!g_strcmp0(v, "customers"))
+        return 2;
+    if (!g_strcmp0(v, "tenant"))
+        return 2;
+    if (!g_strcmp0(v, "permit"))
+        return 2;
     return 3;
 }
 
 static void osm_update_attr_present(char *k, char *v);
 
 void osm_add_tag(char *k, char *v) {
+    // fprintf(stderr,"tag_value %s\n",k);
     int level = 2;
     if (in_relation) {
         relation_add_tag(k, v);
@@ -1097,10 +1359,8 @@ void osm_add_tag(char *k, char *v) {
     if (!g_strcmp0(k, "oneway")) {
         if (!g_strcmp0(v, "1")) {
             flags[0] |= AF_ONEWAY | AF_ROUNDABOUT_VALID;
-        } else if (!g_strcmp0(v, "0")) {
-            flags[0] &= ~AF_ONEWAY;
-            flags[0] &= ~AF_ONEWAYREV;
-        } else if (!g_strcmp0(v, "-1")) {
+        }
+        if (!g_strcmp0(v, "-1")) {
             flags[0] |= AF_ONEWAYREV | AF_ROUNDABOUT_VALID;
         }
         if (!in_way)
@@ -1109,9 +1369,10 @@ void osm_add_tag(char *k, char *v) {
             level = 5;
     }
     if (!g_strcmp0(k, "junction")) {
-        if ((!g_strcmp0(v, "roundabout")) || (!g_strcmp0(v, "circular")))
+        if (!g_strcmp0(v, "roundabout"))
             flags[0] |= AF_ONEWAY | AF_ROUNDABOUT | AF_ROUNDABOUT_VALID;
     }
+
     if (!g_strcmp0(k, "maxspeed")) {
         if (strstr(v, "mph")) {
             maxspeed_attr_value = (int)floor(atof(v) * 1.609344);
@@ -1120,6 +1381,73 @@ void osm_add_tag(char *k, char *v) {
         }
         if (maxspeed_attr_value)
             flags[0] |= AF_SPEED_LIMIT;
+        level = 5;
+    }
+    if (strstr(k, "maxspeed") && strstr(k, "conditional") && !strstr(k, "source")) {
+
+        convert_maxspeed_to_integer_and_flags(k, v, &condlimit_attr_value, &condlimit_fwd_attr_value,
+                                              &condlimit_bwd_attr_value);
+
+        if (condlimit_attr_value.condition) {
+            attr_strings_save(attr_string_maxspeed_conditional_condition, condlimit_attr_value.condition);
+            free(condlimit_attr_value.condition);
+            flags[0] |= AF_CONDITIONAL_SPEED_LIMIT;
+            attr_strings_save(attr_string_maxspeed_conditional_raw_condition, v);
+        }
+
+        condlimit_attr_value.condition = 0;
+
+        if (condlimit_fwd_attr_value.condition) {
+            attr_strings_save(attr_string_maxspeed_fwd_conditional_condition, condlimit_fwd_attr_value.condition);
+            free(condlimit_fwd_attr_value.condition);
+            flags[0] |= AF_CONDITIONAL_SPEED_LIMIT;
+        }
+
+        condlimit_fwd_attr_value.condition = 0;
+
+        if (condlimit_bwd_attr_value.condition) {
+            attr_strings_save(attr_string_maxspeed_bwd_conditional_condition, condlimit_bwd_attr_value.condition);
+            free(condlimit_bwd_attr_value.condition);
+            flags[0] |= AF_CONDITIONAL_SPEED_LIMIT;
+        }
+
+        condlimit_bwd_attr_value.condition = 0;
+
+        level = 5;
+    }
+    if (!g_strcmp0(k, "maxheight")) {
+        maxheight_attr_value = convert_length_unit_to_integer(v, 100);
+
+        if (maxheight_attr_value)
+            flags[0] |= AF_SIZE_OR_WEIGHT_LIMIT;
+        level = 5;
+    }
+    if (!g_strcmp0(k, "maxlength")) {
+        maxlength_attr_value = convert_length_unit_to_integer(v, 100);
+
+        if (maxlength_attr_value)
+            flags[0] |= AF_SIZE_OR_WEIGHT_LIMIT;
+        level = 5;
+    }
+    if (!g_strcmp0(k, "maxwidth")) {
+        maxwidth_attr_value = convert_length_unit_to_integer(v, 100);
+
+        if (maxwidth_attr_value)
+            flags[0] |= AF_SIZE_OR_WEIGHT_LIMIT;
+        level = 5;
+    }
+    if (!g_strcmp0(k, "maxweight")) {
+        maxweight_attr_value = convert_weight_unit_to_integer(v, 1000);
+
+        if (maxweight_attr_value)
+            flags[0] |= AF_SIZE_OR_WEIGHT_LIMIT;
+        level = 5;
+    }
+    if (!g_strcmp0(k, "maxaxleload")) {
+        maxaxleload_attr_value = convert_weight_unit_to_integer(v, 1000);
+
+        if (maxaxleload_attr_value)
+            flags[0] |= AF_SIZE_OR_WEIGHT_LIMIT;
         level = 5;
     }
     if (!g_strcmp0(k, "toll")) {
@@ -1326,10 +1654,10 @@ void osm_add_tag(char *k, char *v) {
         level = 5;
     }
     if (!g_strcmp0(k, "gnis:ST_alpha")) {
-        /*	assume a gnis tag means it is part of the USA:
-                http://en.wikipedia.org/wiki/Geographic_Names_Information_System
-                many US towns do not have is_in tags
-        */
+        /*  assume a gnis tag means it is part of the USA:
+         http://en.wikipedia.org/wiki/Geographic_Names_Information_System
+         many US towns do not have is_in tags
+         */
         g_strlcpy(is_in_buffer, "USA", sizeof(is_in_buffer));
         level = 5;
     }
@@ -1412,9 +1740,7 @@ static void node_buffer_to_hash(void) {
 
 void flush_nodes(int final) {
     fprintf(stderr, "flush_nodes %d\n", final);
-    char coords_tmp_path[PATH_MAX];
-    snprintf(coords_tmp_path, PATH_MAX, "%s/coords.tmp", tempfile_obtain_prefix());
-    save_buffer(coords_tmp_path, &node_buffer, slices * slice_size);
+    save_buffer("coords.tmp", &node_buffer, slices * slice_size);
     if (!final) {
         node_buffer.size = 0;
     }
@@ -1440,8 +1766,6 @@ static void remove_last_node_item_from_buffer(void) {
 void osm_add_node(osmid id, double lat, double lon) {
     in_node = 1;
     attr_strings_clear();
-    memset(flags, 0, sizeof(flags));
-    memset(flagsa, 0, sizeof(flagsa));
     node_is_tagged = 0;
     nodeid = id;
     item.type = type_point_unkn;
@@ -1456,8 +1780,8 @@ void osm_add_node(osmid id, double lat, double lon) {
     dbg_assert(id < ((2ull << NODE_ID_BITS) - 1));
     current_node->nd_id = id;
     current_node->ref_way = 0;
-    current_node->c.x = lon * 6371000.0 * G_PI / 180;
-    current_node->c.y = log(tan(G_PI_4 + lat * G_PI / 360)) * 6371000.0;
+    current_node->c.x = lon * 6371000.0 * M_PI / 180;
+    current_node->c.y = log(tan(M_PI_4 + lat * M_PI / 360)) * 6371000.0;
     if (!node_hash) {
         if (current_node->nd_id > id_last_node) {
             id_last_node = current_node->nd_id;
@@ -1487,8 +1811,6 @@ void clear_node_item_buffer(void) {
 static long long node_item_find_index_in_ordered_list(osmid id) {
     struct node_item *node_buffer_base = (struct node_item *)(node_buffer.base);
     long long node_count = node_buffer.size / sizeof(struct node_item);
-    if (node_count == 0)
-        return -1;
     long long search_step = node_count > 4 ? node_count / 4 : 1;
     long long search_index = node_count / 2;
     if (node_buffer_base[0].nd_id > id)
@@ -1626,6 +1948,17 @@ void osm_add_way(osmid id) {
     item.type = type_street_unkn;
     debug_attr_buffer[0] = '\0';
     maxspeed_attr_value = 0;
+    maxweight_attr_value = 0;
+    maxheight_attr_value = 0;
+    maxlength_attr_value = 0;
+    maxwidth_attr_value = 0;
+    maxaxleload_attr_value = 0;
+    condlimit_attr_value.speed = 0;
+    condlimit_attr_value.condition = 0;
+    condlimit_fwd_attr_value.speed = 0;
+    condlimit_fwd_attr_value.condition = 0;
+    condlimit_bwd_attr_value.speed = 0;
+    condlimit_bwd_attr_value.condition = 0;
     flags_attr_value = 0;
     memset(flags, 0, sizeof(flags));
     memset(flagsa, 0, sizeof(flagsa));
@@ -1642,6 +1975,7 @@ void osm_add_way(osmid id) {
 char relation_type[BUFFER_SIZE];
 char iso_code[BUFFER_SIZE];
 int boundary;
+int multipolygon;
 
 void osm_add_relation(osmid id) {
     osmid_attr_value = id;
@@ -1651,6 +1985,7 @@ void osm_add_relation(osmid id) {
     relation_type[0] = '\0';
     iso_code[0] = '\0';
     boundary = 0;
+    multipolygon = 0;
     item_bin_init(tmp_item_bin, type_none);
     item_bin_add_attr_longlong(tmp_item_bin, attr_osm_relationid, osmid_attr_value);
 }
@@ -1685,14 +2020,8 @@ struct country_table *country_from_iso2(char *iso) {
     return country_from_countryid(country_id_from_iso2(iso));
 }
 
-static inline int filter_unknown(struct item_bin *ib) {
-    if (ignore_unknown && (ib->type == type_point_unkn || ib->type == type_street_unkn || ib->type == type_none))
-        return 1;
-    return 0;
-}
-
 static inline void osm_end_relation_multipolygon(struct maptool_osm *osm) {
-    if ((!g_strcmp0(relation_type, "multipolygon")) && (!boundary)) {
+    if (multipolygon) {
         int count;
         enum item_type types[10];
         /* This is a multipolygon relation which is no boundary. Lets check what it is */
@@ -1711,17 +2040,12 @@ static inline void osm_end_relation_multipolygon(struct maptool_osm *osm) {
             // fprintf(stderr, "relation id "OSMID_FMT": got %d types\n", osmid_attr_value, count);
             item_bin_add_attr_string(tmp_item_bin, attr_label, attr_strings[attr_string_label]);
             for (a = 0; a < count; a++) {
-                /*Don't write out multipolygons that will result in unknown types if -n is given.
-                 *So we don't process useless multipolygons. May save a lot of time.
-                 */
-                tmp_item_bin->type = types[a];
-                if (filter_unknown(tmp_item_bin))
-                    continue;
                 /* no need to clone the item in memory. We just write it out multiple times */
                 if (a == 1) {
                     /*add duplicate tag if 2nd type. The tag stays for all subsequent writes */
                     item_bin_add_attr_int(tmp_item_bin, attr_duplicate, 1);
                 }
+                tmp_item_bin->type = types[a];
                 item_bin_write(tmp_item_bin, osm->multipolygons);
             }
         } else {
@@ -1743,7 +2067,8 @@ static inline void osm_end_relation_multipolygon(struct maptool_osm *osm) {
              * indicating the turn restrictions */
             // tmp_item_bin->type=type_none;
         }
-        if ((!g_strcmp0(relation_type, "multipolygon") || !g_strcmp0(relation_type, "boundary")) && (boundary)) {
+        if ((!g_strcmp0(relation_type, "multipolygon") || !g_strcmp0(relation_type, "boundary"))
+            && (boundary || type != type_none)) {
             item_bin_write(tmp_item_bin, osm->boundaries);
         }
     }
@@ -1776,9 +2101,12 @@ void osm_add_member(enum relation_member_type type, osmid ref, char *role) {
 }
 
 static void relation_add_tag(char *k, char *v) {
+    // fprintf(stderr,"access_value %s\n",k);
     int add_tag = 1;
     if (!g_strcmp0(k, "type")) {
         g_strlcpy(relation_type, v, sizeof(relation_type));
+        if (!g_strcmp0(relation_type, "multipolygon"))
+            multipolygon = 1;
         add_tag = 0;
     } else if (!g_strcmp0(k, "restriction")) {
         if (!strncmp(v, "no_", 3)) {
@@ -1792,8 +2120,12 @@ static void relation_add_tag(char *k, char *v) {
             osm_warning("relation", osmid_attr_value, 0, "Unknown restriction %s\n", v);
         }
     } else if (!g_strcmp0(k, "boundary")) {
+        // fprintf(stderr,"access_value %s\n",v);
         if (!g_strcmp0(v, "administrative") || !g_strcmp0(v, "postal_code")) {
             boundary = 1;
+        }
+        if (!g_strcmp0(v, "low_emission_zone") || !g_strcmp0(v, "national_park")) {
+            multipolygon = 1;
         }
     } else if (!g_strcmp0(k, "ISO3166-1") || !g_strcmp0(k, "ISO3166-1:alpha2")) {
         g_strlcpy(iso_code, v, sizeof(iso_code));
@@ -1904,6 +2236,45 @@ void osm_end_way(struct maptool_osm *osm) {
             item_bin_add_attr_int(item_bin, attr_flags, flags_attr_value);
         if (maxspeed_attr_value)
             item_bin_add_attr_int(item_bin, attr_maxspeed, maxspeed_attr_value);
+        if (maxlength_attr_value)
+            item_bin_add_attr_int(item_bin, attr_vehicle_length, maxlength_attr_value);
+        if (maxwidth_attr_value)
+            item_bin_add_attr_int(item_bin, attr_vehicle_width, maxwidth_attr_value);
+        if (maxheight_attr_value)
+            item_bin_add_attr_int(item_bin, attr_vehicle_height, maxheight_attr_value);
+        if (maxweight_attr_value)
+            item_bin_add_attr_int(item_bin, attr_vehicle_weight, maxweight_attr_value);
+        if (maxaxleload_attr_value)
+            item_bin_add_attr_int(item_bin, attr_vehicle_axle_weight, maxaxleload_attr_value);
+
+        if (condlimit_attr_value.speed) {
+            item_bin_add_attr_int(item_bin, attr_maxspeed_conditional_speed, condlimit_attr_value.speed);
+            item_bin_add_attr_string(item_bin, attr_maxspeed_conditional_condition,
+                                     attr_strings[attr_string_maxspeed_conditional_condition]);
+            fprintf(stderr, "condition: \"%s\"\n", attr_strings[attr_string_maxspeed_conditional_condition]);
+        }
+
+        if (condlimit_fwd_attr_value.speed) {
+            item_bin_add_attr_int(item_bin, attr_maxspeed_fwd_conditional_speed, condlimit_fwd_attr_value.speed);
+            item_bin_add_attr_string(item_bin, attr_maxspeed_fwd_conditional_condition,
+                                     attr_strings[attr_string_maxspeed_fwd_conditional_condition]);
+            fprintf(stderr, "fwdcondition: \"%s\"\n", attr_strings[attr_string_maxspeed_fwd_conditional_condition]);
+        }
+
+        if (condlimit_bwd_attr_value.speed) {
+            item_bin_add_attr_int(item_bin, attr_maxspeed_bwd_conditional_speed, condlimit_bwd_attr_value.speed);
+
+            // set condition
+            if (!attr_strings[attr_string_maxspeed_bwd_conditional_condition]) {
+                fprintf(stderr, "NODE> %li, bwdcondition: NO CONDITION AVAILABLE\n", getcurrentid());
+            } else {
+                item_bin_add_attr_string(item_bin, attr_maxspeed_bwd_conditional_condition,
+                                         attr_strings[attr_string_maxspeed_bwd_conditional_condition]);
+            }
+
+            fprintf(stderr, "bwdcondition: \"%s\"\n", attr_strings[attr_string_maxspeed_bwd_conditional_condition]);
+        }
+
         if (i > 0)
             item_bin_add_attr_int(item_bin, attr_duplicate, 1);
         item_bin_write(item_bin, osm->ways);
@@ -2140,12 +2511,8 @@ static void osm_process_town_by_boundary_update_attrs(struct item_bin *town, str
     for (l = matches; l; l = g_list_next(l)) {
         struct boundary *b = l->data;
         char *boundary_admin_level_string;
-        char *name, *postal;
-
-        if (!g_strcmp0(osm_tag_value(b->ib, "boundary"), "postal_code"))
-            continue;
-
-        postal = osm_tag_value(b->ib, "postal_code");
+        char *name;
+        char *postal = osm_tag_value(b->ib, "postal_code");
 
         if (postal) {
             tc->attrs[0].type = attr_town_postal;
@@ -2173,7 +2540,7 @@ static void osm_process_town_by_boundary_update_attrs(struct item_bin *town, str
             case 'M':
                 /* Here we patch the boundary itself to convert it to town polygon later*/
                 b->ib->type = type_poly_place6;
-            /*fall through*/
+                /*fall through*/
             case 'm':
                 attr_type = attr_municipality_name;
                 break;
@@ -2198,7 +2565,7 @@ static void osm_process_town_by_boundary_update_attrs(struct item_bin *town, str
     /* Administrative centres are not to be contained in their own districts. */
     if (max_adm_level > 0)
         for (a = max_possible_adm_level - 1; a > max_adm_level && a > 2; a--)
-            tc->attrs[a - 2].type = attr_none;
+            tc->attrs[a - 2].type = type_none;
 }
 
 /**
@@ -2238,9 +2605,10 @@ static void osm_town_relations_to_poly(GList *boundaries, FILE *towns_poly) {
                 if ((seg->type == geom_poly_segment_type_way_outer || seg->type == geom_poly_segment_type_way_unknown)
                     && coord_is_equal(*seg->first, *seg->last)) {
                     struct item_bin *ib = init_item(b->ib->type);
-                    void *a;
+                    char *a;
                     item_bin_add_coord(ib, seg->first, seg->last - seg->first + 1);
                     a = osm_tag_value(b->ib, "name");
+                    fprintf(stderr, "tag_value %s\n", a);
                     if (a)
                         item_bin_add_attr_string(ib, attr_label, a);
                     a = osm_tag_value(b->ib, "osm_relationid");
@@ -2313,8 +2681,7 @@ void osm_process_towns(FILE *in, FILE *boundaries, FILE *ways, char *suffix) {
             int i;
 
             if (!tc->country->file) {
-                char *name =
-                    g_strdup_printf("%s/country_%d.unsorted.tmp", tempfile_obtain_prefix(), tc->country->countryid);
+                char *name = g_strdup_printf("country_%d.unsorted.tmp", tc->country->countryid);
                 tc->country->file = fopen(name, "wb");
                 g_free(name);
             }
@@ -2401,8 +2768,8 @@ void sort_countries(int keep_tmpfiles) {
             fclose(co->file);
             co->file = NULL;
         }
-        name_in = g_strdup_printf("%s/country_%d.unsorted.tmp", tempfile_obtain_prefix(), co->countryid);
-        name_out = g_strdup_printf("%s/country_%d.tmp", tempfile_obtain_prefix(), co->countryid);
+        name_in = g_strdup_printf("country_%d.unsorted.tmp", co->countryid);
+        name_out = g_strdup_printf("country_%d.tmp", co->countryid);
         co->r = world_bbox;
         item_bin_sort_file(name_in, name_out, &co->r, &co->size);
         if (!keep_tmpfiles)
@@ -2449,9 +2816,8 @@ static int search_relation_member(struct item_bin *ib, char *role, struct relati
     char *str = NULL;
     int count = 0;
     while ((str = item_bin_get_attr(ib, attr_osm_member, str))) {
+        relation_member_parse(str, memb);
         count++;
-        if (!relation_member_parse(str, memb))
-            continue;
         if (!g_strcmp0(memb->role, role) && (!min_count || *min_count < count)) {
             if (min_count)
                 *min_count = count;
@@ -2593,7 +2959,7 @@ static void process_associated_street_member(void *func_priv, void *relation_pri
         }
     } else {
         /* Pass 2, add associated street names to relation members which do not have street name attr defined but
-           have house number defined or are streets */
+         have house number defined or are streets */
         int type_implies_streetname = item_is_street(*member) || member->type == type_house_number_interpolation_even
                                       || member->type == type_house_number_interpolation_odd
                                       || member->type == type_house_number_interpolation_all
@@ -2682,12 +3048,10 @@ static void process_associated_streets_setup(FILE *in, struct relations *relatio
 
     fseek(in, 0, SEEK_SET);
     relations_func = relations_func_new(process_associated_street_member, fp);
-    relations_add_func(relations, relations_func);
     while ((ib = read_item(in))) {
         char *name = osm_tag_value(ib, "name");
         int namelen = name ? strlen(name) + 1 : 0;
         struct associated_street *rel = g_malloc0(sizeof(struct associated_street) + namelen);
-        fp->allocations = g_list_prepend(fp->allocations, rel);
         relid = item_bin_get_relationid(ib);
         rel->relid = relid;
         if (name) {
@@ -2713,7 +3077,6 @@ static void process_associated_streets_setup(FILE *in, struct relations *relatio
         }
     }
     relations_func = relations_func_new(relation_func_writethrough, &fp->out);
-    relations_add_func(relations, relations_func);
     relations_add_relation_default_entry(relations, relations_func);
 }
 
@@ -2759,10 +3122,8 @@ static void process_house_number_interpolations_setup(FILE *in, struct relations
 
     fseek(in, 0, SEEK_SET);
     relations_func_process_hn_interpol = relations_func_new(process_house_number_interpolation_member, fp);
-    relations_add_func(relations, relations_func_process_hn_interpol);
     while ((ib = read_item(in))) {
         struct house_number_interpolation *hn_interpol = g_malloc0(sizeof(struct house_number_interpolation));
-        fp->allocations = g_list_prepend(fp->allocations, hn_interpol);
         hn_interpol->wayid = item_bin_get_wayid(ib);
         hn_interpol->nodeid_first_node = item_bin_get_nodeid_from_attr(ib, attr_osm_nodeid_first_node);
         hn_interpol->nodeid_last_node = item_bin_get_nodeid_from_attr(ib, attr_osm_nodeid_last_node);
@@ -2774,9 +3135,7 @@ static void process_house_number_interpolations_setup(FILE *in, struct relations
         relations_add_relation_member_entry(relations, relations_func_process_hn_interpol, hn_interpol, NULL,
                                             rel_member_way, hn_interpol->wayid);
     }
-    struct relations_func *rf = relations_func_new(relation_func_writethrough, &fp->out);
-    relations_add_func(relations, rf);
-    relations_add_relation_default_entry(relations, rf);
+    relations_add_relation_default_entry(relations, relations_func_new(relation_func_writethrough, &fp->out));
 }
 
 void process_house_number_interpolations(FILE *in, struct files_relation_processing *files_relproc) {
@@ -2822,14 +3181,14 @@ struct multipolygon {
 };
 
 /**
- * @brief find the nect matching polygon segment
+ * @brief find the next matching polygon segment
  * This can be used to find the next matching "line" to form a polygon.
  * @param part current line part
  * @param part_used how this part was used
  * @param in_count number of lines passed in parts
  * @parts array of item_bin pointers giving the single parts
  * @parts used int array, one for each part, indicating wheather the part was already used. This
- *        function sets the usage for the mathcing part if one is found. Usage is 0: not used,
+ *        function sets the usage for the matching part if one is found. Usage is 0: not used,
  *        1: used forward 2: used reverse
  * @returns: index of matching part, -1 if none matches or all are consumed already.
  */
@@ -3322,6 +3681,7 @@ static GList **process_multipolygons_setup(FILE *in, int thread_count, struct re
     struct process_multipolygon_setup_thread *sthread;
 
     struct item_bin *ib;
+    struct relations_func *relations_func;
     int i;
     GList **multipolygons = NULL;
     /* allocate and reference async queue */
@@ -3330,13 +3690,13 @@ static GList **process_multipolygons_setup(FILE *in, int thread_count, struct re
     sthread = g_malloc0(sizeof(struct process_multipolygon_setup_thread) * thread_count);
 
     fseek(in, 0, SEEK_SET);
+    relations_func = relations_func_new(process_multipolygons_member, NULL);
 
     /* start the threads */
     for (i = 0; i < thread_count; i++) {
-        sthread[i].relations_func = relations_func_new(process_multipolygons_member, NULL);
-        relations_add_func(relations[i], sthread[i].relations_func);
         sthread[i].number = i;
         sthread[i].queue = ib_queue;
+        sthread[i].relations_func = relations_func;
         sthread[i].relations = relations[i];
         sthread[i].multipolygons = NULL;
         sthread[i].thread =
@@ -3677,6 +4037,7 @@ static GList **process_turn_restrictions_setup(FILE *in, int thread_count, struc
     struct process_turn_restrictions_setup_thread *sthread;
 
     struct item_bin *ib;
+    struct relations_func *relations_func;
     int i;
     GList **turn_restrictions = NULL;
     /* allocate and reference async queue */
@@ -3685,13 +4046,13 @@ static GList **process_turn_restrictions_setup(FILE *in, int thread_count, struc
     sthread = g_malloc0(sizeof(struct process_turn_restrictions_setup_thread) * thread_count);
 
     fseek(in, 0, SEEK_SET);
+    relations_func = relations_func_new(process_turn_restrictions_member, NULL);
 
     /* start the threads */
     for (i = 0; i < thread_count; i++) {
-        sthread[i].relations_func = relations_func_new(process_turn_restrictions_member, NULL);
-        relations_add_func(relations[i], sthread[i].relations_func);
         sthread[i].number = i;
         sthread[i].queue = ib_queue;
+        sthread[i].relations_func = relations_func;
         sthread[i].relations = relations[i];
         sthread[i].turn_restrictions = NULL;
         sthread[i].thread = g_thread_new("process_turn_restrictions_setup_worker",
@@ -3908,7 +4269,7 @@ static void process_countries(FILE *way, FILE *ways_index) {
         while ((str=item_bin_get_attr(ib, attr_osm_member, str))) {
             if (!relation_member_parse(str, &member))
                 break;
-            if (member.type == rel_member_way) {
+            if (member.type == 2) {
                 if (!seek_to_way(way, ways_index, member.id)) {
                     fprintf(stderr,"not found in index");
                     break;
@@ -4147,7 +4508,7 @@ static void index_country_add(struct zip_info *info, int country_id, char *first
 void write_countrydir(struct zip_info *zip_info, int max_index_size) {
     int i;
     int max = 11;
-    char filename[64];
+    char filename[32];
     struct country_table *co;
     for (i = 0; i < sizeof(country_table) / sizeof(struct country_table); i++) {
         co = &country_table[i];
@@ -4170,7 +4531,7 @@ void write_countrydir(struct zip_info *zip_info, int max_index_size) {
 
             tile(&co->r, "", tileco, max, overlap, NULL);
 
-            snprintf(filename, sizeof(filename), "%s/country_%d.tmp", tempfile_obtain_prefix(), co->countryid);
+            snprintf(filename, sizeof(filename), "country_%d.tmp", co->countryid);
             in = fopen(filename, "rb");
 
             snprintf(countrypart, sizeof(countrypart), "country_%d_p", co->countryid);
@@ -4199,10 +4560,10 @@ void write_countrydir(struct zip_info *zip_info, int max_index_size) {
                 }
 
                 /* If output file is already opened, and:
-                     - we have reached end of input file, or
-                     - adding new tile would make index part too big, or
-                     - item just read belongs to a different tile than the previous one,
-                    then close existing output file, put reference to the country index tile.*/
+                 - we have reached end of input file, or
+                 - adding new tile would make index part too big, or
+                 - item just read belongs to a different tile than the previous one,
+                 then close existing output file, put reference to the country index tile.*/
                 if (out
                     && (!r || (partsize && ((partsize + ibsize) > max_index_size)) || g_strcmp0(tileprev, tilecur))) {
                     partsize = ftello(out);
@@ -4246,14 +4607,14 @@ void write_countrydir(struct zip_info *zip_info, int max_index_size) {
 }
 
 void load_countries(void) {
-    char filename[64];
+    char filename[32];
     FILE *f;
     int i;
     struct country_table *co;
 
     for (i = 0; i < sizeof(country_table) / sizeof(struct country_table); i++) {
         co = &country_table[i];
-        sprintf(filename, "%s/country_%d.tmp", tempfile_obtain_prefix(), co->countryid);
+        sprintf(filename, "country_%d.tmp", co->countryid);
         f = fopen(filename, "rb");
         if (f) {
             int i, first = 1;
@@ -4279,19 +4640,19 @@ void load_countries(void) {
 
 void remove_countryfiles(void) {
     int i, j;
-    char filename[64];
+    char filename[32];
     struct country_table *co;
 
     for (i = 0; i < sizeof(country_table) / sizeof(struct country_table); i++) {
         co = &country_table[i];
         if (co->size) {
-            sprintf(filename, "%s/country_%d.tmp", tempfile_obtain_prefix(), co->countryid);
+            sprintf(filename, "country_%d.tmp", co->countryid);
             unlink(filename);
         }
         for (j = 0; j <= co->nparts; j++) {
             char partsuffix[32];
-            sprintf(partsuffix, "%d", j);
             sprintf(filename, "country_%d_p", co->countryid);
+            sprintf(partsuffix, "%d", j);
             tempfile_unlink(partsuffix, filename);
         }
     }

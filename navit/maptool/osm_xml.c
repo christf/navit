@@ -16,14 +16,21 @@
  * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA  02110-1301, USA.
  */
-#include "maptool.h"
-#include <glib.h>
-#include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #ifdef _MSC_VER
 #    define atoll _atoi64
+#else
+#    include <unistd.h>
 #endif
+#include "maptool.h"
+
+long long int currentid;
+
+long long int getcurrentid() {
+    return currentid;
+}
 
 int osm_xml_get_attribute(char *xml, char *attribute, char *buffer, int buffer_size) {
     int len = strlen(attribute);
@@ -108,6 +115,7 @@ static int parse_node(char *p) {
     if (!osm_xml_get_attribute(p, "lon", lon_buffer, BUFFER_SIZE))
         return 0;
     osm_add_node(atoll(id_buffer), atof(lat_buffer), atof(lon_buffer));
+    currentid = atoll(id_buffer);
     return 1;
 }
 
@@ -116,6 +124,7 @@ static int parse_way(char *p) {
     if (!osm_xml_get_attribute(p, "id", id_buffer, BUFFER_SIZE))
         return 0;
     osm_add_way(atoll(id_buffer));
+    currentid = atoll(id_buffer);
     return 1;
 }
 
@@ -124,6 +133,7 @@ static int parse_relation(char *p) {
     if (!osm_xml_get_attribute(p, "id", id_buffer, BUFFER_SIZE))
         return 0;
     osm_add_relation(atoll(id_buffer));
+    currentid = atoll(id_buffer);
     return 1;
 }
 
@@ -169,7 +179,6 @@ int map_collect_data_osm(FILE *in, struct maptool_osm *osm) {
     int size = BUFFER_SIZE;
     char buffer[BUFFER_SIZE];
     char *p;
-    int process_tags = 0;
     sig_alrm(0);
     if (!fgets(buffer, size, in) || !xml_declaration_in_line(buffer)) {
         fprintf(stderr, "FATAL: First line does not start with XML declaration;\n"
@@ -186,17 +195,11 @@ int map_collect_data_osm(FILE *in, struct maptool_osm *osm) {
         }
         if (!strncmp(p, "<osm ", 5)) {
         } else if (!strncmp(p, "<bound ", 7)) {
-        } else if (!strncmp(p, "<boundary ", 10)) {
-        } else if (!strncmp(p, "<changeset ", 11)) {
-        } else if (!strncmp(p, "</changeset>", 12)) {
         } else if (!strncmp(p, "<node ", 6)) {
             if (!parse_node(p))
                 fprintf(stderr, "WARNING: failed to parse %s\n", buffer);
             processed_nodes++;
-            process_tags = 1;
         } else if (!strncmp(p, "<tag ", 5)) {
-            if (!process_tags)
-                continue;
             if (!parse_tag(p))
                 fprintf(stderr, "WARNING: failed to parse %s\n", buffer);
         } else if (!strncmp(p, "<way ", 5)) {
