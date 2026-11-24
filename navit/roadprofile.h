@@ -29,6 +29,7 @@ extern "C" {
 struct roadprofile {
     NAVIT_OBJECT
     int speed;
+    int route_weight;
     int maxspeed;
 };
 

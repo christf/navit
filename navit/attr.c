@@ -330,8 +330,8 @@ static char *flags_to_text(int flags) {
         ret = g_strconcat_printf(ret, "%sAF_ONEWAY_EXCEPTION", ret ? "|" : "");
     if (flags & AF_SPEED_LIMIT)
         ret = g_strconcat_printf(ret, "%sAF_SPEED_LIMIT", ret ? "|" : "");
-    if (flags & AF_RESERVED1)
-        ret = g_strconcat_printf(ret, "%sAF_RESERVED1", ret ? "|" : "");
+    if (flags & AF_CONDITIONAL_SPEED_LIMIT)
+        ret = g_strconcat_printf(ret, "%sAF_CONDITIONAL_SPEED_LIMIT", ret ? "|" : "");
     if (flags & AF_SIZE_OR_WEIGHT_LIMIT)
         ret = g_strconcat_printf(ret, "%sAF_SIZE_OR_WEIGHT_LIMIT", ret ? "|" : "");
     if (flags & AF_THROUGH_TRAFFIC_LIMIT)
