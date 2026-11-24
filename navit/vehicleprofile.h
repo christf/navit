@@ -24,12 +24,41 @@ extern "C" {
 #include "callback.h"
 #include "navit.h"
 
+enum maxspeed_handling {
+    maxspeed_enforce = 0,
+    maxspeed_restrict = 1,
+    maxspeed_ignore = 2,
+};
+
+enum emissionclass {
+    // Truck
+    Euro_0,
+    Euro_1,
+    Euro_2,
+    Euro_3,
+    Euro_4,
+    Euro_5,
+    Euro_6,
+    // Car, use label colors and Euro_6d_TEMP for now
+    Cat_RED,
+    Cat_YLW,
+    Cat_GRN,
+    Euro_6d_TEMP,
+    EMISSION_CLASS_MAX,
+};
+
+static struct emissionclasstxt {
+    char *classes[EMISSION_CLASS_MAX];
+} ectxt = {"Euro 0", "Euro 1",    "Euro 2",       "Euro 3",      "Euro 4",      "Euro 5",
+           "Euro 6", "Red Label", "Yellow Label", "Green Label", "Euro 6d temp"};
+
 struct vehicleprofile {
     NAVIT_OBJECT
     int mode;                    /**< 0 = Auto, 1 = On-Road, 2 = Off-Road */
     int flags_forward_mask;      /**< Flags mask for moving in positive direction */
     int flags_reverse_mask;      /**< Flags mask for moving in reverse direction */
     int flags;                   /**< Required flags to move through a segment */
+    int maxspeed_handling;       /**< How to handle maxspeed of segment */
     int static_speed;            /**< Maximum speed of vehicle to consider it stationary */
     int static_distance;         /**< Maximum distance of previous position of vehicle to consider it stationary */
     char *name;                  /**< the vehicle profile name */
@@ -45,6 +74,8 @@ struct vehicleprofile {
     struct attr active_callback;
     int turn_around_penalty;  /**< Penalty when turning around */
     int turn_around_penalty2; /**< Penalty when turning around, for planned turn arounds */
+    int emissionclass;
+    int lez_allowed;
 };
 
 struct vehicleprofile *vehicleprofile_new(struct attr *parent, struct attr **attrs);
@@ -59,6 +90,10 @@ struct roadprofile *vehicleprofile_get_roadprofile(struct vehicleprofile *this_,
 
 //! Returns the vehicle profile's name.
 char *vehicleprofile_get_name(struct vehicleprofile *this_);
+int vehicleprofile_store_dimensions(struct vehicleprofile *profile);
+int vehicleprofile_read_dimensions(struct vehicleprofile *profile);
+char *getTagValue(char *xmlstring, char *tag);
+
 #ifdef __cplusplus
 }
 #endif
