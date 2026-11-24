@@ -177,8 +177,6 @@ static int gui_internal_cmd_enter_coord(struct gui_priv *this, char *function, s
     gui_internal_widget_append(wr, row);
     row = gui_internal_text_new(this, "52°31'19N 19°24'46E", gravity_top_center | flags_fill | orientation_vertical);
     gui_internal_widget_append(wr, row);
-    row = gui_internal_text_new(this, "52.5219,19.4127", gravity_top_center | flags_fill | orientation_vertical);
-    gui_internal_widget_append(wr, row);
 
     if (this->keyboard)
         gui_internal_widget_append(w, gui_internal_keyboard(this, VKBD_DEGREE));
@@ -367,6 +365,10 @@ static int gui_internal_cmd2_route_height_profile(struct gui_priv *this, char *f
     int min_ele = INT_MAX;
     int max_ele = INT_MIN;
     int distance = 0;
+    int heightmeters = 0;  // sum of all inclines
+    int prev_height = 0;
+    int dheight = 0;
+    int first_height = 1;
     sel.next = NULL;
     sel.order = 18;
     sel.range.min = type_height_line_1;
@@ -459,9 +461,20 @@ static int gui_internal_cmd2_route_height_profile(struct gui_priv *this, char *f
                                 if (heightline->c[i].x != heightline->c[i + 1].x
                                     || heightline->c[i].y != heightline->c[i + 1].y) {
                                     if (line_intersection(heightline->c + i, heightline->c + i + 1, &last, &c, &res)) {
+                                        if (first_height) {
+                                            prev_height = heightline->height;
+                                            first_height = 0;
+                                        }
                                         diagram_point = g_new(struct diagram_point, 1);
                                         diagram_point->c.x = dist + transform_distance(projection_mg, &last, &res);
                                         diagram_point->c.y = heightline->height;
+                                        // add heightmeters
+                                        dheight = heightline->height - prev_height;
+                                        if (dheight > 0) {
+                                            heightmeters += dheight;
+                                            dbg(lvl_debug, "dheight: %i", dheight);
+                                        }
+                                        prev_height = heightline->height;
                                         diagram_point->next = diagram_points;
                                         diagram_points = diagram_point;
                                         diagram_points_count++;
@@ -548,12 +561,17 @@ static int gui_internal_cmd2_route_height_profile(struct gui_priv *this, char *f
 
     struct point pTopLeft = {0, box->p.y + 10};
     struct point pBottomLeft = {0, box->h + box->p.y - 2};
-    struct point pBottomRight = {box->w - 100, box->h + box->p.y - 2};
+    struct point pBottomRight = {box->w - 150, box->h + box->p.y - 2};
+    struct point pBottomRightHm = {box->w - 150, box->h + box->p.y - 20};
     char *minele_text = g_strdup_printf("%d m", min_ele);
     char *maxele_text = g_strdup_printf("%d m", max_ele);
-    char *distance_text = g_strdup_printf("%.3f km", distance / 1000.0);
+    char *distance_text = _("Distance:");
+    distance_text = g_strconcat(distance_text, g_strdup_printf(" %.3f km", distance / 1000.0), NULL);
+    char *heightmeter_text = _("Vertical Meters:");
+    heightmeter_text = g_strconcat(heightmeter_text, g_strdup_printf(" %i", heightmeters), NULL);
     graphics_draw_text_std(this->gra, 10, maxele_text, &pTopLeft);
     graphics_draw_text_std(this->gra, 10, minele_text, &pBottomLeft);
+    graphics_draw_text_std(this->gra, 10, heightmeter_text, &pBottomRightHm);
     graphics_draw_text_std(this->gra, 10, distance_text, &pBottomRight);
 
     while (diagram_points) {
@@ -936,7 +954,11 @@ static int gui_internal_cmd2_set(struct gui_priv *this, char *function, struct a
 }
 
 int gui_internal_cmd2_quit(struct gui_priv *this, char *function, struct attr **in, struct attr ***out) {
+    struct attr navit;
     gui_internal_prune_menu(this, NULL);
+    navit.type = attr_navit;
+    navit.u.navit = this->nav;
+    config_remove_attr(config, &navit);
     event_main_loop_quit();
     return 0;
 }
@@ -968,12 +990,10 @@ static int gui_internal_cmd_write(struct gui_priv *this, char *function, struct 
         in++;
     }
     if (str) {
-        char *tmp = str;
         str = g_strdup_printf("<html>%s</html>\n", str);
 #if 0
         dbg(lvl_debug,"%s",str);
 #endif
-        g_free(tmp);
         gui_internal_html_parse_text(this, str);
     }
     g_free(str);
