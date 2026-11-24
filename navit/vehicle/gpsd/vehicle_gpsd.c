@@ -17,16 +17,6 @@
  * Boston, MA  02110-1301, USA.
  */
 
-#include "config.h"
-
-#include "callback.h"
-#include "coord.h"
-#include "debug.h"
-#include "event.h"
-#include "item.h"
-#include "plugin.h"
-#include "types.h"
-#include "vehicle.h"
 #include <config.h>
 #include <glib.h>
 #include <gps.h>
@@ -36,6 +26,15 @@
 #    include <errno.h>
 #    include <gpsbt.h>
 #endif
+#include "callback.h"
+#include "config.h"
+#include "coord.h"
+#include "debug.h"
+#include "event.h"
+#include "item.h"
+#include "plugin.h"
+#include "types.h"
+#include "vehicle.h"
 
 /**
  * @defgroup vehicle-gpsd Vehicle Gpsd
@@ -47,7 +46,6 @@
 
 static struct vehicle_priv {
     char *source;
-    char *gpsd_host;
     char *gpsd_query;
     struct callback_list *cbl;
     struct callback *cb, *cbt;
@@ -70,6 +68,7 @@ static struct vehicle_priv {
     struct event_timeout *retry_timer2;
     struct attr **attrs;
     char fixiso8601[128];
+    int is_selected;
 #ifdef HAVE_GPSBT
     gpsbt_t context;
 #endif
@@ -179,7 +178,6 @@ vehicle_gpsd_callback(struct gps_data_t *data, const char *buf, size_t len, int 
     }
     if (data->set & MODE_SET) {
         priv->fix_type = data->fix.mode - 1;
-        dbg(lvl_debug, "Fix Mode: %i", priv->fix_type);
         data->set &= ~MODE_SET;
     }
     if (data->set & TIME_SET) {
@@ -242,11 +240,14 @@ static int vehicle_gpsd_try_open(struct vehicle_priv *priv) {
     if (!priv->gps) {
 #endif
         priv->cbt = callback_new_1(callback_cast(vehicle_gpsd_try_open), priv);
-        dbg(lvl_error, "gps_open failed for '%s'. Retrying in %d seconds. Have you started gpsd?", priv->source,
-            priv->retry_interval);
+        if (priv->is_selected)
+            dbg(lvl_error, "gps_open failed for '%s'. Retrying in %d seconds. Have you started gpsd?", priv->source,
+                priv->retry_interval);
         g_free(source);
         return TRUE;
     }
+    g_free(source);
+
 #ifdef HAVE_LIBGPS19
     if (strchr(priv->gpsd_query, 'r'))
         gps_stream(priv->gps, WATCH_ENABLE | WATCH_NMEA | WATCH_JSON, NULL);
@@ -255,7 +256,6 @@ static int vehicle_gpsd_try_open(struct vehicle_priv *priv) {
 #else
     gps_query(priv->gps, priv->gpsd_query);
 #endif
-    priv->gpsd_host = source;
 
 #if GPSD_API_MAJOR_VERSION < 5
     gps_set_raw_hook(priv->gps, vehicle_gpsd_callback);
@@ -368,23 +368,27 @@ static void vehicle_gpsd_destroy(struct vehicle_priv *priv) {
     vehicle_gpsd_close(priv);
     if (priv->source)
         g_free(priv->source);
-    if (priv->gpsd_host)
-        g_free(priv->gpsd_host);
     if (priv->gpsd_query)
         g_free(priv->gpsd_query);
 #if GPSD_API_MAJOR_VERSION >= 5
     g_free(priv->gps);
 #endif
-    attr_list_free(priv->attrs);
     g_free(priv);
+}
+
+static int vehicle_gpsd_position_attr_set(struct vehicle_priv *priv, struct attr *attr) {
+    switch (attr->type) {
+    case attr_vehicle_is_selected:
+        priv->is_selected = attr->u.num;
+        break;
+    default:
+        return 0;
+    }
 }
 
 static int vehicle_gpsd_position_attr_get(struct vehicle_priv *priv, enum attr_type type, struct attr *attr) {
     struct attr *active = NULL;
     switch (type) {
-    case attr_position_valid:  // Fix #1130
-        attr->u.num = (priv->fix_type > 0 ? attr_position_valid_valid : attr_position_valid_invalid);
-        break;
     case attr_position_fix_type:
         attr->u.num = priv->fix_type;
         break;
@@ -428,7 +432,7 @@ static int vehicle_gpsd_position_attr_get(struct vehicle_priv *priv, enum attr_t
             return 0;
     } break;
     case attr_active:
-        active = priv->attrs ? attr_search(priv->attrs, attr_active) : NULL;
+        active = attr_search(priv->attrs, attr_active);
         if (active != NULL) {
             attr->u.num = active->u.num;
             return 1;
@@ -445,6 +449,8 @@ static int vehicle_gpsd_position_attr_get(struct vehicle_priv *priv, enum attr_t
 static struct vehicle_methods vehicle_gpsd_methods = {
     vehicle_gpsd_destroy,
     vehicle_gpsd_position_attr_get,
+    0,  // we don't have attr_set
+    vehicle_gpsd_position_attr_set,
 };
 
 static struct vehicle_priv *vehicle_gpsd_new_gpsd(struct vehicle_methods *meth, struct callback_list *cbl,
@@ -479,7 +485,7 @@ static struct vehicle_priv *vehicle_gpsd_new_gpsd(struct vehicle_methods *meth, 
     }
     ret->cbl = cbl;
     *meth = vehicle_gpsd_methods;
-    ret->attrs = attr_list_dup(attrs);
+    ret->attrs = attrs;
     vehicle_gpsd_open(ret);
     return ret;
 }

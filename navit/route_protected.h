@@ -39,6 +39,15 @@ extern "C" {
 #define RP_TURN_RESTRICTION_RESOLVED 4
 
 #define RSD_MAXSPEED(x) *((int *)route_segment_data_field_pos((x), attr_maxspeed))
+#define RSD_MAXCONDSPEED(x) *((int *)route_segment_data_field_pos((x), attr_maxspeed_conditional_speed))
+#define RSD_MAXCONDSPEEDFWD(x) *((int *)route_segment_data_field_pos((x), attr_maxspeed_fwd_conditional_speed))
+#define RSD_MAXCONDSPEEDBWD(x) *((int *)route_segment_data_field_pos((x), attr_maxspeed_bwd_conditional_speed))
+#define RSD_MAXCONDSPEEDCOND(x)                                                                                        \
+    *((unsigned char **)route_segment_data_field_pos((x), attr_maxspeed_conditional_condition))
+#define RSD_MAXCONDSPEEDFWDCOND(x)                                                                                     \
+    *((unsigned char **)route_segment_data_field_pos((x), attr_maxspeed_fwd_conditional_condition))
+#define RSD_MAXCONDSPEEDBWDCOND(x)                                                                                     \
+    *((unsigned char **)route_segment_data_field_pos((x), attr_maxspeed_bwd_conditional_condition))
 
 /**
  * @brief A point in the route graph
@@ -80,6 +89,7 @@ struct route_segment_data {
     int len;          /**< Length of this segment, in meters */
     int score;        /**< Used by the traffic module to give preference to some
                        *   segments over others */
+    int inside_lez;
     /*NOTE: After a segment, various fields may follow, depending on what flags are set. Order of fields:
                             1.) maxspeed			Maximum allowed speed on this segment. Present if
        AF_SPEED_LIMIT is set. 2.) offset				If the item is segmented (i.e. represented by
@@ -102,18 +112,38 @@ struct size_weight_limit {
  * @brief Data for a segment in the route graph
  */
 struct route_graph_segment_data {
-    struct item *item;                    /**< The item which this segment is part of */
-    int offset;                           /**< If the item passed in "item" is segmented (i.e. divided
-                                           *   into several segments), this indicates the position of
-                                           *   this segment within the item */
-    int flags;                            /**< Flags for this segment */
-    int len;                              /**< The length of this segment */
-    int maxspeed;                         /**< The maximum speed allowed on this segment in km/h,
-                                           *   -1 if not known */
+    struct item *item; /**< The item which this segment is part of */
+    int offset;        /**< If the item passed in "item" is segmented (i.e. divided
+                        *   into several segments), this indicates the position of
+                        *   this segment within the item */
+    int flags;         /**< Flags for this segment */
+    int len;           /**< The length of this segment */
+    int maxspeed;      /**< The maximum speed allowed on this segment in km/h,
+                        *   -1 if not known */
+    int maxspeedcond;  /**< The maximum conditional speed allowed on this segment in km/h,
+                        *   -1 if not known */
+    char *condition;
+    int maxspeedcondfwd; /**< The maximum conditional forward speed allowed on this segment in km/h,
+                          *   -1 if not known */
+    char *fwdcondition;
+    int maxspeedcondbwd; /**< The maximum conditional backward speed allowed on this segment in km/h,
+                          *   -1 if not known */
+    char *bwdcondition;
     struct size_weight_limit size_weight; /**< Size and weight limits for this segment */
     int dangerous_goods;
-    int score; /**< Used by the traffic module to give preference to some
-                *   segments over others */
+    int score;         /**< Used by the traffic module to give preference to some
+                        *   segments over others */
+    int sp_inside_lez; /** 1 if the start point of the segment is inside a low emission zone*/
+    int ep_inside_lez; /** 1 if the end point of the segment is inside a low emission zone*/
+};
+
+struct route_graph_lez {
+    // struct coord *next;         /**< Pointer to the next coordinate */
+    unsigned int ncoords;  /**< How many coordinates does this lez poly have? */
+    struct coord min;      /**< min coordinates */
+    struct coord max;      /**< max coordinates */
+    struct coord coord[0]; /**< Pointer to the coords coordinates of this lez */
+    /* WARNING: There will be coordinates following here, so do not create new fields after c! */
 };
 
 /**
@@ -129,7 +159,15 @@ struct route_graph_segment {
                                              *  same point. Start of this list is in route_graph_point->end. */
     struct route_graph_point *start;        /**< Pointer to the point this segment starts at. */
     struct route_graph_point *end;          /**< Pointer to the point this segment ends at. */
-    struct route_segment_data data;         /**< The segment data */
+    struct route_graph_lez *lez;
+    struct route_segment_data data; /**< The segment data */
+};
+
+struct route_graph_lezs {
+    struct route_graph_lez *next;     /**< Pointer to the next lez */
+    unsigned nlezs;                   /**< How many lezs do we have? */
+    struct route_graph_lez *lez[100]; /**< Pointer to the lez structures */
+    /* WARNING: There will be lezs following here, so do not create new fields after lez! */
 };
 
 /**
@@ -149,6 +187,7 @@ struct route_graph {
     struct vehicleprofile *vehicleprofile; /**< The vehicle profile */
     struct callback *idle_cb;              /**< Idle callback to process the graph */
     struct callback *done_cb;              /**< Callback when graph is done */
+    struct callback *donelez_cb;           /**< Callback when graph is done */
     struct event_idle *idle_ev;            /**< The pointer to the idle event */
     struct route_graph_segment
         *route_segments; /**< Pointer to the first route_graph_segment in the linked list of all segments */
@@ -156,6 +195,7 @@ struct route_graph {
     struct fibheap *heap;                  /**< Priority queue for points to be expanded */
 #define HASH_SIZE 8192
     struct route_graph_point *hash[HASH_SIZE]; /**< A hashtable containing all route_graph_points in this graph */
+    struct route_graph_lezs *lezs;             /**< low emission zones */
 };
 
 /* prototypes */
@@ -178,6 +218,7 @@ void route_graph_free_segments(struct route_graph *this);
 void route_graph_build_done(struct route_graph *rg, int cancel);
 void route_recalculate_partial(struct route *this_);
 void *route_segment_data_field_pos(struct route_segment_data *seg, enum attr_type type);
+int route_get_conditional_speed(struct route_segment_data *over, struct vehicleprofile *profile, enum attr_type type);
 /* end of prototypes */
 #ifdef __cplusplus
 }

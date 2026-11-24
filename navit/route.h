@@ -71,7 +71,10 @@ struct street_data {
     struct item item; /**< The map item for this street */
     int count;        /**< Number of coordinates this street has */
     int flags;
-    int maxspeed;      /**< Maximum speed allowed on this street. */
+    int maxspeed; /**< Maximum speed allowed on this street. */
+    int maxspeed_conditional;
+    int maxspeed_conditional_fwd;
+    int maxspeed_conditional_bwd;
     struct coord c[0]; /**< Pointer to the coordinates of this street.
                         *   DO NOT INSERT FIELDS AFTER THIS. */
 };
@@ -102,7 +105,7 @@ struct route_info *route_get_dst(struct route *this_);
 int route_get_path_set(struct route *this_);
 int route_contains(struct route *this_, struct item *item);
 int route_destination_reached(struct route *this_);
-void route_set_position(struct route *this_, struct pcoord *pos);
+void route_set_position(struct route *this_, struct pcoord *pos, struct graphics *gra);
 void route_set_position_from_tracking(struct route *this_, struct tracking *tracking, enum projection pro);
 struct map_selection *route_rect(int order, struct coord *c1, struct coord *c2, int rel, int abs);
 void route_set_destinations(struct route *this_, struct pcoord *dst, int count, int async);
@@ -134,6 +137,8 @@ void route_attr_iter_destroy(struct attr_iter *iter);
 int route_get_attr(struct route *this_, enum attr_type type, struct attr *attr, struct attr_iter *iter);
 void route_init(void);
 void route_destroy(struct route *this_);
+int route_evaluate_condition(struct vehicleprofile *profile, char *condition, int speed);
+
 /* end of prototypes */
 #ifdef __cplusplus
 }

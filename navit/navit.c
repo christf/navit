@@ -18,12 +18,14 @@
  */
 
 #define _USE_MATH_DEFINES 1
-#include "navit.h"
+#include "config.h"
+#ifdef HAVE_UNISTD_H
+#    include <unistd.h>
+#endif
 #include "attr.h"
 #include "bookmarks.h"
 #include "callback.h"
 #include "command.h"
-#include "config.h"
 #include "coord.h"
 #include "data_window.h"
 #include "debug.h"
@@ -32,13 +34,15 @@
 #include "graphics.h"
 #include "gui.h"
 #include "item.h"
-#include "item_type_def.h"
 #include "layout.h"
 #include "log.h"
+#include "main.h"
 #include "map.h"
 #include "mapset.h"
+#include "menu.h"
 #include "messages.h"
 #include "navigation.h"
+#include "navit.h"
 #include "navit_nls.h"
 #include "param.h"
 #include "point.h"
@@ -56,20 +60,17 @@
 #include "vehicleprofile.h"
 #include "xmlconfig.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <glib.h>
-#include <glib/gtypes.h>
 #include <math.h>
-#include <stdarg.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct log;
-struct vehicle;
+#include <time.h>
 #ifdef HAVE_API_WIN32_BASE
-#    include <windows.h>
-
 #    include "util.h"
+#    include <windows.h>
 #endif
 #ifdef HAVE_API_WIN32_CE
 #    include "libc.h"
@@ -77,10 +78,6 @@ struct vehicle;
 
 /* define string for bookmark handling */
 #define TEXTFILE_COMMENT_NAVI_STOPPED "# navigation stopped\n"
-/* How many times wider/taller than the screen the map source rectangle is made when building
- * a prefetch display list after a pan gesture (and on initial draw).
- */
-#define PAN_PREFETCH_SCALE_FACTOR 3
 
 /**
  * @defgroup navit The navit core instance
@@ -151,7 +148,6 @@ struct navit {
     int autozoom_paused;
     struct event_timeout *button_timeout, *motion_timeout;
     struct callback *motion_timeout_callback;
-    int pan_prefetch;
     int ignore_button;
     int ignore_graphics_events;
     struct log *textfile_debug_log;
@@ -305,11 +301,9 @@ struct map *navit_get_search_results_map(struct navit *this_) {
  * @return The number of results actually added to the map
  */
 int navit_populate_search_results_map(struct navit *this_, GList *search_results, struct coord_rect *r) {
-    struct mapset *ms;
     struct map *map;
     struct map_rect *mr;
     struct item *item;
-    struct attr attr;
     GList *curr_result = search_results;
     int count;
     char *name_label;
@@ -317,8 +311,6 @@ int navit_populate_search_results_map(struct navit *this_, GList *search_results
     map = navit_get_search_results_map(this_);
     if (!map)
         return 0;
-
-    ms = navit_get_mapset(this_);
 
     mr = map_rect_new(map, NULL);
 
@@ -332,10 +324,7 @@ int navit_populate_search_results_map(struct navit *this_, GList *search_results
 
     if (!search_results) {
         map_rect_destroy(mr);
-        attr.type = attr_map;
-        attr.u.map = map;
-        mapset_remove_attr(ms, &attr);
-        map_destroy(map);
+        dbg(lvl_warning, "NULL result table - only map clean up is done.");
         return 0;
     }
 
@@ -384,9 +373,9 @@ struct tracking *navit_get_tracking(struct navit *this_) {
 char *navit_get_user_data_directory(int create) {
     char *dir;
     dir = getenv("NAVIT_USER_DATADIR");
-    if (create && dir != NULL && !file_exists(dir)) {
+    if (create && !file_exists(dir)) {
         dbg(lvl_debug, "creating dir %s", dir);
-        if (file_mkdir(dir, 1)) {
+        if (file_mkdir(dir, 0)) {
             dbg(lvl_error, "failed creating dir %s", dir);
             return NULL;
         }
@@ -400,12 +389,7 @@ void navit_draw_async(struct navit *this_, int async) {
         this_->blocked |= 2;
         return;
     }
-    if (this_->pan_prefetch) {
-        transform_setup_source_rect_scale(this_->trans, PAN_PREFETCH_SCALE_FACTOR);
-        this_->pan_prefetch = 0;
-    } else {
-        transform_setup_source_rect(this_->trans);
-    }
+    transform_setup_source_rect(this_->trans);
     graphics_draw(this_->gra, this_->displaylist, this_->mapsets->data, this_->trans, this_->layout_current, async,
                   NULL, this_->graphics_flags | 1);
 }
@@ -474,27 +458,8 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     int callback = (this_->ready == 1);
     this_->ready |= 2;
     memset(&sel, 0, sizeof(sel));
-    int firstcall = 0;
-    struct attr attr;
-
-    /* Fix for #1135: Check if pitch was set while w and h were 0. In this case set pitch
-     * again so transformation value is set correctly */
-    if (this_->w == 0 && this_->h == 0) {
-        firstcall = 1;
-    }
-
     this_->w = w;
     this_->h = h;
-
-    /* Fix for #1135: Now w and h are set initially, we can set pitch value again
-     *
-     */
-    if (firstcall) {
-        attr.type = attr_pitch;
-        attr.u.num = this_->pitch;
-        navit_set_attr(this_, &attr);  // Set pitch again
-    }
-
     sel.u.p_rect.rl.x = w;
     sel.u.p_rect.rl.y = h;
     transform_set_screen_selection(this_->trans, &sel);
@@ -502,13 +467,8 @@ void navit_handle_resize(struct navit *this_, int w, int h) {
     graphics_set_rect(this_->gra, &sel.u.p_rect);
     if (callback)
         callback_list_call_attr_1(this_->attr_cbl, attr_graphics_ready, this_);
-    if (this_->ready == 3) {
-        /* About to resize. Cancel drawing whatever it is */
-        graphics_draw_cancel(this_->gra, this_->displaylist);
-        /* Prefetch during start so first pan has off-screen map data */
-        this_->pan_prefetch = 1;
+    if (this_->ready == 3)
         navit_draw_async(this_, 1);
-    }
 }
 
 static void navit_resize(void *data, int w, int h) {
@@ -655,9 +615,6 @@ int navit_handle_button(struct navit *this_, int pressed, int button, struct poi
             graphics_overlay_disable(this_->gra, 0);
             if (!this_->zoomed)
                 navit_set_timeout(this_);
-            /* Prefetch during start so next pan has off-screen map data
-            pan_prefetch is cleared by navit_draw_async after the draw is scheduled. */
-            this_->pan_prefetch = 1;
             navit_draw(this_);
         } else
             return 1;
@@ -840,7 +797,7 @@ void navit_zoom_in(struct navit *this_, int factor, struct point *p) {
 }
 
 /**
- * Change the current zoom level, further to the ground
+ * Change the current zoom level
  *
  * @param navit The navit instance
  * @param factor The zoom factor, usually 2
@@ -1806,9 +1763,7 @@ static int navit_former_destinations_active(struct navit *this_) {
         while (fgets(lastline, sizeof(lastline), destination_file))
             ;
         fclose(destination_file);
-        /*forcefully terminate the string, there is no proper fgets error handling.*/
-        lastline[sizeof(lastline) - 1] = 0;
-        if (strcmp(lastline, TEXTFILE_COMMENT_NAVI_STOPPED)) {
+        if ((lastline != NULL) && (strcmp(lastline, TEXTFILE_COMMENT_NAVI_STOPPED))) {
             active = 1;
         }
     }
@@ -1852,10 +1807,8 @@ static void navit_add_former_destinations_from_file(struct navit *this_) {
     struct map_rect *mr;
 
     this_->former_destination = read_former_destinations_from_file();
-    if (!this_->route || !navit_former_destinations_active(this_) || !this_->vehicle) {
-        g_free(c);
+    if (!this_->route || !navit_former_destinations_active(this_) || !this_->vehicle)
         return;
-    }
     mr = map_rect_new(this_->former_destination, NULL);
     while ((item = map_rect_get_item(mr))) {
         if (item->type == type_former_itinerary || item->type == type_former_itinerary_part) {
@@ -2110,9 +2063,6 @@ int navit_init(struct navit *this_) {
     struct attr *attr;
     struct traffic *traffic;
 
-    this_->w = 0;
-    this_->h = 0;
-
     dbg(lvl_info, "enter gui %p graphics %p", this_->gui, this_->gra);
 
     if (!this_->gui && !(this_->flags & 2)) {
@@ -2130,9 +2080,8 @@ int navit_init(struct navit *this_) {
         graphics_get_attr(this_->gra, attr_type, &attr_type_graphics, NULL);
         dbg(lvl_error, "FATAL: Failed to connect graphics '%s' to gui '%s'", attr_type_graphics.u.str,
             attr_type_gui.u.str);
-        dbg(lvl_error,
-            "Please see https://navit.readthedocs.io/en/trunk/user/faq/Failed_to_connect_graphics_to_gui.html "
-            "for explanations and solutions\n");
+        dbg(lvl_error, "Please see http://wiki.navit-project.org/index.php/Failed_to_connect_graphics_to_gui "
+                       "for explanations and solutions\n");
         exit(1);
     }
     if (this_->speech && this_->navigation) {
@@ -2258,10 +2207,8 @@ int navit_init(struct navit *this_) {
     callback = (this_->ready == 2);
     this_->ready |= 1;
     dbg(lvl_info, "ready=%d", this_->ready);
-    if (this_->ready == 3) {
-        this_->pan_prefetch = 1;
+    if (this_->ready == 3)
         navit_draw_async(this_, 1);
-    }
     if (callback)
         callback_list_call_attr_1(this_->attr_cbl, attr_graphics_ready, this_);
     return 0;
@@ -2465,8 +2412,8 @@ static int navit_get_cursor_pnt(struct navit *this_, struct point *p, int keep_o
             mdir = nv->dir - this_->orientation;
         }
 
-        p->x = (50 - offset * sin(G_PI * mdir / 180.)) * width / 100;
-        p->y = (50 + offset * cos(G_PI * mdir / 180.)) * height / 100;
+        p->x = (50 - offset * sin(M_PI * mdir / 180.)) * width / 100;
+        p->y = (50 + offset * cos(M_PI * mdir / 180.)) * height / 100;
         if (dir)
             *dir = this_->orientation;
     }
@@ -2510,27 +2457,6 @@ void navit_set_center_cursor(struct navit *this_, int autozoom, int keep_orienta
     navit_set_center_coord_screen(this_, &nv->coord, &pn, 0);
     if (autozoom)
         navit_autozoom(this_, &nv->coord, nv->speed, 0);
-}
-
-/**
- * @brief Drags (moves) the map
- *
- * Drags (moves) the map from origin point to the destination point
- *
- * @param navit The navit instance
- * @param origin The point point where the drag starts
- * @param destination The point where to map should be dragged to
- * @returns nothing
- */
-
-void navit_drag_map(struct navit *this_, struct point *origin, struct point *destination) {
-    update_transformation(this_->trans, origin, destination);
-    graphics_draw_drag(this_->gra, NULL);
-    transform_copy(this_->trans, this_->trans_cursor);
-    graphics_overlay_disable(this_->gra, 0);
-    if (!this_->zoomed)
-        navit_set_timeout(this_);
-    navit_draw(this_);
 }
 
 /**
@@ -2629,15 +2555,10 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
         dbg(lvl_debug, "setting attr_layout to %s", attr->u.layout->name);
         if (this_->layout_current != attr->u.layout) {
             navit_update_current_layout(this_, attr->u.layout);
-            /* Invalidate fonts, rebuild the display list synchronously, then clear the
-             * invalidation: cached fonts are only destroyed while their size is being
-             * replaced inside the rebuild, so nothing in an in-flight frame can dangle.
-             */
-            graphics_font_invalidate(this_->gra);
+            graphics_font_destroy_all(this_->gra);
             navit_set_cursors(this_);
             if (this_->ready == 3)
                 navit_draw(this_);
-            graphics_font_validate(this_->gra);
             attr_updated = 1;
         }
         break;
@@ -2682,8 +2603,6 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
 #endif
                 attr_updated = 1;
             }
-            if (attr_updated && this_->ready == 3)
-                navit_draw(this_);
         }
         break;
     case attr_osd_configuration:
@@ -2714,10 +2633,7 @@ static int navit_set_attr_do(struct navit *this_, struct attr *attr, int init) {
         this_->recentdest_count = attr->u.num;
         break;
     case attr_speech:
-        if (this_->speech != attr->u.speech) {
-            if (this_->speech) {
-                navit_object_unref((struct navit_object *)this_->speech);
-            }
+        if (this_->speech && this_->speech != attr->u.speech) {
             attr_updated = 1;
             this_->speech = attr->u.speech;
         }
@@ -3113,7 +3029,6 @@ static int navit_add_layout(struct navit *this_, struct layout *layout) {
     struct attr active;
     int is_default = 0;
     int is_active = 0;
-    navit_object_ref((struct navit_object *)layout);
     this_->layouts = g_list_append(this_->layouts, layout);
     /** check if we want to immediately activate this layout.
      * Unfortunately we have concurring conditions about when to activate
@@ -3336,7 +3251,7 @@ static void navit_vehicle_update_position(struct navit *this_, struct navit_vehi
         if (tracking)
             route_set_position_from_tracking(this_->route, tracking, pro);
         else
-            route_set_position(this_->route, &cursor_pc);
+            route_set_position(this_->route, &cursor_pc, this_->gra);
     }
     callback_list_call_attr_0(this_->attr_cbl, attr_position);
     navit_textfile_debug_log(this_, "type=trackpoint_tracked");
@@ -3425,7 +3340,7 @@ static void navit_vehicle_update_status(struct navit *this_, struct navit_vehicl
 
 void navit_set_position(struct navit *this_, struct pcoord *c) {
     if (this_->route) {
-        route_set_position(this_->route, c);
+        route_set_position(this_->route, c, this_->gra);
         callback_list_call_attr_0(this_->attr_cbl, attr_position);
     }
     if (this_->ready == 3)
@@ -3433,8 +3348,9 @@ void navit_set_position(struct navit *this_, struct pcoord *c) {
 }
 
 static int navit_set_vehicleprofile(struct navit *this_, struct vehicleprofile *vp) {
-    if (this_->vehicleprofile == vp)
-        return 0;
+    //    if (this_->vehicleprofile == vp)  if we change the vehicleprofile settings we need to set even the same
+    //    profile
+    //        return 0;
     this_->vehicleprofile = vp;
     if (this_->route)
         route_set_profile(this_->route, this_->vehicleprofile);
@@ -3459,7 +3375,24 @@ int navit_set_vehicleprofile_name(struct navit *this_, char *name) {
 
 static void navit_set_vehicle(struct navit *this_, struct navit_vehicle *nv) {
     struct attr attr;
+    struct vehicle *oldv;
+
+    // mark vehicle in priv as inactive
+    if (navit_get_attr(this_, attr_vehicle, &attr, NULL)) {
+        oldv = attr.u.vehicle;
+        attr.type = attr_vehicle_is_selected;
+        attr.u.num = 0;
+        vehicle_set_attr(oldv, &attr);
+    }
+
     this_->vehicle = nv;
+
+    if (nv) {
+        attr.type = attr_vehicle_is_selected;
+        attr.u.num = 1;
+        vehicle_set_attr(nv->vehicle, &attr);
+    }
+
     if (nv && vehicle_get_attr(nv->vehicle, attr_profilename, &attr, NULL)) {
         if (navit_set_vehicleprofile_name(this_, attr.u.str))
             return;
@@ -3500,7 +3433,6 @@ static int navit_add_vehicle(struct navit *this_, struct vehicle *v) {
     if ((vehicle_get_attr(v, attr_follow, &follow, NULL)))
         nv->follow = follow.u.num;
     nv->follow_curr = nv->follow;
-    navit_object_ref((struct navit_object *)v);
     this_->vehicles = g_list_append(this_->vehicles, nv);
     if ((vehicle_get_attr(v, attr_active, &active, NULL)) && active.u.num)
         navit_set_vehicle(this_, nv);
@@ -3547,7 +3479,7 @@ void navit_layout_switch(struct navit *n) {
 
     int currTs = 0;
     struct attr iso8601_attr, geo_attr, valid_attr, layout_attr;
-    double trise, tset;
+    double trise, tset, trise_actual;
     struct layout *l;
     int year, month, day;
     int after_sunrise = FALSE;
@@ -3567,9 +3499,9 @@ void navit_layout_switch(struct navit *n) {
         // Check that we aren't calculating too fast
         if (vehicle_get_attr(n->vehicle->vehicle, attr_position_time_iso8601, &iso8601_attr, NULL) == 1) {
             currTs = iso8601_to_secs(iso8601_attr.u.str);
-            dbg(lvl_debug, "currTs: %02u:%02u", currTs % 86400 / 3600, ((currTs % 86400) % 3600) / 60);
+            dbg(lvl_debug, "currTs: %u:%u", currTs % 86400 / 3600, ((currTs % 86400) % 3600) / 60);
         }
-        dbg(lvl_debug, "prevTs: %02u:%02u", n->prevTs % 86400 / 3600, ((n->prevTs % 86400) % 3600) / 60);
+        dbg(lvl_debug, "prevTs: %u:%u", n->prevTs % 86400 / 3600, ((n->prevTs % 86400) % 3600) / 60);
 
         if (n->auto_switch == FALSE)
             return;
@@ -3623,47 +3555,24 @@ void navit_layout_switch(struct navit *n) {
                          &trise, &tset)
             != 0) {
             dbg(lvl_debug, "near the pole sun never rises/sets, so we should never switch profiles");
-            dbg(lvl_debug, "trise: %02u:%02u", HOURS(trise), MINUTES(trise));
-            dbg(lvl_debug, "tset: %02u:%02u", HOURS(tset), MINUTES(tset));
+            dbg(lvl_debug, "trise: %u:%u", HOURS(trise), MINUTES(trise));
+            dbg(lvl_debug, "tset: %u:%u", HOURS(tset), MINUTES(tset));
             n->prevTs = currTs;
             return;
         }
-
-        dbg(lvl_debug, "trise: %02u:%02u", HOURS(trise), MINUTES(trise));
-        dbg(lvl_debug, "tset: %02u:%02u", HOURS(tset), MINUTES(tset));
+        trise_actual = trise;
+        dbg(lvl_debug, "trise: %u:%u", HOURS(trise), MINUTES(trise));
+        dbg(lvl_debug, "tset: %u:%u", HOURS(tset), MINUTES(tset));
         dbg(lvl_debug, "dayname = %s, name =%s ", l->dayname, l->name);
         dbg(lvl_debug, "nightname = %s, name = %s ", l->nightname, l->name);
-
-        // We want any times to be in [0;1439].
-        if (trise < 0)
-            trise += 24;
-        if (tset >= 24)
-            tset -= 24;
-
-        int trmin = HOURS(trise) * 60 + MINUTES(trise);  // rise time in minutes
-        int tsmin = HOURS(tset) * 60 + MINUTES(tset);    // set time in minutes
-        int tcur = (currTs % 86400) / 60;                // minutes elapsed today
-
-        if (trmin <= tcur) {  // use <= to have defined values for after_sunrise for any value of tcur
+        if (HOURS(trise) * 60 + MINUTES(trise) < (currTs % 86400) / 60) {
             after_sunrise = TRUE;
         }
 
-        if (tsmin > trmin) {  // set > rise
-            if (trmin <= tcur) {
-                after_sunrise = TRUE;
-            }
-            if (tsmin <= tcur || trmin > tcur) {
-                after_sunset = TRUE;
-            }
-        } else {  // rise > set
-            if ((tcur <= tsmin) || (tcur >= trmin)) {
-                after_sunrise = TRUE;
-            }
-            if (tcur > tsmin && tcur < trmin) {
-                after_sunset = TRUE;
-            }
+        if (((HOURS(tset) * 60 + MINUTES(tset) < (currTs % 86400) / 60))
+            || ((HOURS(trise_actual) * 60 + MINUTES(trise_actual) > (currTs % 86400) / 60))) {
+            after_sunset = TRUE;
         }
-
         if (after_sunrise && !after_sunset && l->dayname) {
             navit_set_layout_by_name(n, l->dayname);
             dbg(lvl_debug, "layout set to day");
@@ -3807,10 +3716,9 @@ void navit_disable_suspend() {
  * {@code blocked} member. If draw operations in progress were canceled, flag 2 is also set.
  *
  * {@code block = 0} unblocks redraw operations, resetting {@code blocked} to 0. If flag 2 was previously set,
- * indicating that draw operations had been previously canceled, the active GUI is redrawn while keeping map drawing
- * blocked, or the map if no GUI handles the redraw.
+ * indicating that draw operations had been previously canceled, a redraw is triggered.
  *
- * {@code block < 0} forces a redraw. If a GUI handles it, map drawing remains blocked until the GUI closes.
+ * {@code block < 0} unblocks redraw operations and forces a redraw. As above, {@code blocked} is reset to 0.
  *
  * @param this_ The navit instance
  * @param block The operation to perform, see description
@@ -3825,11 +3733,6 @@ int navit_block(struct navit *this_, int block) {
         return 0;
     }
     if ((this_->blocked & 2) || block < 0) {
-        int redraw_pending = this_->blocked & 2;
-        if (gui_redraw(this_->gui)) {
-            this_->blocked = 1 | redraw_pending;
-            return 1;
-        }
         this_->blocked = 0;
         navit_draw(this_);
         return 1;
@@ -3845,11 +3748,20 @@ int navit_get_blocked(struct navit *this_) {
     return this_->blocked;
 }
 
-static void navit_destroy_traffic_maps(struct navit *this_) {
+void navit_store_center(struct navit *this_) {
+    if (this_->bookmarks) {
+        char *center_file = bookmarks_get_center_file(TRUE);
+        bookmarks_write_center_to_file(this_->bookmarks, center_file);
+        g_free(center_file);
+    }
+}
+
+void navit_destroy(struct navit *this_) {
+    dbg(lvl_debug, "enter %p", this_);
     GList *mapsets;
-    GList *m;
     struct map *map;
     struct attr attr;
+    graphics_draw_cancel(this_->gra, this_->displaylist);
 
     mapsets = this_->mapsets;
     while (mapsets) {
@@ -3857,74 +3769,28 @@ static void navit_destroy_traffic_maps(struct navit *this_) {
         struct mapset_handle *msh;
         msh = mapset_open(mapsets->data);
         while (msh && (map = mapset_next(msh, 0))) {
+            /* Add traffic map (identified by the `attr_traffic` attribute) to list of maps to remove */
             if (map_get_attr(map, attr_traffic, &attr, NULL))
                 maps = g_list_append(maps, map);
         }
         mapset_close(msh);
 
-        for (m = maps; m; m = m->next) {
+        /* Remove traffic maps, if any */
+        while (maps) {
             attr.type = attr_map;
-            attr.u.map = m->data;
+            attr.u.map = maps->data;
             mapset_remove_attr(mapsets->data, &attr);
             attr_free_content(&attr);
+            maps = g_list_next(maps);
         }
-        g_list_free(maps);
+        if (maps)
+            g_list_free(maps);
         mapsets = g_list_next(mapsets);
     }
-}
 
-static void navit_destroy_mapset_maps(struct navit *this_) {
-    struct mapset *ms;
-    struct map *map;
-    struct attr attr;
+    callback_list_call_attr_1(this_->attr_cbl, attr_destroy, this_);
+    attr_list_free(this_->attrs);
 
-    if (!this_->mapsets)
-        return;
-
-    ms = this_->mapsets->data;
-
-    map = mapset_get_map_by_name(ms, "search_results");
-    if (map) {
-        attr.type = attr_map;
-        attr.u.map = map;
-        mapset_remove_attr(ms, &attr);
-        map_destroy(map);
-    }
-
-    if (this_->navigation) {
-        map = navigation_get_map(this_->navigation);
-        if (map) {
-            attr.type = attr_map;
-            attr.u.map = map;
-            mapset_remove_attr(ms, &attr);
-        }
-    }
-    if (this_->tracking) {
-        map = tracking_get_map(this_->tracking);
-        if (map) {
-            attr.type = attr_map;
-            attr.u.map = map;
-            mapset_remove_attr(ms, &attr);
-        }
-    }
-}
-
-static void navit_destroy_graphics_callbacks(struct navit *this_) {
-    if (!this_->gra)
-        return;
-
-    graphics_remove_callback(this_->gra, this_->resize_callback);
-    graphics_remove_callback(this_->gra, this_->button_callback);
-    graphics_remove_callback(this_->gra, this_->motion_callback);
-    graphics_remove_callback(this_->gra, this_->predraw_callback);
-
-    callback_destroy(this_->resize_callback);
-    callback_destroy(this_->button_callback);
-    callback_destroy(this_->motion_callback);
-    callback_destroy(this_->predraw_callback);
-}
-
-static void navit_destroy_global_cmd_state(void) {
     if (cmd_int_var_hash) {
         g_hash_table_destroy(cmd_int_var_hash);
         cmd_int_var_hash = NULL;
@@ -3933,62 +3799,11 @@ static void navit_destroy_global_cmd_state(void) {
         g_hash_table_destroy(cmd_attr_var_hash);
         cmd_attr_var_hash = NULL;
     }
-    g_list_foreach(cmd_int_var_stack, (GFunc)attr_free_g, NULL);
-    g_list_free(cmd_int_var_stack);
-    cmd_int_var_stack = NULL;
-}
-
-static void navit_vehicle_destroy(struct navit_vehicle *nv) {
-    if (nv->vehicle)
-        navit_object_unref((struct navit_object *)nv->vehicle);
-    g_free(nv);
-}
-
-/* Child objects such as OSD items can hold callbacks registered on the navigation
- * object. That object is kept alive by its attr, so it has to be released after all
- * other attrs to prevent those callbacks from touching freed memory during teardown. */
-static void navit_attrs_free_navigation_last(struct attr **attrs) {
-    int i, count = 0;
-
-    while (attrs && attrs[count])
-        count++;
-    for (i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->type != attr_navigation) {
-            attr_free(attrs[i]);
-            attrs[i] = NULL;
-        }
+    if (cmd_int_var_stack) {
+        g_list_foreach(cmd_int_var_stack, (GFunc)attr_free_g, NULL);
+        g_list_free(cmd_int_var_stack);
+        cmd_int_var_stack = NULL;
     }
-    for (i = 0; i < count; i++) {
-        if (attrs[i]) {
-            attr_free(attrs[i]);
-            attrs[i] = NULL;
-        }
-    }
-    g_free(attrs);
-}
-
-void navit_destroy(struct navit *this_) {
-    graphics_draw_cancel(this_->gra, this_->displaylist);
-
-    navit_destroy_traffic_maps(this_);
-
-    callback_list_call_attr_1(this_->attr_cbl, attr_destroy, this_);
-
-    navit_destroy_mapset_maps(this_);
-
-    g_list_free_full(this_->layouts, (GDestroyNotify)navit_object_unref);
-    this_->layouts = NULL;
-
-    navigation_destroy_map(this_->navigation);
-    tracking_destroy_map(this_->tracking);
-
-    navit_attrs_free_navigation_last(this_->attrs);
-    callback_list_destroy(this_->attr_cbl);
-    this_->navigation = NULL;
-    this_->speech = NULL;
-    this_->tracking = NULL;
-
-    navit_destroy_global_cmd_state();
 
     if (this_->bookmarks) {
         char *center_file = bookmarks_get_center_file(TRUE);
@@ -3997,40 +3812,33 @@ void navit_destroy(struct navit *this_) {
         bookmarks_destroy(this_->bookmarks);
     }
 
-    if (this_->route) {
-        route_destroy(this_->route);
-        this_->route_cb = NULL;
-    }
-
+    callback_destroy(this_->nav_speech_cb);
+    callback_destroy(this_->roadbook_callback);
     callback_destroy(this_->popup_callback);
     callback_destroy(this_->motion_timeout_callback);
     callback_destroy(this_->progress_cb);
 
-    navit_destroy_graphics_callbacks(this_);
+    if (this_->gra) {
+        graphics_remove_callback(this_->gra, this_->resize_callback);
+        graphics_remove_callback(this_->gra, this_->button_callback);
+        graphics_remove_callback(this_->gra, this_->motion_callback);
+        graphics_remove_callback(this_->gra, this_->predraw_callback);
+    }
+
+    callback_destroy(this_->resize_callback);
+    callback_destroy(this_->motion_callback);
+    callback_destroy(this_->predraw_callback);
 
     callback_destroy(this_->route_cb);
+    if (this_->route)
+        route_destroy(this_->route);
 
     map_destroy(this_->former_destination);
 
     graphics_displaylist_destroy(this_->displaylist);
 
-    g_list_free_full(this_->vehicles, (GDestroyNotify)navit_vehicle_destroy);
-    this_->vehicles = NULL;
-
-    gui_destroy(this_->gui);
     graphics_free(this_->gra);
 
-    if (this_->trans)
-        transform_destroy(this_->trans);
-    if (this_->trans_cursor)
-        transform_destroy(this_->trans_cursor);
-
-    g_list_free(this_->mapsets);
-    this_->mapsets = NULL;
-    g_list_free(this_->vehicleprofiles);
-    this_->vehicleprofiles = NULL;
-
-    g_free(this_->default_layout_name);
     g_free(this_);
 }
 
