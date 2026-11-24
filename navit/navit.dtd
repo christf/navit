@@ -62,6 +62,9 @@
 <!ATTLIST vehicleprofile vehicle_length CDATA #IMPLIED>
 <!ATTLIST vehicleprofile vehicle_weight CDATA #IMPLIED>
 <!ATTLIST vehicleprofile vehicle_axle_weight CDATA #IMPLIED>
+<!ATTLIST vehicleprofile maxspeed_handling CDATA #IMPLIED>
+<!ATTLIST vehicleprofile turn_around_penalty CDATA #IMPLIED>
+<!ATTLIST vehicleprofile turn_around_penalty2 CDATA #IMPLIED>
 <!ELEMENT coord EMPTY>
 <!ATTLIST coord x CDATA #REQUIRED>
 <!ATTLIST coord y CDATA #REQUIRED>
@@ -78,6 +81,7 @@
 <!ATTLIST roadprofile item_types CDATA #REQUIRED>
 <!ATTLIST roadprofile speed CDATA #REQUIRED>
 <!ATTLIST roadprofile maxspeed CDATA #IMPLIED>
+<!ATTLIST roadprofile route_weight CDATA #IMPLIED>
 <!ELEMENT speed EMPTY>
 <!ATTLIST speed type CDATA #REQUIRED>
 <!ATTLIST speed value CDATA #REQUIRED>
@@ -87,6 +91,7 @@
 <!ATTLIST announce level0 CDATA #IMPLIED>
 <!ATTLIST announce level1 CDATA #IMPLIED>
 <!ATTLIST announce level2 CDATA #IMPLIED>
+<!ATTLIST announce unit CDATA #IMPLIED>
 <!ELEMENT speech EMPTY>
 <!ATTLIST speech active CDATA #REQUIRED>
 <!ATTLIST speech type CDATA #REQUIRED>
