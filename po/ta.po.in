@@ -9,9 +9,9 @@
 # தமிழ்நேரம் <tamilneram247@gmail.com>, 2026.
 msgid ""
 msgstr ""
-"Project-Id-Version: navit 0.5.7\n"
+"Project-Id-Version: navit 0.5.8\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-11-24 11:24+0100\n"
 "PO-Revision-Date: 2026-03-02 06:09+0000\n"
 "Last-Translator: தமிழ்நேரம் <tamilneram247@gmail.com>\n"
 "Language-Team: Tamil <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -2016,6 +2016,46 @@ msgstr "அசிமுத்"
 msgid "Show NMEA Data"
 msgstr "என்எம்இஎ தரவைக் காட்டு"
 
+msgid "Change settings"
+msgstr ""
+
+#, c-format
+msgid "Total Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Axle Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Length: %li"
+msgstr ""
+
+#, c-format
+msgid "Width: %li"
+msgstr ""
+
+#, c-format
+msgid "Height: %li"
+msgstr ""
+
+#, c-format
+msgid "Hazardous materials: %s"
+msgstr ""
+
+#. Strings from android/res/values/strings.xml
+#. Android resource: @strings/yes
+msgid "Yes"
+msgstr "ஆம்"
+
+#, c-format
+msgid "Emission Class: %s"
+msgstr ""
+
+#, c-format
+msgid "Enter Low Emission Zone: %s"
+msgstr ""
+
 msgid "car"
 msgstr "கார்"
 
@@ -2041,6 +2081,10 @@ msgstr "செயற்கைக்கோள் நிலையைக் கா�
 
 msgid "Show NMEA data"
 msgstr "என்எம்இஎ தரவைக் காட்டு"
+
+#, c-format
+msgid "Change settings for: %s"
+msgstr ""
 
 msgid "Add Bookmark"
 msgstr "புக்மார்க்கைச் சேர்க்கவும்"
@@ -2112,6 +2156,12 @@ msgstr "எலிவேதியோண்டாட்டாவை வழங்�
 
 msgid "The route must cross at least 2 heightlines"
 msgstr "பாதை குறைந்தது 2 உயரங்களைக் கடக்க வேண்டும்"
+
+msgid "Distance:"
+msgstr ""
+
+msgid "Vertical Meters:"
+msgstr ""
 
 msgid "Route Description"
 msgstr "பாதை விளக்கம்"
@@ -2266,11 +2316,6 @@ msgstr "குதிரை"
 
 msgid "Truck"
 msgstr "டிரக்"
-
-#. Strings from android/res/values/strings.xml
-#. Android resource: @strings/yes
-msgid "Yes"
-msgstr "ஆம்"
 
 #. Android resource: @strings/cancel
 msgid "Cancel"

@@ -23,9 +23,9 @@
 # adevoss <arnobugs@hotmail.com>, 2025, 2026.
 msgid ""
 msgstr ""
-"Project-Id-Version: navit 0.5.7\n"
+"Project-Id-Version: navit 0.5.8\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 21:46+0100\n"
+"POT-Creation-Date: 2026-11-24 11:24+0100\n"
 "PO-Revision-Date: 2026-04-28 08:10+0000\n"
 "Last-Translator: adevoss <arnobugs@hotmail.com>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/navit/navit-core/"
@@ -2033,6 +2033,46 @@ msgstr "Azimut"
 msgid "Show NMEA Data"
 msgstr "NMEA-gegevens weergeven"
 
+msgid "Change settings"
+msgstr ""
+
+#, c-format
+msgid "Total Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Axle Weight: %li"
+msgstr ""
+
+#, c-format
+msgid "Length: %li"
+msgstr ""
+
+#, c-format
+msgid "Width: %li"
+msgstr ""
+
+#, c-format
+msgid "Height: %li"
+msgstr ""
+
+#, c-format
+msgid "Hazardous materials: %s"
+msgstr ""
+
+#. Strings from android/res/values/strings.xml
+#. Android resource: @strings/yes
+msgid "Yes"
+msgstr "Ja"
+
+#, c-format
+msgid "Emission Class: %s"
+msgstr ""
+
+#, c-format
+msgid "Enter Low Emission Zone: %s"
+msgstr ""
+
 msgid "car"
 msgstr "auto"
 
@@ -2058,6 +2098,10 @@ msgstr "Satellietstatus weergeven"
 
 msgid "Show NMEA data"
 msgstr "Toon NMEA-gegevens"
+
+#, c-format
+msgid "Change settings for: %s"
+msgstr ""
 
 msgid "Add Bookmark"
 msgstr "Favoriet toevoegen"
@@ -2129,6 +2173,12 @@ msgstr "Installeer een  *.heightlines.bin kaart voor hoogte gegevens"
 
 msgid "The route must cross at least 2 heightlines"
 msgstr "De route moet op zijn minst 2 hoogtelijnen bevatten"
+
+msgid "Distance:"
+msgstr ""
+
+msgid "Vertical Meters:"
+msgstr ""
 
 msgid "Route Description"
 msgstr "Routebeschrijving"
@@ -2279,11 +2329,6 @@ msgstr "paard"
 
 msgid "Truck"
 msgstr "Vrachtwagen"
-
-#. Strings from android/res/values/strings.xml
-#. Android resource: @strings/yes
-msgid "Yes"
-msgstr "Ja"
 
 #. Android resource: @strings/cancel
 msgid "Cancel"
