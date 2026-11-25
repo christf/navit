@@ -145,6 +145,25 @@ static char *traffic_traff_http_queue_pop(struct traffic_priv *this_) {
     return request;
 }
 
+static void traffic_traff_http_messages_merge(struct traffic_priv *this_, struct traffic_message **messages) {
+    int old_count = 0;
+    int new_count = 0;
+
+    if (!messages)
+        return;
+    if (!this_->feed_messages) {
+        this_->feed_messages = messages;
+        return;
+    }
+    while (this_->feed_messages[old_count])
+        old_count++;
+    while (messages[new_count])
+        new_count++;
+    this_->feed_messages = g_realloc(this_->feed_messages, (old_count + new_count + 1) * sizeof(*messages));
+    memcpy(this_->feed_messages + old_count, messages, (new_count + 1) * sizeof(*messages));
+    g_free(messages);
+}
+
 /**
  * @brief Destructor.
  */
@@ -343,12 +362,18 @@ static struct curl_result *curl_post(char *url, char *data) {
  * @param this_ Private data for the module instance
  */
 static void traffic_traff_http_on_feed_received(struct traffic_priv *this_) {
-    struct traffic_message **messages = this_->feed_messages;
+    struct traffic_message **messages;
+    struct callback *cb;
+
     dbg(lvl_debug, "enter");
+    thread_lock_acquire_write(this_->queue_lock);
+    messages = this_->feed_messages;
     this_->feed_messages = NULL;
     this_->feed_dispatch_ev = NULL;
-    callback_destroy(this_->feed_cb);
+    cb = this_->feed_cb;
     this_->feed_cb = NULL;
+    thread_lock_release_write(this_->queue_lock);
+    callback_destroy(cb);
     traffic_process_messages(this_->traffic, messages);
     g_free(messages);
 }
@@ -382,10 +407,14 @@ static int traffic_traff_http_process_response(struct traffic_priv *this_, struc
         /* TODO subscription timeout */
         if (messages && *messages) {
             dbg(lvl_debug, "response contains messages, posting traffic feed");
-            this_->feed_messages = messages;
             response->messages = NULL;
-            this_->feed_cb = callback_new_1(callback_cast(traffic_traff_http_on_feed_received), this_);
-            this_->feed_dispatch_ev = event_add_timeout(FEED_DISPATCH_DELAY, 0, this_->feed_cb);
+            thread_lock_acquire_write(this_->queue_lock);
+            traffic_traff_http_messages_merge(this_, messages);
+            if (!this_->feed_cb) {
+                this_->feed_cb = callback_new_1(callback_cast(traffic_traff_http_on_feed_received), this_);
+                this_->feed_dispatch_ev = event_add_timeout(FEED_DISPATCH_DELAY, 0, this_->feed_cb);
+            }
+            thread_lock_release_write(this_->queue_lock);
             dispatched = 1;
         }
     } else {
