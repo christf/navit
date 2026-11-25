@@ -1328,50 +1328,16 @@ and vice versa (from svn 5875).
 
    <osd enabled="yes" type="button" x="500" y="500" command='layout_name=layout.nightlayout?layout.nightlayout:layout.daylayout' src="zoom_in.png"/>
 
-.. _show_route_status:
+For a routing-status indicator, use :ref:`osd_navigation_status` rather
+than driving a button from ``route.route_status``.
 
-Show route status
------------------
+.. _show_name_of_current_street:
 
-This example displays the status of the routing engine. It assumes the
-following bitmaps to be present in ``$HOME/.navit/buttons``:
-
--  **def.png**: No destination set, not routing
--  **set.png**: Destination has been set (this will usually be shown
-   when GPS is not available)
--  **no_destination.png**: No route to the destination found (this
-   happens when no road connection between position and destination
-   could be found in the map data)
--  **calculate.png**: Route is being calculated
--  **up.png**: Routing (new)
--  **route.png**: Routing (incremental)
+Show name of current street
+---------------------------
 
 .. code:: xml
 
-   <osd name="status" enabled="yes" use_overlay="1" w="102" h="102" type="button" command="" src="$HOME/.navit/buttons/def.png" x="2" y="-213" />
-
-.. code:: xml
-
-   <osd name="status1" h="1" w="1"  update_period="1"  enabled="yes" type="cmd_interface" x="11"  y="416" command='osd[@name=="status"].src = route.route_status==1     ? "$HOME/.navit/buttons/set.png" :
-   (route.route_status==0     ? "$HOME/.navit/buttons/def.png" :
-   (route.route_status==3     ? "$HOME/.navit/buttons/no_destination.png" :
-
-   (route.route_status==5     ? "$HOME/.navit/buttons/calculate.png" :
-
-   (route.route_status==13    ? "$HOME/.navit/buttons/calculate.png" :
-
-   (route.route_status==17    ? "$HOME/.navit/buttons/up.png" :
-
-   (route.route_status==33    ? "$HOME/.navit/buttons/route.png" : "unhandled"
-
-   ))))))'  />
-   </pre>
-   </code>
-
-
-   ==Show name of current street==
-
-   <source lang="xml">
    <osd enabled="yes" type="text" label="${tracking.item.street_name_systematic} ${tracking.item.street_name}" font_size="200" x="0" y="-22" w="100%" h="22"/>
 
 .. _show_name_of_street_after_next_maneuver:
