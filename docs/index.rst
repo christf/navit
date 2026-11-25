@@ -61,18 +61,6 @@ Main Features
    team
    privacy
 
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :glob:
-   :caption: Old Wiki
-
-   user/configuration/QML_GUI
-   user/configuration/QML2_GUI
-   user/configuration/QML2_GUI_WIP
-   user/configuration/Speech
-
-
 .. Indices and tables
 .. ------------------
 
