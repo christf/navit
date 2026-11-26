@@ -2753,6 +2753,20 @@ void navit_speak(struct navit *this_) {
          * navit_nav_status_callback()); there is deliberately no preparation here. */
 
         if (item && item_attr_get(item, attr_navigation_speech, &attr)) {
+            {
+                struct attr vattr, pattr, tattr;
+                const char *time = "";
+                if (navit_get_attr(this_, attr_vehicle, &vattr, NULL)) {
+                    if (vehicle_get_attr(vattr.u.vehicle, attr_position_coord_geo, &pattr, NULL)
+                        && vehicle_get_attr(vattr.u.vehicle, attr_position_time_iso8601, &tattr, NULL))
+                        time = tattr.u.str;
+                    else
+                        memset(&pattr, 0, sizeof(pattr));
+                    if (pattr.u.coord_geo)
+                        fprintf(stderr, "SPEECHPOS time=%s lat=%.6f lon=%.6f text='%s'\n", time, pattr.u.coord_geo->lat,
+                                pattr.u.coord_geo->lng, attr.u.str);
+                }
+            }
             if (*attr.u.str != '\0' && !(this_->speech_last_text && !strcmp(this_->speech_last_text, attr.u.str))) {
                 g_free(this_->speech_last_text);
                 this_->speech_last_text = g_strdup(attr.u.str);
