@@ -1592,6 +1592,9 @@ static struct navigation_itm *navigation_itm_new(struct navigation *this_, struc
         }
         ret->start = c[0];
         ret->end = c[i];
+        for (int j = 0; j <= i; j++)
+            fprintf(stderr, "NAVCOORD item=0x%x/0x%x idx=%d 0x%x/0x%x\n", ret->start.x, ret->start.y, j, c[j].x,
+                    c[j].y);
 
         if (item_attr_get(routeitem, attr_route, &route_attr))
             graph_map = route_get_graph_map(route_attr.u.route);
@@ -2837,6 +2840,9 @@ static struct navigation_command *command_new(struct navigation *this_, struct n
         }
     }
 
+    fprintf(stderr, "NAVCMD start=0x%x/0x%x end=0x%x/0x%x type=%s delta=%d maneuver=%s\n", itm->start.x, itm->start.y,
+            itm->end.x, itm->end.y, item_to_name(itm->way.item.type), ret->delta,
+            item_to_name(ret->maneuver->type));
     if (this_->cmd_last) {
         this_->cmd_last->next = ret;
         ret->prev = this_->cmd_last;
@@ -2871,9 +2877,19 @@ static void navigation_cmd_free(struct navigation *this_) {
 static void make_maneuvers(struct navigation *this_, struct route *route) {
     struct navigation_itm *itm, *last = NULL, *last_itm = NULL;
     struct navigation_maneuver *maneuver;
+    int idx = 0;
     navigation_cmd_free(this_);
     itm = this_->first;
     while (itm) {
+        struct navigation_way *w;
+        fprintf(stderr, "NAVITM idx=%d start=0x%x/0x%x end=0x%x/0x%x type=%s name='%s' sys='%s' angle2=%d angle_end=%d len=%d\n",
+                idx++, itm->start.x, itm->start.y, itm->end.x, itm->end.y, item_to_name(itm->way.item.type),
+                itm->way.name ? itm->way.name : "", itm->way.name_systematic ? itm->way.name_systematic : "",
+                itm->way.angle2, itm->angle_end, itm->length);
+        for (w = itm->way.next; w; w = w->next)
+            fprintf(stderr, "NAVWAY idx=%d type=%s name='%s' sys='%s' angle2=%d\n", idx - 1,
+                    item_to_name(w->item.type), w->name ? w->name : "", w->name_systematic ? w->name_systematic : "",
+                    w->angle2);
         if (last) {
             if (maneuver_required2(this_, last_itm, itm, &maneuver)) {
                 command_new(this_, itm, maneuver);
@@ -3845,6 +3861,8 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
     }
 
     level = navigation_get_announce_level_cmd(nav, itm, cmd, distance - cmd->length);
+    fprintf(stderr, "NAVNEXT dist=%d len=%d level=%d told=%d type=%s\n", distance, cmd->length, level, itm->told,
+            item_to_name(cmd->itm->way.item.type));
 
     if (level > level_soon) {
         /* suppress the 'follow the road..' announcement, if the next 'soon' announcement is just a few meters away, so
@@ -3868,6 +3886,7 @@ static char *show_next_maneuvers(struct navigation *nav, struct navigation_itm *
     }
 
     ret = navigation_get_speech_text(nav, itm, cmd, level, alts);
+    fprintf(stderr, "NAVTEXT level=%d text='%s'\n", level, ret ? ret : "");
 
     if (level > level_meters) {
         return ret; /* We only concatenate maneuvers that are close each other, so quit here */
@@ -3908,6 +3927,10 @@ static void navigation_call_callbacks(struct navigation *this_, int force_speech
     dbg(lvl_debug, "force_speech=%d turn_around=%d turn_around_limit=%d", force_speech, this_->turn_around,
         this_->turn_around_limit);
     distance = this_->first->dest_length - this_->cmd_first->itm->dest_length;
+    fprintf(stderr, "NAVCALL dist=%d len=%d type=%s first=0x%x/0x%x cmdstart=0x%x/0x%x cmdend=0x%x/0x%x\n", distance,
+            this_->cmd_first->length, item_to_name(this_->cmd_first->itm->way.item.type), this_->first->start.x,
+            this_->first->start.y, this_->cmd_first->itm->start.x, this_->cmd_first->itm->start.y,
+            this_->cmd_first->itm->end.x, this_->cmd_first->itm->end.y);
     if (this_->turn_around_limit && this_->turn_around == this_->turn_around_limit) {
         dbg(lvl_debug, "distance=%d distance_turn=%d", distance, this_->distance_turn);
         while (distance > this_->distance_turn) {
