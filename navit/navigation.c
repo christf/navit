@@ -3979,6 +3979,8 @@ static void navigation_update_done(struct navigation *this_, int cancel) {
     int incr = 0;
     struct map_rect *mr = this_->route_mr;
     struct attr nav_status;
+    struct attr route_length;
+    int live_distance;
 
     if (this_->idle_ev)
         event_remove_idle(this_->idle_ev);
@@ -3999,6 +4001,15 @@ static void navigation_update_done(struct navigation *this_, int cancel) {
                 make_maneuvers(this_, this_->route);
             }
             calculate_dest_distance(this_, incr);
+            if (this_->route && this_->first
+                && route_get_attr(this_->route, attr_destination_length, &route_length, NULL)
+                && route_length.u.num >= 0) {
+                live_distance = (int)route_length.u.num;
+                dbg(lvl_debug, "live route distance=%d item distance=%d", live_distance,
+                    this_->first->dest_length);
+                if (live_distance < this_->first->dest_length)
+                    this_->first->dest_length = live_distance;
+            }
             profile(0, "end");
             /* Fire the status event BEFORE the maneuver callbacks: consumers use it to prepare
              * all speech output while the route is fresh, so that announcements never have to be
