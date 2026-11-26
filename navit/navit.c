@@ -139,6 +139,7 @@ struct navit {
     struct route *route;
     struct navigation *navigation;
     struct speech *speech;
+    char *speech_last_text;
     struct tracking *tracking;
     int ready;
     struct window *win;
@@ -2370,6 +2371,8 @@ static void navit_mark_navigation_stopped(char *former_destination_file) {
  */
 void navit_set_destination(struct navit *this_, struct pcoord *c, const char *description, int async) {
     char *destination_file;
+    g_free(this_->speech_last_text);
+    this_->speech_last_text = NULL;
     destination_file = bookmarks_get_destination_file(TRUE);
     if (c) {
         this_->destination = *c;
@@ -2447,6 +2450,8 @@ void navit_add_destination_description(struct navit *this_, struct pcoord *c, co
  */
 void navit_set_destinations(struct navit *this_, struct pcoord *c, int count, const char *description, int async) {
     char *destination_file;
+    g_free(this_->speech_last_text);
+    this_->speech_last_text = NULL;
     if (c && count) {
         this_->destination = c[count - 1];
         this_->destination_valid = 1;
@@ -2748,7 +2753,9 @@ void navit_speak(struct navit *this_) {
          * navit_nav_status_callback()); there is deliberately no preparation here. */
 
         if (item && item_attr_get(item, attr_navigation_speech, &attr)) {
-            if (*attr.u.str != '\0') {
+            if (*attr.u.str != '\0' && !(this_->speech_last_text && !strcmp(this_->speech_last_text, attr.u.str))) {
+                g_free(this_->speech_last_text);
+                this_->speech_last_text = g_strdup(attr.u.str);
                 if (nav)
                     alts = navigation_get_speech_alternatives(nav);
                 if (alts && alts[0]) {
@@ -2765,7 +2772,8 @@ void navit_speak(struct navit *this_) {
                     speech_say(this_->speech, attr.u.str);
                 navit_add_message(this_, attr.u.str);
             }
-            navit_textfile_debug_log(this_, "type=announcement label=\"%s\"", attr.u.str);
+            if (*attr.u.str != '\0')
+                navit_textfile_debug_log(this_, "type=announcement label=\"%s\"", attr.u.str);
         }
         map_rect_destroy(mr);
     }
@@ -5088,6 +5096,7 @@ void navit_destroy(struct navit *this_) {
     this_->vehicleprofiles = NULL;
 
     navit_lang_pref_free(this_->lang_pref);
+    g_free(this_->speech_last_text);
     g_free(this_->default_layout_name);
     g_free(this_);
 }
